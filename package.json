@@ -6,7 +6,7 @@
   "private": true,
   "scripts": {
     "build": "node scripts/build-userscript.cjs",
-    "dev": "node scripts/build-userscript.js"
+    "dev": "node scripts/build-userscript.cjs"
   },
   "engines": {
     "node": "24.x"

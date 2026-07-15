@@ -2,6 +2,7 @@
   "name": "qc-productivity-tracker",
   "version": "1.0.0",
   "description": "Tampermonkey tracker for QC productivity on WMS return inbound flows",
+  "type": "module",
   "private": true,
   "scripts": {
     "build": "node scripts/build-userscript.js",
@@ -9,5 +10,8 @@
   },
   "engines": {
     "node": "24.x"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.39.0"
   }
 }

@@ -13,6 +13,14 @@
           "value": "inline"
         },
         {
+          "key": "Access-Control-Allow-Origin",
+          "value": "*"
+        },
+        {
+          "key": "Access-Control-Allow-Methods",
+          "value": "GET, OPTIONS"
+        },
+        {
           "key": "Cache-Control",
           "value": "no-cache, no-store, must-revalidate"
         }
@@ -28,6 +36,14 @@
         {
           "key": "Content-Disposition",
           "value": "inline"
+        },
+        {
+          "key": "Access-Control-Allow-Origin",
+          "value": "*"
+        },
+        {
+          "key": "Access-Control-Allow-Methods",
+          "value": "GET, OPTIONS"
         },
         {
           "key": "Cache-Control",

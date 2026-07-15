@@ -6,7 +6,7 @@ const { createTrackerSource } = require("../src/tracking.cjs");
 const pkg = require("../package.json");
 
 // Cấu hình các đường dẫn
-const DIST_DIR = path.join(__dirname, "../public");
+const DIST_DIR = path.join(__dirname, "../install");
 const OUTPUT_FILE = path.join(DIST_DIR, "qc-productivity-tracker.user.js");
 
 // Tạo thư mục public nếu chưa tồn tại

@@ -1,67 +1,62 @@
-const crypto = require("crypto");
+const crypto = require('crypto');
 
-// Đọc danh sách Email cho phép từ Environment Variable trên Vercel
-// Ví dụ cấu hình trên Vercel: ALLOWED_EMAILS=xuanmanh.nguyen@shopee.com,user2@shopee.com
-const ALLOWED_EMAILS = process.env.ALLOWED_EMAILS
-  ? process.env.ALLOWED_EMAILS.split(",").map((e) => e.trim().toLowerCase())
-  : ["xuanmanh.nguyen@shopee.com"]; // Fallback mặc định
+const AUTH_SECRET = process.env.AUTH_SECRET || "secure-default-secret-key-replace-me-in-prod";
+const SUPABASE_URL = process.env.SUPABASE_URL;
+const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-// Khóa bảo mật dùng để ký mã token (Cần cấu hình AUTH_SECRET phức tạp trên Vercel)
-const AUTH_SECRET =
-  process.env.AUTH_SECRET || "secure-default-secret-key-replace-me-in-prod";
-
-// Hàm tự tạo Session Token bảo mật không cần cài thêm thư viện JWT bên ngoài
 function generateSessionToken(email) {
-  const expiresAt = Date.now() + 15 * 60 * 1000; // Token có hiệu lực trong 15 phút
+  const expiresAt = Date.now() + 15 * 60 * 1000; // Token sống trong 15 phút
   const payload = JSON.stringify({ email, expiresAt });
-  const signature = crypto
-    .createHmac("sha256", AUTH_SECRET)
-    .update(payload)
-    .digest("hex");
-  return Buffer.from(`${payload}.${signature}`).toString("base64");
+  const signature = crypto.createHmac('sha256', AUTH_SECRET).update(payload).digest('hex');
+  return Buffer.from(`${payload}.${signature}`).toString('base64');
 }
 
 module.exports = async (req, res) => {
-  // Cấu hình CORS để cho phép Tampermonkey/WMS có thể gọi API này[cite: 4]
-  res.setHeader("Access-Control-Allow-Credentials", true);
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "POST,OPTIONS");
-  res.setHeader(
-    "Access-Control-Allow-Headers",
-    "Content-Type, X-QC-Session-Token",
-  );
+  res.setHeader('Access-Control-Allow-Credentials', true);
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-QC-Session-Token');
 
-  if (req.method === "OPTIONS") {
-    return res.status(200).end();
-  }
-
-  if (req.method !== "POST") {
-    return res.status(405).json({ error: "Method not allowed" });
-  }
+  if (req.method === 'OPTIONS') return res.status(200).end();
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
   try {
-    const { email, page } = req.body;
-
+    const { email } = req.body;
     if (!email) {
-      return res.status(200).json({
-        allowed: false,
-        reason: "missing_email",
-      });
+      return res.status(200).json({ allowed: false, reason: "missing_email" });
     }
 
     const normalizedEmail = email.trim().toLowerCase();
 
-    // 1. Kiểm tra Email có thuộc danh sách được phép không
-    const isAllowed = ALLOWED_EMAILS.includes(normalizedEmail);
+    // Gọi Supabase REST API để lấy thông tin user đang Active
+    const dbResponse = await fetch(
+      `${SUPABASE_URL}/rest/v1/qc_users?email=eq.${encodeURIComponent(normalizedEmail)}&is_active=eq.true&select=role`,
+      {
+        method: 'GET',
+        headers: {
+          'apikey': SUPABASE_SERVICE_ROLE_KEY,
+          'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+          'Content-Type': 'application/json'
+        }
+      }
+    );
 
-    if (!isAllowed) {
+    if (!dbResponse.ok) {
+      console.error("DB Error:", await dbResponse.text());
+      return res.status(500).json({ allowed: false, reason: "database_error" });
+    }
+
+    const users = await dbResponse.json();
+
+    // Nếu không tìm thấy user hoặc user bị vô hiệu hóa
+    if (!users || users.length === 0) {
       return res.status(200).json({
         allowed: false,
-        reason: "unauthorized_user",
+        reason: "unauthorized_user"
       });
     }
 
-    // 2. Tạo session_token ngắn hạn
+    const user = users[0];
     const sessionToken = generateSessionToken(normalizedEmail);
 
     return res.status(200).json({
@@ -69,14 +64,12 @@ module.exports = async (req, res) => {
       reason: "authorized",
       user: {
         email: normalizedEmail,
-        role: "qc",
+        role: user.role || "qc"
       },
-      session_token: sessionToken,
+      session_token: sessionToken
     });
   } catch (error) {
     console.error("Authz Error:", error);
-    return res
-      .status(500)
-      .json({ allowed: false, reason: "internal_server_error" });
+    return res.status(500).json({ allowed: false, reason: "internal_server_error" });
   }
 };

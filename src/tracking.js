@@ -9,7 +9,7 @@ function createTrackerSource() {
     VERSION: "__VERSION__",
     API_BASE_URL: "__API_BASE_URL__",
     LOGIN_INFO_URL:
-      "https://wms.ssc.shopee.vn/api/v2/apps/system/user/get_login_info",
+      "/api/v2/apps/system/user/get_login_info",
     AUTH_ENDPOINT: "/api/qc-productivity/authz",
     LOG_ENDPOINT: "/api/qc-productivity/log",
     DEBUG: false,

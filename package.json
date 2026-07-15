@@ -8,6 +8,6 @@
     "dev": "node scripts/build-userscript.js"
   },
   "engines": {
-    "node": ">=18"
+    "node": "18.x"
   }
 }

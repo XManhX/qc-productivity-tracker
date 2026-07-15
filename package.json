@@ -5,7 +5,7 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "build": "node scripts/build-userscript.js",
+    "build": "node scripts/build-userscript.cjs",
     "dev": "node scripts/build-userscript.js"
   },
   "engines": {

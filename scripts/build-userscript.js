@@ -1,6 +1,10 @@
-const fs = require("fs");
-const path = require("path");
-const { createTrackerSource } = require("../src/tracking");
+import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
+import { createTrackerSource } from "../src/tracking.js";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const VERSION = process.env.npm_package_version || "1.0.0";
 const API_BASE_URL =

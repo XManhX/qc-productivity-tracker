@@ -3,7 +3,7 @@
 // @namespace    https://qc-productivity-tracker.vercel.app/
 // @version      1.0.0
 // @description  Hệ thống theo dõi hiệu suất làm việc dành riêng cho QC
-// @author       Your Name
+// @author       X Manh
 // @match        https://*.shopee.com/*
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=shopee.com
 // @grant        none

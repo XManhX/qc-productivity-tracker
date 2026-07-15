@@ -1,72 +1,133 @@
 <!-- public/users.html -->
 <!DOCTYPE html>
-<html lang="en">
+<html lang="vi">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Manage Authorized Users</title>
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <title>⚡ WMS QC MONITOR - Nhân Sự</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
   <style>
-    body { background-color: #f8f9fa; font-family: sans-serif; }
-    .nav-link.active { font-weight: bold; color: #ff5722 !important; }
-    .card-box { background: white; padding: 25px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+    body { font-family: 'Inter', sans-serif; }
   </style>
 </head>
-<body>
-  <nav class="navbar navbar-expand-lg navbar-dark bg-dark mb-4">
-    <div class="container-fluid">
-      <a class="navbar-brand text-warning" href="#">⚡ WMS QC MONITOR</a>
-      <div class="navbar-nav">
-        <a class="nav-link text-light" href="index.html">Sản Lượng Từng Giờ</a>
-        <a class="nav-link active" href="users.html">Quản Lý Nhân Sự</a>
+<body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col">
+
+  <!-- Navigation Bar -->
+  <nav class="bg-slate-900 border-b border-slate-800 sticky top-0 z-50 shadow-md">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex items-center justify-between h-16">
+        <div class="flex items-center space-x-3">
+          <div class="bg-amber-500 text-slate-950 p-2 rounded-lg flex items-center justify-center">
+            <i data-lucide="zap" class="w-5 h-5"></i>
+          </div>
+          <span class="text-white font-bold text-lg tracking-wider">WMS QC MONITOR</span>
+        </div>
+        <div class="flex space-x-1">
+          <a href="/" class="flex items-center space-x-2 px-4 py-2 rounded-lg text-sm font-medium text-slate-300 hover:bg-slate-800 hover:text-white transition">
+            <i data-lucide="bar-chart-3" class="w-4 h-4"></i>
+            <span>Sản Lượng Theo Giờ</span>
+          </a>
+          <a href="/users.html" class="flex items-center space-x-2 px-4 py-2 rounded-lg text-sm font-medium bg-slate-800 text-amber-400 border border-slate-700">
+            <i data-lucide="users" class="w-4 h-4"></i>
+            <span>Quản Lý Nhân Sự</span>
+          </a>
+        </div>
       </div>
     </div>
   </nav>
 
-  <div class="container">
-    <div class="row">
-      <!-- Cột trái: Form thêm user mới -->
-      <div class="col-md-4 mb-4">
-        <div class="card-box">
-          <h4>➕ Thêm Nhân Sự Mới</h4>
-          <hr>
-          <form id="user-form">
-            <div class="mb-3">
-              <label class="form-label">Họ và tên</label>
-              <input type="text" id="user-name" class="form-control" placeholder="Ví dụ: Nguyễn Văn A" required>
+  <!-- Main Content -->
+  <main class="flex-grow max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+      
+      <!-- Cột Trái: Thêm Nhân Viên -->
+      <div class="lg:col-span-5 space-y-6">
+        <div class="bg-white rounded-2xl border border-slate-100 shadow-sm p-6">
+          <div class="flex items-center gap-2 mb-4">
+            <div class="bg-indigo-50 p-2 rounded-lg text-indigo-600">
+              <i data-lucide="user-plus" class="w-5 h-5"></i>
             </div>
-            <div class="mb-3">
-              <label class="form-label">Email Shopee WMS</label>
-              <input type="email" id="user-email" class="form-control" placeholder="user@shopee.com" required>
-              <div class="form-text">Hệ thống check allowed qua chính xác email này.</div>
+            <h2 class="text-lg font-bold text-slate-900">Thêm Nhân Sự Mới</h2>
+          </div>
+          <hr class="border-slate-100 mb-4">
+          
+          <!-- Form Thêm 1 User -->
+          <form id="single-user-form" class="space-y-4 mb-6">
+            <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider">Thêm Từng Người</h3>
+            <div>
+              <label class="block text-xs font-semibold text-slate-600 mb-1">Họ và tên</label>
+              <input type="text" id="user-name" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition" placeholder="Ví dụ: Nguyễn Văn A" required>
             </div>
-            <button type="submit" class="btn btn-success w-100">Kích Hoạt Quyền Cập Nhật</button>
+            <div>
+              <label class="block text-xs font-semibold text-slate-600 mb-1">Email Shopee WMS</label>
+              <input type="email" id="user-email" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition" placeholder="nguyenvana@shopee.com" required>
+            </div>
+            <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-sm py-2.5 rounded-xl transition shadow-sm">
+              Cấp Quyền Truy Cập
+            </button>
           </form>
+
+          <!-- Form Thêm Hàng Loạt (Bulk Add) -->
+          <div class="border-t border-slate-100 pt-6">
+            <div class="flex items-center justify-between mb-2">
+              <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider">Thêm Hàng Loạt (Bulk Add)</h3>
+              <span class="bg-amber-100 text-amber-800 text-[10px] font-bold px-2 py-0.5 rounded-full">Tính năng xịn</span>
+            </div>
+            <p class="text-slate-400 text-xs mb-3">Copy và dán danh sách Email vào bên dưới (Các email phân cách nhau bằng dấu phẩy, dấu cách hoặc xuống dòng).</p>
+            <textarea id="bulk-emails" rows="5" class="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs focus:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition" placeholder="user1@shopee.com, user2@shopee.com&#10;user3@shopee.com"></textarea>
+            <button onclick="handleBulkAdd()" class="w-full mt-3 bg-slate-900 hover:bg-slate-800 text-white font-semibold text-sm py-2.5 rounded-xl transition shadow-sm flex items-center justify-center gap-2">
+              <i data-lucide="users-2" class="w-4 h-4"></i>
+              Kích Hoạt Danh Sách Hàng Loạt
+            </button>
+          </div>
+
         </div>
       </div>
 
-      <!-- Cột phải: Danh sách User hiện có -->
-      <div class="col-md-8">
-        <div class="card-box">
-          <h4>📋 Danh Sách Nhân Sự Được Phép Hoạt Động</h4>
-          <hr>
-          <table class="table table-hover align-middle">
-            <thead class="table-light">
-              <tr>
-                <th>Họ Tên</th>
-                <th>Email</th>
-                <th>Trạng thái</th>
-                <th>Thao tác</th>
-              </tr>
-            </thead>
-            <tbody id="user-list-body">
-              <tr><td colspan="4">Đang tải danh sách...</td></tr>
-            </tbody>
-          </table>
+      <!-- Cột Phải: Danh Sách User Allowed -->
+      <div class="lg:col-span-7">
+        <div class="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+          <div class="p-6 border-b border-slate-100 flex items-center justify-between">
+            <div class="flex items-center gap-2">
+              <div class="bg-emerald-50 p-2 rounded-lg text-emerald-600">
+                <i data-lucide="shield-check" class="w-5 h-5"></i>
+              </div>
+              <div>
+                <h2 class="text-lg font-bold text-slate-900">Danh Sách Allowed</h2>
+                <p id="user-count-badge" class="text-slate-400 text-xs mt-0.5">0 nhân sự được ủy quyền</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="overflow-x-auto max-h-[600px] overflow-y-auto">
+            <table class="w-full text-left border-collapse">
+              <thead>
+                <tr class="bg-slate-50 border-b border-slate-100 text-slate-500 text-xs uppercase tracking-wider font-semibold">
+                  <th class="px-6 py-3">Nhân Viên</th>
+                  <th class="px-6 py-3">Email</th>
+                  <th class="px-6 py-3 text-right">Thao Tác</th>
+                </tr>
+              </thead>
+              <tbody id="user-list-body" class="divide-y divide-slate-100 text-sm">
+                <tr>
+                  <td colspan="3" class="py-12 text-center text-slate-400">Đang tải danh sách...</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
+
     </div>
-  </div>
+  </main>
+
+  <footer class="bg-slate-900 border-t border-slate-800 py-6 mt-12 text-center text-sm text-slate-500">
+    <div class="container mx-auto px-4">
+      <p>© 2026 QC Productivity Tracker. Đo lường chính xác - Vận hành tối ưu.</p>
+    </div>
+  </footer>
 
   <script>
     async function fetchUsers() {
@@ -76,29 +137,55 @@
         const tbody = document.getElementById('user-list-body');
         tbody.innerHTML = '';
 
+        document.getElementById('user-count-badge').innerText = `${users.length} nhân sự được ủy quyền`;
+
         if(users.length === 0) {
-          tbody.innerHTML = `<tr><td colspan="4" class="text-center text-muted">Chưa có nhân sự nào được phân quyền.</td></tr>`;
+          tbody.innerHTML = `
+            <tr>
+              <td colspan="3" class="py-12 text-center text-slate-400">
+                <div class="flex flex-col items-center justify-center gap-1">
+                  <i data-lucide="user-x" class="w-10 h-10 text-slate-300"></i>
+                  <span class="font-medium">Chưa có nhân viên nào được cho phép</span>
+                </div>
+              </td>
+            </tr>`;
+          lucide.createIcons();
           return;
         }
 
         users.forEach(user => {
           tbody.innerHTML += `
-            <tr>
-              <td><strong>${user.name || 'N/A'}</strong></td>
-              <td>${user.email}</td>
-              <td><span class="badge bg-success">Allowed</span></td>
-              <td>
-                <button class="btn btn-sm btn-outline-danger" onclick="deleteUser(${user.id})">Thu hồi quyền</button>
+            <tr class="hover:bg-slate-50/50 transition duration-150">
+              <td class="px-6 py-4">
+                <div class="flex items-center gap-3">
+                  <div class="w-9 h-9 rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold text-xs uppercase border border-indigo-100">
+                    ${(user.name || 'QC').substring(0,2)}
+                  </div>
+                  <div>
+                    <div class="font-semibold text-slate-900">${user.name || 'Không tên'}</div>
+                    <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800 mt-0.5">Active</span>
+                  </div>
+                </div>
+              </td>
+              <td class="px-6 py-4 text-slate-600 font-mono text-xs">${user.email}</td>
+              <td class="px-6 py-4 text-right">
+                <button onclick="deleteUser(${user.id})" class="inline-flex items-center gap-1.5 px-3 py-1.5 border border-rose-200 hover:bg-rose-50 text-rose-600 rounded-xl text-xs font-semibold transition">
+                  <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+                  Thu hồi
+                </button>
               </td>
             </tr>
           `;
         });
       } catch (err) {
         alert('Không thể tải danh sách nhân sự');
+      } finally {
+        lucide.createIcons();
       }
     }
 
-    document.getElementById('user-form').addEventListener('submit', async (e) => {
+    // Xử lý thêm đơn lẻ
+    document.getElementById('single-user-form').addEventListener('submit', async (e) => {
       e.preventDefault();
       const name = document.getElementById('user-name').value;
       const email = document.getElementById('user-email').value;
@@ -111,19 +198,67 @@
         });
 
         if (res.ok) {
-          document.getElementById('user-form').reset();
+          document.getElementById('single-user-form').reset();
           fetchUsers();
         } else {
           const err = await res.json();
           alert('Lỗi: ' + err.error);
         }
       } catch (err) {
-        alert('Lỗi kết nối máy chủ khi thêm user');
+        alert('Lỗi khi lưu dữ liệu!');
       }
     });
 
+    // Xử lý Thêm Hàng Loạt (Bulk Add)
+    async function handleBulkAdd() {
+      const rawText = document.getElementById('bulk-emails').value;
+      if (!rawText.trim()) {
+        alert('Vui lòng nhập ít nhất một email!');
+        return;
+      }
+
+      // Regex bóc tách tất cả chuỗi dạng email ngăn cách bởi bất kỳ ký tự phân tách nào
+      const emails = rawText.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g);
+
+      if (!emails || emails.length === 0) {
+        alert('Không tìm thấy địa chỉ email hợp lệ nào!');
+        return;
+      }
+
+      const confirmMsg = `Hệ thống tìm thấy ${emails.length} email. Bạn có đồng ý cấp quyền truy cập hàng loạt cho họ không?`;
+      if (!confirm(confirmMsg)) return;
+
+      let successCount = 0;
+      let failedEmails = [];
+
+      // Loop thêm đồng thời các tài khoản
+      for (const email of emails) {
+        try {
+          const defaultName = email.split('@')[0].toUpperCase();
+          const res = await fetch('/api/qc-productivity/users', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: defaultName, email })
+          });
+          if (res.ok) successCount++;
+          else failedEmails.push(email);
+        } catch (e) {
+          failedEmails.push(email);
+        }
+      }
+
+      document.getElementById('bulk-emails').value = '';
+      fetchUsers();
+
+      if (failedEmails.length > 0) {
+        alert(`Hoàn tất! Đã thêm thành công ${successCount} nhân sự. Thất bại ${failedEmails.length} trường hợp (Có thể đã tồn tại trong hệ thống).`);
+      } else {
+        alert(`Chúc mừng! Đã kích hoạt quyền hoạt động thành công cho toàn bộ ${successCount} nhân sự.`);
+      }
+    }
+
     async function deleteUser(id) {
-      if (!confirm('Bạn có chắc chắn muốn xóa nhân sự này khỏi danh sách allowed?')) return;
+      if (!confirm('Bạn có chắc muốn xóa quyền hoạt động của nhân viên này?')) return;
       try {
         const res = await fetch(`/api/qc-productivity/users?id=${id}`, { method: 'DELETE' });
         if (res.ok) fetchUsers();
@@ -132,7 +267,7 @@
       }
     }
 
-    // Khởi chạy khi tải trang
+    // Khởi động
     fetchUsers();
   </script>
 </body>

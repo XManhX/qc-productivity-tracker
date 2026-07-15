@@ -1,0 +1,139 @@
+<!-- public/users.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Manage Authorized Users</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    body { background-color: #f8f9fa; font-family: sans-serif; }
+    .nav-link.active { font-weight: bold; color: #ff5722 !important; }
+    .card-box { background: white; padding: 25px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
+  </style>
+</head>
+<body>
+  <nav class="navbar navbar-expand-lg navbar-dark bg-dark mb-4">
+    <div class="container-fluid">
+      <a class="navbar-brand text-warning" href="#">⚡ WMS QC MONITOR</a>
+      <div class="navbar-nav">
+        <a class="nav-link text-light" href="index.html">Sản Lượng Từng Giờ</a>
+        <a class="nav-link active" href="users.html">Quản Lý Nhân Sự</a>
+      </div>
+    </div>
+  </nav>
+
+  <div class="container">
+    <div class="row">
+      <!-- Cột trái: Form thêm user mới -->
+      <div class="col-md-4 mb-4">
+        <div class="card-box">
+          <h4>➕ Thêm Nhân Sự Mới</h4>
+          <hr>
+          <form id="user-form">
+            <div class="mb-3">
+              <label class="form-label">Họ và tên</label>
+              <input type="text" id="user-name" class="form-control" placeholder="Ví dụ: Nguyễn Văn A" required>
+            </div>
+            <div class="mb-3">
+              <label class="form-label">Email Shopee WMS</label>
+              <input type="email" id="user-email" class="form-control" placeholder="user@shopee.com" required>
+              <div class="form-text">Hệ thống check allowed qua chính xác email này.</div>
+            </div>
+            <button type="submit" class="btn btn-success w-100">Kích Hoạt Quyền Cập Nhật</button>
+          </form>
+        </div>
+      </div>
+
+      <!-- Cột phải: Danh sách User hiện có -->
+      <div class="col-md-8">
+        <div class="card-box">
+          <h4>📋 Danh Sách Nhân Sự Được Phép Hoạt Động</h4>
+          <hr>
+          <table class="table table-hover align-middle">
+            <thead class="table-light">
+              <tr>
+                <th>Họ Tên</th>
+                <th>Email</th>
+                <th>Trạng thái</th>
+                <th>Thao tác</th>
+              </tr>
+            </thead>
+            <tbody id="user-list-body">
+              <tr><td colspan="4">Đang tải danh sách...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    async function fetchUsers() {
+      try {
+        const res = await fetch('/api/qc-productivity/users');
+        const users = await res.json();
+        const tbody = document.getElementById('user-list-body');
+        tbody.innerHTML = '';
+
+        if(users.length === 0) {
+          tbody.innerHTML = `<tr><td colspan="4" class="text-center text-muted">Chưa có nhân sự nào được phân quyền.</td></tr>`;
+          return;
+        }
+
+        users.forEach(user => {
+          tbody.innerHTML += `
+            <tr>
+              <td><strong>${user.name || 'N/A'}</strong></td>
+              <td>${user.email}</td>
+              <td><span class="badge bg-success">Allowed</span></td>
+              <td>
+                <button class="btn btn-sm btn-outline-danger" onclick="deleteUser(${user.id})">Thu hồi quyền</button>
+              </td>
+            </tr>
+          `;
+        });
+      } catch (err) {
+        alert('Không thể tải danh sách nhân sự');
+      }
+    }
+
+    document.getElementById('user-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const name = document.getElementById('user-name').value;
+      const email = document.getElementById('user-email').value;
+
+      try {
+        const res = await fetch('/api/qc-productivity/users', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, email })
+        });
+
+        if (res.ok) {
+          document.getElementById('user-form').reset();
+          fetchUsers();
+        } else {
+          const err = await res.json();
+          alert('Lỗi: ' + err.error);
+        }
+      } catch (err) {
+        alert('Lỗi kết nối máy chủ khi thêm user');
+      }
+    });
+
+    async function deleteUser(id) {
+      if (!confirm('Bạn có chắc chắn muốn xóa nhân sự này khỏi danh sách allowed?')) return;
+      try {
+        const res = await fetch(`/api/qc-productivity/users?id=${id}`, { method: 'DELETE' });
+        if (res.ok) fetchUsers();
+      } catch (err) {
+        alert('Xóa thất bại');
+      }
+    }
+
+    // Khởi chạy khi tải trang
+    fetchUsers();
+  </script>
+</body>
+</html>

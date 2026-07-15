@@ -6,4 +6,4 @@ node_modules/
 .env.local
 
 # Build output
-public/
+# public/

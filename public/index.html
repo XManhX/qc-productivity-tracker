@@ -1,0 +1,145 @@
+<!-- public/index.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>QC Productivity Dashboard</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    body { background-color: #f4f6f9; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+    .nav-link.active { font-weight: bold; color: #ff5722 !important; }
+    .table-container { background: white; padding: 24px; border-radius: 12px; box-shadow: 0 4px 16px rgba(0,0,0,0.05); }
+    .highlight-total { background-color: #e8f5e9 !important; font-weight: bold; color: #2e7d32; }
+    .hour-column { min-width: 75px; }
+  </style>
+</head>
+<body>
+  <nav class="navbar navbar-expand-lg navbar-dark bg-dark mb-4">
+    <div class="container-fluid">
+      <a class="navbar-brand text-warning" href="#">⚡ WMS QC MONITOR</a>
+      <div class="navbar-nav">
+        <a class="nav-link active" href="index.html">Sản Lượng Từng Giờ</a>
+        <a class="nav-link text-light" href="users.html">Quản Lý Nhân Sự</a>
+      </div>
+    </div>
+  </nav>
+
+  <div class="container-fluid px-4">
+    <!-- Thanh Bộ Lọc Điều Hướng -->
+    <div class="card p-3 mb-4 shadow-sm border-0">
+      <div class="row align-items-center g-3">
+        <div class="col-md-4">
+          <h3 class="m-0 text-dark fw-bold">📊 Theo Dõi Sản Lượng Theo Giờ</h3>
+        </div>
+        <div class="col-md-5 d-flex align-items-center justify-content-md-end gap-2">
+          <label class="fw-bold text-secondary text-nowrap m-0">Chọn ngày xem:</label>
+          <input type="date" id="filter-date" class="form-control w-50" onchange="loadDashboardData()">
+        </div>
+        <div class="col-md-3 text-md-end">
+          <button class="btn btn-primary px-3 w-100" onclick="loadDashboardData()">🔄 Làm mới dữ liệu</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Bảng hiển thị -->
+    <div class="table-container">
+      <div class="table-responsive">
+        <table class="table table-bordered table-hover align-middle text-center m-0">
+          <thead class="table-dark">
+            <tr id="table-header">
+              <th class="text-start" style="min-width: 220px;">Nhân viên (Email)</th>
+              <th class="highlight-total hour-column">Tổng đơn</th>
+              <!-- Cột mốc giờ tạo tự động -->
+            </tr>
+          </thead>
+          <tbody id="dashboard-body">
+            <tr><td colspan="30" class="py-4 text-muted">Đang truy vấn dữ liệu tối ưu...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Giờ làm việc tiêu chuẩn tại kho (Từ 6h sáng đến 22h đêm)
+    const startHour = 6, endHour = 22;
+
+    // Đặt mặc định Date Picker là ngày hôm nay (Theo giờ VN)
+    function setInitialDate() {
+      const nowVN = new Date(new Date().getTime() + 7 * 60 * 60 * 1000);
+      document.getElementById('filter-date').value = nowVN.toISOString().split('T')[0];
+    }
+
+    // Tự động dựng các tiêu đề cột giờ
+    function initTableHeader() {
+      const headerRow = document.getElementById('table-header');
+      for (let h = startHour; h <= endHour; h++) {
+        const th = document.createElement('th');
+        th.className = 'hour-column';
+        th.innerText = `${h}h`;
+        headerRow.appendChild(th);
+      }
+    }
+
+    async function loadDashboardData() {
+      const selectedDate = document.getElementById('filter-date').value;
+      const tbody = document.getElementById('dashboard-body');
+      
+      try {
+        const res = await fetch(`/api/qc-productivity/dashboard?date=${selectedDate}`);
+        const data = await res.json();
+        
+        if (!data.success) throw new Error(data.error);
+        
+        tbody.innerHTML = '';
+        const list = data.results;
+
+        if (list.length === 0) {
+          tbody.innerHTML = `<tr><td colspan="30" class="py-4 text-muted fs-5">Chưa có sản lượng nào được ghi nhận trong ngày ${selectedDate}</td></tr>`;
+          return;
+        }
+
+        list.forEach(user => {
+          let tr = document.createElement('tr');
+          
+          // Cột tên và tổng sản lượng trong ngày
+          tr.innerHTML = `<td class="text-start fw-bold text-secondary">${user.email}</td>
+                          <td class="highlight-total">${user.total}</td>`;
+          
+          // Điền chi tiết số lượng đơn của từng khung giờ
+          for (let h = startHour; h <= endHour; h++) {
+            const count = user.hourly[h] || 0;
+            const td = document.createElement('td');
+            
+            if (count > 0) {
+              td.innerText = count;
+              td.className = 'fw-bold table-warning text-dark';
+            } else {
+              td.innerText = '-';
+              td.className = 'text-muted';
+            }
+            tr.appendChild(td);
+          }
+          tbody.appendChild(tr);
+        });
+      } catch (err) {
+        tbody.innerHTML = `<tr><td colspan="30" class="py-4 text-danger fw-bold">Lỗi kết nối database: ${err.message}</td></tr>`;
+      }
+    }
+
+    // Khởi chạy hệ thống
+    setInitialDate();
+    initTableHeader();
+    loadDashboardData();
+    
+    // Tự động làm mới dữ liệu sau mỗi 60 giây nếu xem ngày hiện tại
+    setInterval(() => {
+      const nowVN = new Date(new Date().getTime() + 7 * 60 * 60 * 1000).toISOString().split('T')[0];
+      if (document.getElementById('filter-date').value === nowVN) {
+        loadDashboardData();
+      }
+    }, 60000);
+  </script>
+</body>
+</html>

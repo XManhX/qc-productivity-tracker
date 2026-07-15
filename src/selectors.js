@@ -1,45 +1,33 @@
+// src/selectors.js
 const PAGE_CONFIG = {
   qc: {
     pathIncludes: "/v2/returninbound/qc",
     actionText: "Complete",
-    requiredFields: ["asn", "return_tn", "order_sn"],
+    apiWatchUrl: "/api/apps/process/returninbound/riqc/scan_sheet_id",
+    requiredFields: ["scan_value"],
     fields: {
-      asn: ["asn"],
-      return_tn: ["return tn", "return_tn", "returnno", "return no"],
-      order_sn: ["order sn", "order_sn", "ordersn"],
+      scan_value: ["sheet_id"]
     },
   },
   judgement: {
     pathIncludes: "/v2/returninbound/judgement",
     actionText: "Confirm Judged",
-    requiredFields: ["asn", "return_tn", "order_sn", "lmtn", "uid"],
+    apiWatchUrl: "/api/apps/process/returninbound/judge/scan_sheet_id",
+    requiredFields: ["scan_value"],
     fields: {
-      asn: ["asn"],
-      return_tn: ["return tn", "return_tn", "returnno", "return no"],
-      order_sn: ["order sn", "order_sn", "ordersn"],
-      lmtn: ["lmtn"],
-      uid: ["uid"],
+      scan_value: ["scanInput"]
     },
   },
   rimassreceive: {
     pathIncludes: "/v2/returninbound/rimassreceive",
     actionText: "Confirm Received",
-    requiredFields: [
-      "device_id",
-      "asn",
-      "return_tn",
-      "order_sn",
-      "lmtn",
-      "uid",
-    ],
+    apiWatchUrl: "/api/apps/process/returninbound/receiving/scan_sheet_id",
+    requiredFields: ["device_id", "scan_value"],
     fields: {
-      device_id: ["device id", "device_id", "deviceid"],
-      asn: ["asn"],
-      return_tn: ["return tn", "return_tn", "returnno", "return no"],
-      order_sn: ["order sn", "order_sn", "ordersn"],
-      lmtn: ["lmtn"],
-      uid: ["uid"],
+      device_id: ["#rms-receiving-input-deviceID"],
+      scan_value: ["inbound_id"]
     },
   },
 };
+
 module.exports = { PAGE_CONFIG };

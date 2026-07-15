@@ -1,12 +1,10 @@
-// api/qc-productivity/users.js
-import { createClient } from '@supabase/supabase-client';
+const { createClient } = require('@supabase/supabase-js');
 
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
 
-export default async function handler(req, res) {
+module.exports = async function handler(req, res) {
   const { method } = req;
 
-  // 1. LẤY DANH SÁCH USER
   if (method === 'GET') {
     const { data, error } = await supabase
       .from('qc_users')
@@ -16,7 +14,6 @@ export default async function handler(req, res) {
     return res.status(200).json(data);
   }
 
-  // 2. THÊM MỚI USER
   if (method === 'POST') {
     const { email, name } = req.body;
     if (!email) return res.status(400).json({ message: 'Missing email' });
@@ -30,7 +27,6 @@ export default async function handler(req, res) {
     return res.status(201).json(data[0]);
   }
 
-  // 3. XÓA USER (HỦY QUYỀN)
   if (method === 'DELETE') {
     const { id } = req.query;
     const { error } = await supabase
@@ -43,4 +39,4 @@ export default async function handler(req, res) {
   }
 
   return res.status(405).json({ message: 'Method not allowed' });
-}
+};

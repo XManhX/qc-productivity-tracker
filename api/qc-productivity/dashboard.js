@@ -1,10 +1,9 @@
-// Thay vì: import { createClient } from '@supabase/supabase-client';
-// Hãy dùng cú pháp chuẩn CommonJS dưới đây:
-const { createClient } = require('@supabase/supabase-js');
+// api/qc-productivity/dashboard.js
+import { createClient } from '@supabase/supabase-js';
 
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
 
-module.exports = async function handler(req, res) {
+export default async function handler(req, res) {
   if (req.method !== 'GET') return res.status(405).json({ message: 'Method not allowed' });
 
   try {
@@ -54,4 +53,4 @@ module.exports = async function handler(req, res) {
   } catch (error) {
     return res.status(500).json({ success: false, error: error.message });
   }
-};
+}

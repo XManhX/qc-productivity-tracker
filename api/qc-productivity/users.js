@@ -1,8 +1,9 @@
-const { createClient } = require('@supabase/supabase-js');
+// api/qc-productivity/users.js
+import { createClient } from '@supabase/supabase-js';
 
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
 
-module.exports = async function handler(req, res) {
+export default async function handler(req, res) {
   const { method } = req;
 
   if (method === 'GET') {
@@ -39,4 +40,4 @@ module.exports = async function handler(req, res) {
   }
 
   return res.status(405).json({ message: 'Method not allowed' });
-};
+}

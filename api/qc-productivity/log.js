@@ -2,7 +2,7 @@ const crypto = require('crypto');
 
 const AUTH_SECRET = process.env.AUTH_SECRET || "secure-default-secret-key-replace-me-in-prod";
 const SUPABASE_URL = process.env.SUPABASE_URL;
-const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY;
 
 function verifySessionToken(token) {
   if (!token) return null;
@@ -47,8 +47,8 @@ module.exports = async (req, res) => {
     const dbResponse = await fetch(`${SUPABASE_URL}/rest/v1/qc_logs`, {
       method: 'POST',
       headers: {
-        'apikey': SUPABASE_SERVICE_ROLE_KEY,
-        'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+        'apikey': SUPABASE_ANON_KEY,
+        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
         'Content-Type': 'application/json',
         'Prefer': 'return=minimal'
       },

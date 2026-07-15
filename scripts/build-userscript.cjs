@@ -1,76 +1,47 @@
-import fs from "fs";
-import path from "path";
-import { fileURLToPath } from "url";
-import { createTrackerSource } from "../src/tracking.js";
+// scripts/build-userscript.cjs
+const fs = require("fs");
+const path = require("path");
+const { createTrackerSource } = require("../src/tracking");
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+const pkg = require("../package.json");
 
-const VERSION = process.env.npm_package_version || "1.0.0";
-const API_BASE_URL =
-  process.env.API_BASE_URL || "https://your-api.company-domain.com";
-const HOST_BASE_URL =
-  process.env.HOST_BASE_URL || "https://tm-qc-tools.company-domain.com";
-const API_HOST = new URL(API_BASE_URL).host;
+// Cấu hình các đường dẫn
+const DIST_DIR = path.join(__dirname, "../public");
+const OUTPUT_FILE = path.join(DIST_DIR, "qc-productivity-tracker.user.js");
 
-const userScriptHeader = `// ==UserScript==
-// @name QC Productivity Tracker
-// @namespace sea-qc-tools
-// @version ${VERSION}
-// @description Track QC productivity actions on WMS return inbound pages
-// @match https://wms.ssc.shopee.vn/v2/returninbound/qc*
-// @match https://wms.ssc.shopee.vn/v2/returninbound/judgement*
-// @match https://wms.ssc.shopee.vn/v2/returninbound/rimassreceive*
-// @grant GM_getValue
-// @grant GM_setValue
-// @grant GM_xmlhttpRequest
-// @grant GM_notification
-// @connect ${API_HOST}
-// @downloadURL ${HOST_BASE_URL}/tracker.user.js
-// @updateURL ${HOST_BASE_URL}/tracker.meta.js
-// ==/UserScript==
-
-`;
-
-const metaScript = `// ==UserScript==
-// @name QC Productivity Tracker
-// @namespace sea-qc-tools
-// @version ${VERSION}
-// @description Track QC productivity actions on WMS return inbound pages
-// @match https://wms.ssc.shopee.vn/v2/returninbound/qc*
-// @match https://wms.ssc.shopee.vn/v2/returninbound/judgement*
-// @match https://wms.ssc.shopee.vn/v2/returninbound/rimassreceive*
-// @grant GM_getValue
-// @grant GM_setValue
-// @grant GM_xmlhttpRequest
-// @grant GM_notification
-// @connect ${API_HOST}
-// @downloadURL ${HOST_BASE_URL}/tracker.user.js
-// @updateURL ${HOST_BASE_URL}/tracker.meta.js
-// ==/UserScript==
-`;
-
-function build() {
-  const publicDir = path.resolve(__dirname, "../public");
-  if (!fs.existsSync(publicDir)) {
-    fs.mkdirSync(publicDir, { recursive: true });
-  }
-
-  const source = createTrackerSource()
-    .replace(/__VERSION__/g, VERSION)
-    .replace(/__API_BASE_URL__/g, API_BASE_URL);
-
-  fs.writeFileSync(
-    path.join(publicDir, "tracker.user.js"),
-    userScriptHeader + source,
-    "utf8",
-  );
-  fs.writeFileSync(path.join(publicDir, "tracker.meta.js"), metaScript, "utf8");
-
-  console.log("✅ Build completed");
-  console.log("VERSION:", VERSION);
-  console.log("API_BASE_URL:", API_BASE_URL);
-  console.log("HOST_BASE_URL:", HOST_BASE_URL);
+// Tạo thư mục public nếu chưa tồn tại
+if (!fs.existsSync(DIST_DIR)) {
+  fs.mkdirSync(DIST_DIR, { recursive: true });
 }
 
-build();
+// Thay thế các biến môi trường cấu hình
+const rawSource = createTrackerSource();
+const version = pkg.version || "1.0.0";
+const apiBaseUrl = process.env.VERCEL_URL 
+  ? `https://${process.env.VERCEL_URL}` 
+  : (process.env.API_BASE_URL || "http://localhost:3000");
+
+const finalSource = rawSource
+  .replace(/__VERSION__/g, version)
+  .replace(/__API_BASE_URL__/g, apiBaseUrl);
+
+// Thêm Metadata Block cho Tampermonkey/Userscript
+const metadata = `// ==UserScript==
+// @name         Shopee WMS QC Productivity Tracker
+// @namespace    http://tampermonkey.net/
+// @version      ${version}
+// @description  Track QC, Judgement and Receiving productivity with draggable floating dashboard.
+// @author       QC Team
+// @match        https://wms.ssc.shopee.vn/*
+// @grant        GM_xmlhttpRequest
+// @grant        GM_setValue
+// @grant        GM_getValue
+// @connect      wms.ssc.shopee.vn
+// @connect      *
+// @run-at       document-end
+// ==/UserScript==
+
+`;
+
+fs.writeFileSync(OUTPUT_FILE, metadata + finalSource, "utf8");
+console.log(`✅ Userscript built successfully at: ${OUTPUT_FILE}`);

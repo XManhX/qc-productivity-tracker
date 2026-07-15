@@ -1,7 +1,7 @@
 // scripts/build-userscript.cjs
 const fs = require("fs");
 const path = require("path");
-const { createTrackerSource } = require("../src/tracking");
+const { createTrackerSource } = require("../src/tracking.cjs");
 
 const pkg = require("../package.json");
 

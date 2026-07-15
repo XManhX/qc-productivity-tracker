@@ -1,5 +1,5 @@
 // src/tracking.js
-const { PAGE_CONFIG } = require("./selectors");
+const { PAGE_CONFIG } = require("./selectors.cjs");
 
 function createTrackerSource() {
   return `

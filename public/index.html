@@ -8,6 +8,8 @@
   <!-- Tailwind CSS & Lucide Icons -->
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://unpkg.com/lucide@latest"></script>
+  <!-- Thêm thư viện SheetJS để xử lý xuất file Excel trực tiếp tại client -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
     body { font-family: 'Inter', sans-serif; }
@@ -63,6 +65,11 @@
             <i data-lucide="calendar" class="w-4 h-4 text-slate-400 mr-2"></i>
             <input type="date" id="filter-date" class="bg-transparent border-0 text-slate-700 text-sm font-semibold focus:ring-0 focus:outline-none" onchange="loadDashboardData()">
           </div>
+          <!-- Nút Xuất Excel được thêm mới ở đây -->
+          <button id="btn-export" onclick="exportToExcel()" class="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-sm px-5 py-2.5 rounded-xl transition duration-150 shadow-sm">
+            <i data-lucide="download" class="w-4 h-4"></i>
+            Xuất Excel
+          </button>
           <button onclick="loadDashboardData()" class="flex items-center gap-2 bg-slate-900 hover:bg-slate-800 text-white font-semibold text-sm px-5 py-2.5 rounded-xl transition duration-150 shadow-sm">
             <i data-lucide="refresh-cw" class="w-4 h-4"></i>
             Làm Mới
@@ -147,6 +154,7 @@
 
   <script>
     const startHour = 6, endHour = 22;
+    let currentDashboardData = []; // Lưu trữ dữ liệu tải về để xuất Excel khi cần
 
     function setInitialDate() {
       const nowVN = new Date(new Date().getTime() + 7 * 60 * 60 * 1000);
@@ -175,6 +183,7 @@
         
         tbody.innerHTML = '';
         const list = data.results;
+        currentDashboardData = list; // Lưu dữ liệu vào biến toàn cục
 
         if (list.length === 0) {
           tbody.innerHTML = `
@@ -259,6 +268,54 @@
       document.getElementById('stat-total-orders').innerText = total.toLocaleString('vi-VN');
       document.getElementById('stat-active-qcs').innerText = qcs;
       document.getElementById('stat-avg-performance').innerHTML = `${avg} <span class="text-xs text-slate-400 font-normal">đơn/giờ</span>`;
+    }
+
+    // Hàm chuyển đổi và xuất dữ liệu ra file Excel
+    function exportToExcel() {
+      if (!currentDashboardData || currentDashboardData.length === 0) {
+        alert("Không có dữ liệu tại ngày đã chọn để xuất file!");
+        return;
+      }
+
+      const selectedDate = document.getElementById('filter-date').value;
+
+      // 1. Ánh xạ mảng dữ liệu gốc sang cấu trúc cột Excel đẹp mắt
+      const sheetData = currentDashboardData.map((user, index) => {
+        const row = {
+          "STT": index + 1,
+          "Nhân viên (Operator Email)": user.email,
+          "Tổng Đơn": user.total
+        };
+
+        // Tạo động các cột từ 6h đến 22h
+        for (let h = startHour; h <= endHour; h++) {
+          row[`${h}h`] = user.hourly[h] || 0;
+        }
+
+        return row;
+      });
+
+      // 2. Tạo worksheet từ json
+      const worksheet = XLSX.utils.json_to_sheet(sheetData);
+
+      // 3. Tự động cấu hình độ rộng của cột
+      const colWidths = [
+        { wch: 6 },  // STT
+        { wch: 30 }, // Operator Email
+        { wch: 12 }  // Tổng Đơn
+      ];
+      // Điền độ rộng cho tất cả các cột giờ (6h - 22h) là 8 ký tự rộng
+      for (let h = startHour; h <= endHour; h++) {
+        colWidths.push({ wch: 8 });
+      }
+      worksheet['!cols'] = colWidths;
+
+      // 4. Tạo workbook và ghi file
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, "Năng Suất QC");
+
+      // Xuất và lưu trữ file dưới máy người dùng
+      XLSX.writeFile(workbook, `WMS_QC_Productivity_${selectedDate}.xlsx`);
     }
 
     // Chạy khởi tạo

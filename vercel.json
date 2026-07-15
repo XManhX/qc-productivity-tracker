@@ -1,18 +1,8 @@
 {
   "cleanUrls": true,
-  "rewrites": [
-    {
-      "source": "/tracker.user.js",
-      "destination": "/tracker.user.txt"
-    },
-    {
-      "source": "/tracker.meta.js",
-      "destination": "/tracker.meta.txt"
-    }
-  ],
   "headers": [
     {
-      "source": "/tracker.user.js",
+      "source": "/(.*).user.js",
       "headers": [
         {
           "key": "Content-Type",
@@ -29,7 +19,7 @@
       ]
     },
     {
-      "source": "/tracker.meta.js",
+      "source": "/(.*).meta.js",
       "headers": [
         {
           "key": "Content-Type",

@@ -17,7 +17,7 @@ export function createTrackerSource() {
       "https://wms.ssc.shopee.vn/api/v2/apps/system/user/get_login_info",
     AUTH_ENDPOINT: "/api/qc-productivity/authz",
     LOG_ENDPOINT: "/api/qc-productivity/log",
-    DEBUG: false,
+    DEBUG: true,
     AUTH_CACHE_MS: 5 * 60 * 1000,
     DUPLICATE_WINDOW_MS: 3000,
   };

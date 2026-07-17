@@ -8,7 +8,9 @@ function generateSessionToken(email) {
   const expiresAt = Date.now() + 24 * 60 * 60 * 1000; // 24 giờ
   const payload = JSON.stringify({ email, expiresAt });
   const signature = crypto.createHmac('sha256', AUTH_SECRET).update(payload).digest('hex');
-  return Buffer.from(`${payload}.${signature}`).toString('base64');
+  const token = Buffer.from(`${payload}.${signature}`).toString('base64');
+  console.log('[Auth] Generated token for', email, 'using secret (first 4 chars):', AUTH_SECRET.substring(0,4));
+  return token;
 }
 
 export default async (req, res) => {
@@ -28,7 +30,6 @@ export default async (req, res) => {
 
     const normalizedEmail = email.trim().toLowerCase();
 
-    // Kiểm tra cấu hình biến môi trường trước khi gọi Supabase để tránh crash
     if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
       console.error("[Auth Error] Cấu hình Supabase bị thiếu trên Vercel!");
       return res.status(500).json({ error: "Database configuration missing on server" });
@@ -59,7 +60,6 @@ export default async (req, res) => {
       return res.status(200).json({ allowed: false, reason: "user_not_found_or_inactive" });
     }
 
-    // Sinh session token hợp lệ gửi về client
     const sessionToken = generateSessionToken(normalizedEmail);
     return res.status(200).json({ allowed: true, session_token: sessionToken });
 

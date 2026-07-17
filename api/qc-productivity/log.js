@@ -11,14 +11,22 @@ function verifySessionToken(token) {
     const [payloadStr, signature] = decoded.split('.');
     if (!payloadStr || !signature) return { valid: false, reason: 'malformed_token' };
 
-    const expected = crypto.createHmac('sha256', AUTH_SECRET).update(payloadStr).digest('hex');
-    if (signature !== expected) return { valid: false, reason: 'invalid_signature' };
+    const expectedSignature = crypto.createHmac('sha256', AUTH_SECRET).update(payloadStr).digest('hex');
+    if (signature !== expectedSignature) {
+      console.error('[verifySessionToken] Signature mismatch.');
+      console.error('  Received:', signature);
+      console.error('  Expected:', expectedSignature);
+      console.error('  Payload:', payloadStr);
+      console.error('  Secret (first 4 chars):', AUTH_SECRET.substring(0,4));
+      return { valid: false, reason: 'invalid_signature' };
+    }
 
     const payload = JSON.parse(payloadStr);
     if (Date.now() > payload.expiresAt) return { valid: false, reason: 'expired_token' };
 
     return { valid: true, email: payload.email };
-  } catch {
+  } catch (e) {
+    console.error('[verifySessionToken] Exception:', e);
     return { valid: false, reason: 'token_parse_error' };
   }
 }

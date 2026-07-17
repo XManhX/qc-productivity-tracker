@@ -1,4 +1,4 @@
-const crypto = require('crypto');
+import crypto from 'crypto';
 
 const AUTH_SECRET = process.env.AUTH_SECRET || "secure-default-secret-key-replace-me-in-prod";
 const SUPABASE_URL = process.env.SUPABASE_URL;
@@ -11,7 +11,7 @@ function generateSessionToken(email) {
   return Buffer.from(`${payload}.${signature}`).toString('base64');
 }
 
-module.exports = async (req, res) => {
+export default async (req, res) => {
   res.setHeader('Access-Control-Allow-Credentials', true);
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS');

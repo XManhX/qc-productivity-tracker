@@ -11,8 +11,6 @@
     AUTH_CACHE_MS: 5 * 60 * 1000,
     DUPLICATE_WINDOW_MS: 3000,
     EMAIL_CACHE_MS: 5 * 60 * 1000,
-    WAIT_FOR_INTERCEPT_MS: 5000,
-    POLL_INTERVAL_MS: 300,
   };
 
   const PAGE_CONFIG = {};
@@ -227,7 +225,6 @@
                     return_tn: returnTn,
                     intercepted_at: nowISO(),
                   });
-                  log(`Intercepted ${pageType} data for ID: ${id}`);
                   if (pageType === "qc") {
                     const lastId = getStore("last_qc_inbound_id", "");
                     if (lastId && lastId !== id) {
@@ -255,29 +252,6 @@
 
       return response;
     };
-  };
-
-  // ----- Wait for intercepted data -----
-  const waitForInterceptedData = (pageType, id) => {
-    return new Promise((resolve) => {
-      const start = Date.now();
-      const key = `intercepted_${pageType}_${id}`;
-      const check = () => {
-        const data = getStore(key, null);
-        if (data) {
-          log(`Intercepted data found for ${pageType} ID ${id}`);
-          resolve(data);
-          return;
-        }
-        if (Date.now() - start > CONFIG.WAIT_FOR_INTERCEPT_MS) {
-          log(`Timeout waiting for intercept data for ${pageType} ID ${id}`);
-          resolve(null);
-          return;
-        }
-        setTimeout(check, CONFIG.POLL_INTERVAL_MS);
-      };
-      check();
-    });
   };
 
   // ----- Get Email (localStorage + GM cache, no fetch) -----
@@ -351,7 +325,6 @@
     Object.entries(cfg.fields).forEach(([field, keywords]) => {
       result[field] = getInputByKeywords(keywords);
     });
-    // Nếu là judgement và scan_value rỗng, thử lấy từ URL
     if (pageType === "judgement" && !result.scan_value) {
       const idFromUrl = getInboundIdFromUrl();
       if (idFromUrl) {
@@ -457,7 +430,113 @@
     }
   };
 
-  // ----- Handle click -----
+  // ----- Pre-fetch data for judgement if ID in URL -----
+  const preFetchJudgementData = async () => {
+    const id = getInboundIdFromUrl();
+    if (!id) return;
+    const existing = getStore(`intercepted_judgement_${id}`, null);
+    if (existing) {
+      log("Judgement data already in storage for ID:", id);
+      return;
+    }
+    log("Judgement: Pre-fetching data for ID:", id);
+    try {
+      const apiUrl =
+        "https://wms.ssc.shopee.vn/api/apps/process/returninbound/judge/scan_sheet_id";
+      const resp = await fetch(apiUrl, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ scan_value: id }),
+      });
+      if (!resp.ok) {
+        log("Pre-fetch failed, status:", resp.status);
+        return;
+      }
+      const json = await resp.json();
+      if (json?.retcode === 0 && json?.data?.list?.length) {
+        const item = json.data.list[0];
+        const inboundId = item.inbound_id || item.asn || "";
+        const returnTn = item.return_tn || "";
+        if (inboundId) {
+          setStore(`intercepted_judgement_${inboundId}`, {
+            inbound_id: inboundId,
+            return_tn: returnTn,
+            intercepted_at: nowISO(),
+          });
+          log("Pre-fetch successful, stored data for:", inboundId);
+        }
+      }
+    } catch (e) {
+      log("Pre-fetch error:", e);
+    }
+  };
+
+  // ----- Xử lý action kèm popup Confirm -----
+  const handleActionWithPopup = (pageType, userEmail) => {
+    // Hàm gửi log thực tế
+    const doSend = () => {
+      // Kiểm tra xem đã gửi chưa (tránh gửi 2 lần)
+      if (window._qc_sent) return;
+      window._qc_sent = true;
+      handleAction(pageType, userEmail);
+    };
+
+    // Tìm nút Confirm trong popup
+    let confirmBtn = document.querySelector(
+      ".ssc-message-box-footer-primary .ssc-btn-type-primary",
+    );
+    if (
+      confirmBtn &&
+      normalize(confirmBtn.innerText).toLowerCase() === "confirm"
+    ) {
+      confirmBtn.addEventListener("click", doSend, { once: true });
+      log("Popup Confirm found, waiting for click...");
+      // Nếu popup đã hiện, sau 5s nếu chưa click vẫn gửi (fallback)
+      setTimeout(() => {
+        if (!window._qc_sent) {
+          log("Popup Confirm not clicked after timeout, sending anyway.");
+          doSend();
+        }
+      }, 5000);
+      return;
+    }
+
+    // Nếu chưa có popup, dùng MutationObserver để chờ
+    log("Waiting for popup Confirm...");
+    const observer = new MutationObserver(() => {
+      confirmBtn = document.querySelector(
+        ".ssc-message-box-footer-primary .ssc-btn-type-primary",
+      );
+      if (
+        confirmBtn &&
+        normalize(confirmBtn.innerText).toLowerCase() === "confirm"
+      ) {
+        confirmBtn.addEventListener("click", doSend, { once: true });
+        observer.disconnect();
+        log("Popup Confirm detected and listener attached.");
+        // Timeout sau 5s nếu chưa click vẫn gửi
+        setTimeout(() => {
+          if (!window._qc_sent) {
+            log("Popup Confirm not clicked after timeout, sending anyway.");
+            doSend();
+          }
+        }, 5000);
+      }
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+
+    // Timeout tổng thể sau 10s nếu không thấy popup, vẫn gửi
+    setTimeout(() => {
+      observer.disconnect();
+      if (!window._qc_sent) {
+        log("Popup Confirm not appeared, sending anyway.");
+        doSend();
+      }
+    }, 10000);
+  };
+
+  // ----- Gửi log thực tế -----
   const handleAction = async (pageType, userEmail) => {
     const record = makeRecord(pageType, userEmail);
     if (shouldSkip(record, pageType)) {
@@ -543,13 +622,8 @@
 
     updateWidget();
 
-    // Nếu là judgement và có ID trên URL, chờ interceptor bắt dữ liệu
     if (pageType === "judgement") {
-      const id = getInboundIdFromUrl();
-      if (id) {
-        log(`Judgement page with ID: ${id}, waiting for intercept...`);
-        await waitForInterceptedData("judgement", id);
-      }
+      await preFetchJudgementData();
     }
 
     const email = getEmail();
@@ -573,8 +647,9 @@
         btn.addEventListener(
           "click",
           () => {
-            log("Action button clicked");
-            handleAction(pageType, email);
+            log("Action button clicked, waiting for popup Confirm...");
+            // Sử dụng hàm có xử lý popup
+            handleActionWithPopup(pageType, email);
           },
           true,
         );

@@ -1,10 +1,14 @@
-// src/tracking.js
-const { PAGE_CONFIG } = require("./selectors.cjs");
+import { PAGE_CONFIG } from './selectors.js';
 
-function createTrackerSource() {
+export function createTrackerSource() {
   return `
 (function () {
   "use strict";
+
+  if (typeof GM_xmlhttpRequest === 'undefined' || typeof GM_setValue === 'undefined') {
+    console.warn('[QC Tracker] Tampermonkey APIs not available.');
+    return;
+  }
 
   const CONFIG = {
     VERSION: "__VERSION__",
@@ -13,7 +17,7 @@ function createTrackerSource() {
       "https://wms.ssc.shopee.vn/api/v2/apps/system/user/get_login_info",
     AUTH_ENDPOINT: "/api/qc-productivity/authz",
     LOG_ENDPOINT: "/api/qc-productivity/log",
-    DEBUG: true, 
+    DEBUG: false,
     AUTH_CACHE_MS: 5 * 60 * 1000,
     DUPLICATE_WINDOW_MS: 3000,
   };
@@ -23,7 +27,7 @@ function createTrackerSource() {
   let fieldTimestamps = {};
 
   function logDebug(...args) {
-    if (CONFIG.DEBUG) console.log("[QC Tracker Debug]", ...args);
+    if (CONFIG.DEBUG) console.log("[QC Tracker]", ...args);
   }
 
   function normalizeText(text) {
@@ -49,7 +53,8 @@ function createTrackerSource() {
     try {
       const value = GM_getValue(key);
       return value === undefined ? fallback : value;
-    } catch {
+    } catch (e) {
+      logDebug("getStorage error", e);
       return fallback;
     }
   }
@@ -64,32 +69,44 @@ function createTrackerSource() {
 
   function gmRequest(method, url, data = null, headers = {}) {
     return new Promise((resolve, reject) => {
-      GM_xmlhttpRequest({
-        method,
-        url,
-        headers: {
-          "Content-Type": "application/json",
-          ...headers,
-        },
-        data: data ? JSON.stringify(data) : undefined,
-        onload: function (response) {
-          try {
-            const parsed = response.responseText
-              ? JSON.parse(response.responseText)
-              : {};
-            resolve({ status: response.status, data: parsed });
-          } catch {
-            resolve({ status: response.status, data: response.responseText });
-          }
-        },
-        onerror: function (error) {
-          reject(error);
-        },
-      });
+      try {
+        GM_xmlhttpRequest({
+          method,
+          url,
+          headers: {
+            "Content-Type": "application/json",
+            ...headers,
+          },
+          data: data ? JSON.stringify(data) : undefined,
+          onload: function (response) {
+            if (response.status < 200 || response.status >= 300) {
+              reject(new Error(\`HTTP \${response.status}: \${response.statusText}\`));
+              return;
+            }
+            let parsedData = null;
+            try {
+              parsedData = response.responseText ? JSON.parse(response.responseText) : {};
+            } catch (e) {
+              reject(new Error(\`Invalid JSON: \${response.responseText}\`));
+              return;
+            }
+            resolve({ status: response.status, data: parsedData });
+          },
+          onerror: function (error) {
+            reject(error);
+          },
+          ontimeout: function () {
+            reject(new Error('Request timeout'));
+          },
+          timeout: 10000
+        });
+      } catch (e) {
+        reject(e);
+      }
     });
   }
 
-  // --- HÀM CẬP NHẬT UI ĐẾM SỐ LƯỢNG ĐƠN ---
+  // --- Floating widget ---
   function updateFloatingWidget() {
     const today = getTodayKey();
     const stats = getStorage(\`stats_\${today}\`, { qc: 0, judgement: 0, rimassreceive: 0 });
@@ -184,7 +201,7 @@ function createTrackerSource() {
     }
   }
 
-  // --- CƠ CHẾ ĐÁNH CHẶN API HỆ THỐNG ---
+  // --- API interceptor ---
   function initApiInterceptor() {
     const originalFetch = window.fetch;
     window.fetch = async function (...args) {
@@ -203,7 +220,7 @@ function createTrackerSource() {
               const returnTn = item.return_tn || "";
 
               if (inboundId) {
-                console.log(\`%c[QC Tracker - API Intercepted] Bắt được dữ liệu từ API (\${pageType}):\`, "color: #00bcd4; font-weight: bold;", { inboundId, returnTn });
+                logDebug(\`Intercepted \${pageType} data:\`, { inboundId, returnTn });
                 
                 setStorage(\`intercepted_\${pageType}_\${inboundId}\`, {
                   inbound_id: inboundId,
@@ -237,14 +254,6 @@ function createTrackerSource() {
     };
   }
 
-  // --- CHUYỂN ĐỔI SELECTOR LINH HOẠT ---
-  function getTargetElement(keyword) {
-    if (keyword.startsWith("#") || keyword.startsWith(".") || keyword.startsWith("[")) {
-      return document.querySelector(keyword);
-    }
-    return document.querySelector(\`[data-for="\${keyword}"]\`);
-  }
-
   function setupFieldFocusListeners(pageType) {
     const cfg = PAGE_CONFIG[pageType];
     if (!cfg) return;
@@ -252,12 +261,14 @@ function createTrackerSource() {
     Object.entries(cfg.fields).forEach(([fieldName, keywords]) => {
       for (const keyword of keywords) {
         let inputEl = null;
-        const targetEl = getTargetElement(keyword);
-        
-        if (targetEl) {
-          inputEl = (targetEl.tagName === "INPUT" || targetEl.tagName === "TEXTAREA") 
-            ? targetEl 
-            : targetEl.querySelector("input, textarea");
+        if (keyword.startsWith("#")) {
+          const target = document.querySelector(keyword);
+          if (target) {
+            inputEl = target.tagName === "INPUT" || target.tagName === "TEXTAREA" ? target : target.querySelector("input, textarea");
+          }
+        } else {
+          const parent = document.querySelector(\`[data-for="\${keyword}"]\`);
+          if (parent) inputEl = parent.querySelector("input, textarea");
         }
 
         if (inputEl && !inputEl.dataset.qcTimeBound) {
@@ -279,32 +290,33 @@ function createTrackerSource() {
         credentials: "include",
         headers: { Accept: "application/json" },
       });
-      if (!resp.ok) return "fallback_user@shopee.com";
+      if (!resp.ok) return "";
       const data = await resp.json();
-      if (data?.retcode !== 0) return "fallback_user@shopee.com";
-      return normalizeText(data?.data?.email || "fallback_user@shopee.com").toLowerCase();
+      if (data?.retcode !== 0) return "";
+      return normalizeText(data?.data?.email || "").toLowerCase();
     } catch (e) {
       logDebug("getCurrentUserEmail error", e);
-      return "fallback_user@shopee.com";
+      return "";
     }
   }
 
-  // --- LOG KIỂM TRA ĐỌC GIÁ TRỊ INPUT ---
   function getInputValueByKeywords(keywords = []) {
     for (const keyword of keywords) {
-      const targetEl = getTargetElement(keyword);
-      if (targetEl) {
-        let val = "";
-        if (targetEl.tagName === "INPUT" || targetEl.tagName === "TEXTAREA") {
-          val = normalizeText(targetEl.value || "");
-        } else {
+      if (keyword.startsWith("#")) {
+        const targetEl = document.querySelector(keyword);
+        if (targetEl) {
+          if (targetEl.tagName === "INPUT" || targetEl.tagName === "TEXTAREA") {
+            return normalizeText(targetEl.value || "");
+          }
           const inputEl = targetEl.querySelector("input, textarea");
-          if (inputEl) val = normalizeText(inputEl.value || "");
+          if (inputEl) return normalizeText(inputEl.value || "");
         }
-        console.log(\`%c[QC Tracker - Input Found] Khớp từ khóa: "\${keyword}" -> Giá trị hiện tại: "\${val}"\`, "color: #4caf50; font-weight: bold;");
-        return val;
       } else {
-        console.warn(\`%c[QC Tracker - Input Missing] Không tìm thấy phần tử nào khớp với từ khóa: "\${keyword}". Khắc phục bằng cách cập nhật selector chính xác vào selectors.cjs!\`, "color: #ff9800; font-weight: bold;");
+        const parentEl = document.querySelector(\`[data-for="\${keyword}"]\`);
+        if (parentEl) {
+          const inputEl = parentEl.querySelector("input, textarea");
+          if (inputEl) return normalizeText(inputEl.value || "");
+        }
       }
     }
     return "";
@@ -362,25 +374,46 @@ function createTrackerSource() {
   }
 
   async function checkAuthorization(userEmail) {
+    if (!userEmail) return { allowed: false, reason: "missing_user_email" };
+
+    const cacheKey = "qc_authz_" + userEmail;
+    const cached = getStorage(cacheKey, null);
+
+    if (cached && cached.expireAt && Date.now() < cached.expireAt) {
+      return cached.value;
+    }
+
     try {
       const resp = await gmRequest(
         "POST",
-        CONFIG.API_BASE_URL + "/api/qc-productivity/authz", // Đường dẫn API login/authz của bạn
-        { email: userEmail }
+        CONFIG.API_BASE_URL + CONFIG.AUTH_ENDPOINT,
+        {
+          email: userEmail,
+          page: location.pathname,
+        },
       );
-      if (resp.status === 200) {
-        const data = JSON.parse(resp.responseText);
-        return { allowed: true, session_token: data.session_token };
-      }
-    } catch (err) {
-      console.error("Auth error:", err);
+
+      const value = {
+        allowed: !!resp?.data?.allowed,
+        reason: resp?.data?.reason || "",
+        user: resp?.data?.user || null,
+        session_token: resp?.data?.session_token || "",
+      };
+
+      setStorage(cacheKey, {
+        expireAt: Date.now() + CONFIG.AUTH_CACHE_MS,
+        value,
+      });
+
+      return value;
+    } catch (e) {
+      logDebug("checkAuthorization error", e);
+      return { allowed: false, reason: "authz_api_error" };
     }
-    return { allowed: false, session_token: "" };
   }
 
   async function sendRecord(record, sessionToken = "") {
     try {
-      console.log("%c[QC Tracker - API Sending] Đang đẩy record lên Database...", "color: #e91e63; font-weight: bold;", record);
       const headers = {};
       if (sessionToken) headers["X-QC-Session-Token"] = sessionToken;
 
@@ -388,18 +421,12 @@ function createTrackerSource() {
         "POST",
         CONFIG.API_BASE_URL + CONFIG.LOG_ENDPOINT,
         record,
-        headers
+        headers,
       );
 
-      if (resp.status >= 200 && resp.status < 300) {
-        console.log("%c[QC Tracker - API Success] Dữ liệu đã lưu thành công vào Database!", "color: #2e7d32; font-weight: bold; font-size: 12px;");
-        return true;
-      } else {
-        console.error(\`%c[QC Tracker - API Error] Server trả lỗi Http \${resp.status}\`, "color: #c62828;", resp.data);
-        return false;
-      }
+      return resp.status >= 200 && resp.status < 300;
     } catch (e) {
-      console.error("[QC Tracker - API Crash] Lỗi mạng khi gửi log:", e);
+      logDebug("sendRecord error", e);
       const pending = getStorage("qc_pending_logs", []);
       pending.push({ record, sessionToken });
       setStorage("qc_pending_logs", pending);
@@ -407,11 +434,24 @@ function createTrackerSource() {
     }
   }
 
+  async function flushPendingLogs() {
+    const pending = getStorage("qc_pending_logs", []);
+    if (!Array.isArray(pending) || pending.length === 0) return;
+
+    const remain = [];
+    for (const item of pending) {
+      const ok = await sendRecord(item.record, item.sessionToken || "");
+      if (!ok) remain.push(item);
+    }
+
+    setStorage("qc_pending_logs", remain);
+  }
+
   async function handleActionClick(pageType, userEmail, sessionToken = "") {
     const record = makeRecord(pageType, userEmail);
 
     if (shouldSkipRecord(record, pageType)) {
-      console.error(\`%c[QC Tracker - Skipped] Bỏ qua gửi vì thiếu trường bắt buộc (\${PAGE_CONFIG[pageType]?.requiredFields?.join(", ")}). Hãy sửa cấu hình selector!\`, "color: #d32f2f; font-weight: bold;", record);
+      logDebug("skip record due to missing required fields", record);
       return;
     }
 
@@ -430,7 +470,7 @@ function createTrackerSource() {
       fingerprint === lastFingerprint &&
       Date.now() - lastTime < CONFIG.DUPLICATE_WINDOW_MS
     ) {
-      console.warn("[QC Tracker - Duplicate] Trùng lặp thao tác (3000ms). Hủy lệnh.");
+      logDebug("duplicate record skipped");
       return;
     }
 
@@ -440,6 +480,7 @@ function createTrackerSource() {
     const success = await sendRecord(record, sessionToken);
     if (success) {
       fieldTimestamps = {};
+      
       const today = getTodayKey();
       const stats = getStorage(\`stats_\${today}\`, { qc: 0, judgement: 0, rimassreceive: 0 });
       if (stats.hasOwnProperty(pageType)) {
@@ -454,53 +495,36 @@ function createTrackerSource() {
     initApiInterceptor();
 
     const pageType = getPageType(location.href);
-    if (pageType === "unknown") return;
     
-    updateFloatingWidget();
-    console.log(\`%c[QC Tracker - Initialized] Khởi động thành công hệ thống tracking tại: \${pageType}\`, "color: #9c27b0; font-weight: bold; font-size: 13px;");
+    if (pageType !== "unknown") {
+      updateFloatingWidget();
+    } else {
+      return;
+    }
 
     const userEmail = await getCurrentUserEmail();
+    if (!userEmail) return;
+
     const authz = await checkAuthorization(userEmail);
+    if (!authz.allowed) return;
+
+    await flushPendingLogs();
 
     const bind = () => {
-      // 1. Gắn sự kiện click nút bấm vật lý trên web
       const button = findActionButton(PAGE_CONFIG[pageType].actionText);
       if (button && button.dataset.qcTrackerBound !== "1") {
         button.dataset.qcTrackerBound = "1";
-        button.addEventListener("click", async function () {
-          console.log("[QC Tracker - Event] Phát hiện click nút.");
-          await handleActionClick(pageType, userEmail, authz.session_token || "");
-        }, true);
-      }
-      
-      // 2. TÌM VÀ GẮN KEYUP TRỰC TIẾP LÊN Ô INPUT CỦA PDA SCANNER (Giải pháp triệt để chặn stopPropagation)
-      const cfg = PAGE_CONFIG[pageType];
-      if (cfg) {
-        Object.entries(cfg.fields).forEach(([fieldName, keywords]) => {
-          for (const keyword of keywords) {
-            const targetEl = getTargetElement(keyword);
-            if (targetEl) {
-              const inputEl = (targetEl.tagName === "INPUT" || targetEl.tagName === "TEXTAREA") 
-                ? targetEl 
-                : targetEl.querySelector("input, textarea");
-              
-              if (inputEl && inputEl.dataset.qcInputKeyupBound !== "1") {
-                inputEl.dataset.qcInputKeyupBound = "1";
-                console.log(\`%c[QC Tracker - Bind Success] Lắng nghe thành công sự kiện của ô input: "\${keyword}"\`, "color: #1b5e20; font-weight: bold;");
-                
-                inputEl.addEventListener("keyup", async function (e) {
-                  if (e.key === "Enter" || e.keyCode === 13) {
-                    console.log("%c[QC Tracker - Event] Phát hiện phím Enter từ súng PDA tại ô Input!", "color: #2196f3; font-weight: bold;");
-                    // Chờ 200ms để text từ súng kịp đồng bộ hóa và API Watch nhận diện xong phản hồi
-                    setTimeout(async () => {
-                      await handleActionClick(pageType, userEmail, authz.session_token || "");
-                    }, 200);
-                  }
-                }, true);
-              }
-            }
-          }
-        });
+        button.addEventListener(
+          "click",
+          async function () {
+            await handleActionClick(
+              pageType,
+              userEmail,
+              authz.session_token || "",
+            );
+          },
+          true,
+        );
       }
       
       setupFieldFocusListeners(pageType);
@@ -516,7 +540,3 @@ function createTrackerSource() {
 })();
 `;
 }
-
-module.exports = {
-  createTrackerSource,
-};

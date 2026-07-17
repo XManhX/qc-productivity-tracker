@@ -8,16 +8,17 @@
   <!-- Tailwind CSS & Lucide Icons -->
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://unpkg.com/lucide@latest"></script>
-  <!-- Thêm thư viện SheetJS để xử lý xuất file Excel trực tiếp tại client -->
+  <!-- SheetJS -->
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
     body { font-family: 'Inter', sans-serif; }
-    /* Scrollbar tối giản */
     ::-webkit-scrollbar { width: 6px; height: 6px; }
     ::-webkit-scrollbar-track { background: #f1f5f9; }
     ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
     ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+    .loading-spinner { animation: spin 1s linear infinite; }
+    @keyframes spin { 100% { transform: rotate(360deg); } }
   </style>
 </head>
 <body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col">
@@ -65,7 +66,6 @@
             <i data-lucide="calendar" class="w-4 h-4 text-slate-400 mr-2"></i>
             <input type="date" id="filter-date" class="bg-transparent border-0 text-slate-700 text-sm font-semibold focus:ring-0 focus:outline-none" onchange="loadDashboardData()">
           </div>
-          <!-- Nút Xuất Excel được thêm mới ở đây -->
           <button id="btn-export" onclick="exportToExcel()" class="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-sm px-5 py-2.5 rounded-xl transition duration-150 shadow-sm">
             <i data-lucide="download" class="w-4 h-4"></i>
             Xuất Excel
@@ -131,14 +131,7 @@
             </tr>
           </thead>
           <tbody id="dashboard-body" class="divide-y divide-slate-100 text-sm">
-            <tr>
-              <td colspan="30" class="py-12 text-center text-slate-400">
-                <div class="flex flex-col items-center justify-center gap-2">
-                  <i data-lucide="loader-2" class="w-8 h-8 animate-spin text-indigo-500"></i>
-                  <span>Đang tải thông tin năng suất và thiết lập bảng...</span>
-                </div>
-              </td>
-            </tr>
+            <!-- Loading state sẽ hiển thị ở đây -->
           </tbody>
         </table>
       </div>
@@ -154,7 +147,37 @@
 
   <script>
     const startHour = 6, endHour = 22;
-    let currentDashboardData = []; // Lưu trữ dữ liệu tải về để xuất Excel khi cần
+    let currentDashboardData = [];
+
+    // Hiển thị loading state
+    function showLoading() {
+      const tbody = document.getElementById('dashboard-body');
+      tbody.innerHTML = `
+        <tr>
+          <td colspan="30" class="py-12 text-center text-slate-400">
+            <div class="flex flex-col items-center justify-center gap-2">
+              <div class="loading-spinner w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full"></div>
+              <span>Đang tải dữ liệu...</span>
+            </div>
+          </td>
+        </tr>
+      `;
+    }
+
+    function showError(message) {
+      const tbody = document.getElementById('dashboard-body');
+      tbody.innerHTML = `
+        <tr>
+          <td colspan="30" class="py-12 text-rose-500 text-center font-medium">
+            <div class="flex flex-col items-center justify-center gap-2">
+              <i data-lucide="alert-triangle" class="w-10 h-10"></i>
+              <span>${message}</span>
+            </div>
+          </td>
+        </tr>
+      `;
+      lucide.createIcons();
+    }
 
     function setInitialDate() {
       const nowVN = new Date(new Date().getTime() + 7 * 60 * 60 * 1000);
@@ -175,15 +198,26 @@
       const selectedDate = document.getElementById('filter-date').value;
       const tbody = document.getElementById('dashboard-body');
       
+      // Hiển thị loading
+      showLoading();
+
       try {
         const res = await fetch(`/api/qc-productivity/dashboard?date=${selectedDate}`);
+        
+        if (!res.ok) {
+          const errorData = await res.json().catch(() => ({}));
+          throw new Error(errorData.error || `HTTP ${res.status}`);
+        }
+
         const data = await res.json();
         
-        if (!data.success) throw new Error(data.error);
+        if (!data.success) {
+          throw new Error(data.error || 'Dữ liệu không hợp lệ');
+        }
         
         tbody.innerHTML = '';
         const list = data.results;
-        currentDashboardData = list; // Lưu dữ liệu vào biến toàn cục
+        currentDashboardData = list;
 
         if (list.length === 0) {
           tbody.innerHTML = `
@@ -228,7 +262,6 @@
             if (count > 0) {
               totalActiveHours++;
               td.innerText = count;
-              // Định dạng heatmap nhẹ tùy lượng đơn
               if (count >= 50) {
                 td.className += ' bg-amber-500 text-white font-bold';
               } else if (count >= 25) {
@@ -245,20 +278,13 @@
           tbody.appendChild(tr);
         });
 
-        // Tính toán thông số trung bình
         const avgPerformance = totalActiveHours > 0 ? Math.round(totalOrders / totalActiveHours) : 0;
         updateStats(totalOrders, activeQCs, avgPerformance);
         
       } catch (err) {
-        tbody.innerHTML = `
-          <tr>
-            <td colspan="30" class="py-12 text-rose-500 text-center font-medium">
-              <div class="flex flex-col items-center justify-center gap-2">
-                <i data-lucide="alert-triangle" class="w-10 h-10"></i>
-                <span>Lỗi kết nối cơ sở dữ liệu: ${err.message}</span>
-              </div>
-            </td>
-          </tr>`;
+        showError(`Lỗi kết nối: ${err.message}`);
+        // Reset stats về 0
+        updateStats(0, 0, 0);
       } finally {
         lucide.createIcons();
       }
@@ -270,61 +296,45 @@
       document.getElementById('stat-avg-performance').innerHTML = `${avg} <span class="text-xs text-slate-400 font-normal">đơn/giờ</span>`;
     }
 
-    // Hàm chuyển đổi và xuất dữ liệu ra file Excel
     function exportToExcel() {
       if (!currentDashboardData || currentDashboardData.length === 0) {
-        alert("Không có dữ liệu tại ngày đã chọn để xuất file!");
+        alert('Không có dữ liệu tại ngày đã chọn để xuất file!');
         return;
       }
 
       const selectedDate = document.getElementById('filter-date').value;
 
-      // 1. Ánh xạ mảng dữ liệu gốc sang cấu trúc cột Excel đẹp mắt
       const sheetData = currentDashboardData.map((user, index) => {
         const row = {
           "STT": index + 1,
           "Nhân viên (Operator Email)": user.email,
           "Tổng Đơn": user.total
         };
-
-        // Tạo động các cột từ 6h đến 22h
         for (let h = startHour; h <= endHour; h++) {
           row[`${h}h`] = user.hourly[h] || 0;
         }
-
         return row;
       });
 
-      // 2. Tạo worksheet từ json
       const worksheet = XLSX.utils.json_to_sheet(sheetData);
-
-      // 3. Tự động cấu hình độ rộng của cột
-      const colWidths = [
-        { wch: 6 },  // STT
-        { wch: 30 }, // Operator Email
-        { wch: 12 }  // Tổng Đơn
-      ];
-      // Điền độ rộng cho tất cả các cột giờ (6h - 22h) là 8 ký tự rộng
+      const colWidths = [{ wch: 6 }, { wch: 30 }, { wch: 12 }];
       for (let h = startHour; h <= endHour; h++) {
         colWidths.push({ wch: 8 });
       }
       worksheet['!cols'] = colWidths;
 
-      // 4. Tạo workbook và ghi file
       const workbook = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(workbook, worksheet, "Năng Suất QC");
-
-      // Xuất và lưu trữ file dưới máy người dùng
       XLSX.writeFile(workbook, `WMS_QC_Productivity_${selectedDate}.xlsx`);
     }
 
-    // Chạy khởi tạo
+    // Khởi chạy
     setInitialDate();
     initTableHeader();
     loadDashboardData();
     lucide.createIcons();
 
-    // Tự động reload mỗi 2 phút cho ngày hôm nay
+    // Tự động refresh mỗi 2 phút nếu đang xem ngày hôm nay
     setInterval(() => {
       const nowVN = new Date(new Date().getTime() + 7 * 60 * 60 * 1000).toISOString().split('T')[0];
       if (document.getElementById('filter-date').value === nowVN) {

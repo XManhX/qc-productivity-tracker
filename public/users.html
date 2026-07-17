@@ -10,6 +10,8 @@
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
     body { font-family: 'Inter', sans-serif; }
+    .loading-spinner { animation: spin 1s linear infinite; }
+    @keyframes spin { 100% { transform: rotate(360deg); } }
   </style>
 </head>
 <body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col">
@@ -67,9 +69,10 @@
             <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-sm py-2.5 rounded-xl transition shadow-sm">
               Cấp Quyền Truy Cập
             </button>
+            <div id="single-user-message" class="text-sm hidden"></div>
           </form>
 
-          <!-- Form Thêm Hàng Loạt (Bulk Add) -->
+          <!-- Form Thêm Hàng Loạt -->
           <div class="border-t border-slate-100 pt-6">
             <div class="flex items-center justify-between mb-2">
               <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider">Thêm Hàng Loạt (Bulk Add)</h3>
@@ -81,6 +84,7 @@
               <i data-lucide="users-2" class="w-4 h-4"></i>
               Kích Hoạt Danh Sách Hàng Loạt
             </button>
+            <div id="bulk-message" class="text-sm hidden mt-2"></div>
           </div>
 
         </div>
@@ -99,6 +103,9 @@
                 <p id="user-count-badge" class="text-slate-400 text-xs mt-0.5">0 nhân sự được ủy quyền</p>
               </div>
             </div>
+            <button onclick="fetchUsers()" class="text-slate-400 hover:text-slate-600 transition">
+              <i data-lucide="refresh-cw" class="w-4 h-4"></i>
+            </button>
           </div>
 
           <div class="overflow-x-auto max-h-[600px] overflow-y-auto">
@@ -111,8 +118,14 @@
                 </tr>
               </thead>
               <tbody id="user-list-body" class="divide-y divide-slate-100 text-sm">
+                <!-- Loading state -->
                 <tr>
-                  <td colspan="3" class="py-12 text-center text-slate-400">Đang tải danh sách...</td>
+                  <td colspan="3" class="py-12 text-center text-slate-400">
+                    <div class="flex flex-col items-center justify-center gap-2">
+                      <div class="loading-spinner w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full"></div>
+                      <span>Đang tải danh sách...</span>
+                    </div>
+                  </td>
                 </tr>
               </tbody>
             </table>
@@ -130,16 +143,40 @@
   </footer>
 
   <script>
+    // Hiển thị thông báo
+    function showMessage(elementId, message, isError = false) {
+      const el = document.getElementById(elementId);
+      if (!el) return;
+      el.textContent = message;
+      el.className = `text-sm ${isError ? 'text-rose-600' : 'text-emerald-600'} mt-2`;
+      el.classList.remove('hidden');
+      setTimeout(() => el.classList.add('hidden'), 5000);
+    }
+
+    // Fetch danh sách user
     async function fetchUsers() {
+      const tbody = document.getElementById('user-list-body');
+      // Hiển thị loading
+      tbody.innerHTML = `
+        <tr>
+          <td colspan="3" class="py-12 text-center text-slate-400">
+            <div class="flex flex-col items-center justify-center gap-2">
+              <div class="loading-spinner w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full"></div>
+              <span>Đang tải danh sách...</span>
+            </div>
+          </td>
+        </tr>
+      `;
+
       try {
         const res = await fetch('/api/qc-productivity/users');
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const users = await res.json();
-        const tbody = document.getElementById('user-list-body');
+        
         tbody.innerHTML = '';
-
         document.getElementById('user-count-badge').innerText = `${users.length} nhân sự được ủy quyền`;
 
-        if(users.length === 0) {
+        if (users.length === 0) {
           tbody.innerHTML = `
             <tr>
               <td colspan="3" class="py-12 text-center text-slate-400">
@@ -178,17 +215,30 @@
           `;
         });
       } catch (err) {
-        alert('Không thể tải danh sách nhân sự');
+        tbody.innerHTML = `
+          <tr>
+            <td colspan="3" class="py-12 text-rose-500 text-center font-medium">
+              <div class="flex flex-col items-center gap-2">
+                <i data-lucide="alert-triangle" class="w-8 h-8"></i>
+                <span>Lỗi tải danh sách: ${err.message}</span>
+              </div>
+            </td>
+          </tr>`;
       } finally {
         lucide.createIcons();
       }
     }
 
-    // Xử lý thêm đơn lẻ
+    // Thêm 1 user (submit form)
     document.getElementById('single-user-form').addEventListener('submit', async (e) => {
       e.preventDefault();
-      const name = document.getElementById('user-name').value;
-      const email = document.getElementById('user-email').value;
+      const name = document.getElementById('user-name').value.trim();
+      const email = document.getElementById('user-email').value.trim();
+
+      if (!email) {
+        showMessage('single-user-message', 'Vui lòng nhập email!', true);
+        return;
+      }
 
       try {
         const res = await fetch('/api/qc-productivity/users', {
@@ -197,41 +247,38 @@
           body: JSON.stringify({ name, email })
         });
 
-        if (res.ok) {
-          document.getElementById('single-user-form').reset();
-          fetchUsers();
-        } else {
-          const err = await res.json();
-          alert('Lỗi: ' + err.error);
+        const data = await res.json();
+        if (!res.ok) {
+          throw new Error(data.message || `HTTP ${res.status}`);
         }
+
+        document.getElementById('single-user-form').reset();
+        showMessage('single-user-message', `✅ Đã thêm thành công ${email}`);
+        fetchUsers();
       } catch (err) {
-        alert('Lỗi khi lưu dữ liệu!');
+        showMessage('single-user-message', `❌ Lỗi: ${err.message}`, true);
       }
     });
 
-    // Xử lý Thêm Hàng Loạt (Bulk Add)
+    // Bulk add
     async function handleBulkAdd() {
       const rawText = document.getElementById('bulk-emails').value;
       if (!rawText.trim()) {
-        alert('Vui lòng nhập ít nhất một email!');
+        showMessage('bulk-message', 'Vui lòng nhập ít nhất một email!', true);
         return;
       }
 
-      // Regex bóc tách tất cả chuỗi dạng email ngăn cách bởi bất kỳ ký tự phân tách nào
       const emails = rawText.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g);
-
       if (!emails || emails.length === 0) {
-        alert('Không tìm thấy địa chỉ email hợp lệ nào!');
+        showMessage('bulk-message', 'Không tìm thấy địa chỉ email hợp lệ nào!', true);
         return;
       }
 
-      const confirmMsg = `Hệ thống tìm thấy ${emails.length} email. Bạn có đồng ý cấp quyền truy cập hàng loạt cho họ không?`;
-      if (!confirm(confirmMsg)) return;
+      if (!confirm(`Hệ thống tìm thấy ${emails.length} email. Bạn có đồng ý cấp quyền truy cập hàng loạt cho họ không?`)) return;
 
       let successCount = 0;
       let failedEmails = [];
 
-      // Loop thêm đồng thời các tài khoản
       for (const email of emails) {
         try {
           const defaultName = email.split('@')[0].toUpperCase();
@@ -242,7 +289,7 @@
           });
           if (res.ok) successCount++;
           else failedEmails.push(email);
-        } catch (e) {
+        } catch {
           failedEmails.push(email);
         }
       }
@@ -251,23 +298,25 @@
       fetchUsers();
 
       if (failedEmails.length > 0) {
-        alert(`Hoàn tất! Đã thêm thành công ${successCount} nhân sự. Thất bại ${failedEmails.length} trường hợp (Có thể đã tồn tại trong hệ thống).`);
+        showMessage('bulk-message', `✅ Thêm thành công ${successCount} nhân sự. ❌ Thất bại ${failedEmails.length} trường hợp (có thể đã tồn tại).`, false);
       } else {
-        alert(`Chúc mừng! Đã kích hoạt quyền hoạt động thành công cho toàn bộ ${successCount} nhân sự.`);
+        showMessage('bulk-message', `🎉 Đã kích hoạt quyền hoạt động thành công cho toàn bộ ${successCount} nhân sự.`, false);
       }
     }
 
+    // Xóa user
     async function deleteUser(id) {
       if (!confirm('Bạn có chắc muốn xóa quyền hoạt động của nhân viên này?')) return;
       try {
         const res = await fetch(`/api/qc-productivity/users?id=${id}`, { method: 'DELETE' });
-        if (res.ok) fetchUsers();
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        fetchUsers();
       } catch (err) {
-        alert('Xóa thất bại');
+        alert(`Xóa thất bại: ${err.message}`);
       }
     }
 
-    // Khởi động
+    // Khởi chạy
     fetchUsers();
   </script>
 </body>

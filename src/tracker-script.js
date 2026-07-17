@@ -224,7 +224,7 @@
       contentEl.innerHTML = `
         <div style="display:flex; justify-content:space-between; margin-bottom:4px;"><span>1. Đã QC:</span> <strong style="color:#00e676">${stats.qc}</strong></div>
         <div style="display:flex; justify-content:space-between; margin-bottom:4px;"><span>2. Đã Judge:</span> <strong style="color:#29b6f6">${stats.judgement}</strong></div>
-        <div style="display:flex; justify-content:space-between;"><span>3. Đã Nhận:</span> <strong style="color:#ffca28">${stats.rimassreceive}</strong></div>
+        <div style="display:flex; justify-content:space-between;"><span>3. Đã Recieve:</span> <strong style="color:#ffca28">${stats.rimassreceive}</strong></div>
       `;
     }
   }

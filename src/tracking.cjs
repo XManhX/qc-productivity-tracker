@@ -13,7 +13,7 @@ function createTrackerSource() {
       "https://wms.ssc.shopee.vn/api/v2/apps/system/user/get_login_info",
     AUTH_ENDPOINT: "/api/qc-productivity/authz",
     LOG_ENDPOINT: "/api/qc-productivity/log",
-    DEBUG: false,
+    DEBUG: true, // Đã bật true để hỗ trợ tracking log hệ thống
     AUTH_CACHE_MS: 5 * 60 * 1000,
     DUPLICATE_WINDOW_MS: 3000,
   };
@@ -23,7 +23,7 @@ function createTrackerSource() {
   let fieldTimestamps = {};
 
   function logDebug(...args) {
-    if (CONFIG.DEBUG) console.log("[QC Tracker]", ...args);
+    if (CONFIG.DEBUG) console.log("[QC Tracker Debug]", ...args);
   }
 
   function normalizeText(text) {
@@ -94,13 +94,11 @@ function createTrackerSource() {
     const today = getTodayKey();
     const stats = getStorage(\`stats_\${today}\`, { qc: 0, judgement: 0, rimassreceive: 0 });
     
-    // Tìm hoặc tạo mới widget trên màn hình
     let widget = document.getElementById("qc-tracker-floating-widget");
     if (!widget) {
       widget = document.createElement("div");
       widget.id = "qc-tracker-floating-widget";
       
-      // Lấy lại vị trí cũ user đã kéo thả (nếu có)
       const savedPos = getStorage("widget_position", { top: "80px", right: "20px" });
       
       widget.style.cssText = \`
@@ -122,14 +120,12 @@ function createTrackerSource() {
         border: 1px solid #ff5722;
       \`;
       
-      // Tạo phần thanh tiêu đề dùng để nắm kéo thả
       const header = document.createElement("div");
       header.id = "qc-tracker-widget-header";
       header.innerText = "📊 NĂNG SUẤT HÔM NAY";
       header.style.cssText = "font-weight: bold; border-bottom: 1px solid #555; padding-bottom: 6px; margin-bottom: 8px; cursor: move; color: #ff5722; text-align: center;";
       widget.appendChild(header);
       
-      // Khởi tạo container chứa số liệu
       const content = document.createElement("div");
       content.id = "qc-tracker-widget-content";
       widget.appendChild(content);
@@ -148,7 +144,6 @@ function createTrackerSource() {
     }
   }
 
-  // --- XỬ LÝ KÉO THẢ (DRAGGABLE) ---
   function makeWidgetDraggable(elmnt, header) {
     let pos1 = 0, pos2 = 0, pos3 = 0, pos4 = 0;
     header.onmousedown = dragMouseDown;
@@ -182,7 +177,6 @@ function createTrackerSource() {
     function closeDragElement() {
       document.onmouseup = null;
       document.onmousemove = null;
-      // Lưu lại vị trí tọa độ mới để F5 trang không bị reset vị trí
       setStorage("widget_position", {
         top: elmnt.style.top,
         left: elmnt.style.left
@@ -209,7 +203,7 @@ function createTrackerSource() {
               const returnTn = item.return_tn || "";
 
               if (inboundId) {
-                logDebug(\`Intercepted \${pageType} data:\`, { inboundId, returnTn });
+                console.log(\`%c[QC Tracker - API Intercepted] Bắt được dữ liệu từ API (\${pageType}):\`, "color: #00bcd4; font-weight: bold;", { inboundId, returnTn });
                 
                 setStorage(\`intercepted_\${pageType}_\${inboundId}\`, {
                   inbound_id: inboundId,
@@ -217,7 +211,6 @@ function createTrackerSource() {
                   intercepted_at: nowISO()
                 });
 
-                // Cảnh báo tiến trình làm việc (Nếu sang đơn QC mới mà đơn cũ chưa làm Judgement)
                 if (pageType === "qc") {
                   const lastQcInboundId = getStorage("last_qc_inbound_id", "");
                   if (lastQcInboundId && lastQcInboundId !== inboundId) {
@@ -296,15 +289,22 @@ function createTrackerSource() {
     }
   }
 
+  // --- LOG KIỂM TRA ĐỌC GIÁ TRỊ INPUT ---
   function getInputValueByKeywords(keywords = []) {
     for (const keyword of keywords) {
       const targetEl = getTargetElement(keyword);
       if (targetEl) {
+        let val = "";
         if (targetEl.tagName === "INPUT" || targetEl.tagName === "TEXTAREA") {
-          return normalizeText(targetEl.value || "");
+          val = normalizeText(targetEl.value || "");
+        } else {
+          const inputEl = targetEl.querySelector("input, textarea");
+          if (inputEl) val = normalizeText(inputEl.value || "");
         }
-        const inputEl = targetEl.querySelector("input, textarea");
-        if (inputEl) return normalizeText(inputEl.value || "");
+        console.log(\`%c[QC Tracker - Input Found] Khớp từ khóa: "\${keyword}" -> DOM:\`, "color: #4caf50; font-weight: bold;", targetEl, \`-> Giá trị hiện tại: "\${val}"\`);
+        return val;
+      } else {
+        console.warn(\`%c[QC Tracker - Input Missing] Không tìm thấy phần tử nào khớp với từ khóa: "\${keyword}". Vui lòng kiểm tra lại cấu hình CSS Selector trong selectors.cjs!\`, "color: #ff9800; font-weight: bold;");
       }
     }
     return "";
@@ -402,6 +402,7 @@ function createTrackerSource() {
 
   async function sendRecord(record, sessionToken = "") {
     try {
+      console.log("%c[QC Tracker - API Sending] Đang đẩy record lên Database...", "color: #e91e63; font-weight: bold;", record);
       const headers = {};
       if (sessionToken) headers["X-QC-Session-Token"] = sessionToken;
 
@@ -412,9 +413,15 @@ function createTrackerSource() {
         headers,
       );
 
-      return resp.status >= 200 && resp.status < 300;
+      if (resp.status >= 200 && resp.status < 300) {
+        console.log("%c[QC Tracker - API Success] Dữ liệu đã lưu thành công vào Database!", "color: #2e7d32; font-weight: bold; font-size: 12px;");
+        return true;
+      } else {
+        console.error(\`%c[QC Tracker - API Error] Server phản hồi với Http Status \${resp.status}\`, "color: #c62828;", resp.data);
+        return false;
+      }
     } catch (e) {
-      logDebug("sendRecord error", e);
+      console.error("[QC Tracker - API Crash] Lỗi kết nối mạng khi gửi log:", e);
       const pending = getStorage("qc_pending_logs", []);
       pending.push({ record, sessionToken });
       setStorage("qc_pending_logs", pending);
@@ -438,8 +445,9 @@ function createTrackerSource() {
   async function handleActionClick(pageType, userEmail, sessionToken = "") {
     const record = makeRecord(pageType, userEmail);
 
+    // --- LOG BÁO HỦY NẾU BỊ THIẾU GIÁ TRỊ ---
     if (shouldSkipRecord(record, pageType)) {
-      logDebug("skip record due to missing required fields", record);
+      console.error(\`%c[QC Tracker - Skipped] Bỏ qua record do thiếu trường bắt buộc (\${PAGE_CONFIG[pageType]?.requiredFields?.join(", ")}). Vui lòng check lại selector!\`, "color: #d32f2f; font-weight: bold;", record);
       return;
     }
 
@@ -458,7 +466,7 @@ function createTrackerSource() {
       fingerprint === lastFingerprint &&
       Date.now() - lastTime < CONFIG.DUPLICATE_WINDOW_MS
     ) {
-      logDebug("duplicate record skipped");
+      console.warn("[QC Tracker - Duplicate] Phát hiện trùng lặp thao tác trong thời gian ngắn (3000ms). Hủy lệnh gửi để tránh rác database.");
       return;
     }
 
@@ -469,7 +477,6 @@ function createTrackerSource() {
     if (success) {
       fieldTimestamps = {};
       
-      // Tăng số đếm năng suất của trang hiện tại lên +1 và cập nhật giao diện widget
       const today = getTodayKey();
       const stats = getStorage(\`stats_\${today}\`, { qc: 0, judgement: 0, rimassreceive: 0 });
       if (stats.hasOwnProperty(pageType)) {
@@ -484,52 +491,53 @@ function createTrackerSource() {
     initApiInterceptor();
 
     const pageType = getPageType(location.href);
-
-    // Hiển thị Floating Widget đếm số lượng đơn ở cả 3 trang    
+    
     if (pageType !== "unknown") {
       updateFloatingWidget();
+      console.log(\`%c[QC Tracker - Initialized] Đã kích hoạt công cụ theo dõi tại trang: \${pageType}\`, "color: #9c27b0; font-weight: bold; font-size: 13px;");
     } else {
       return;
     }
 
     const userEmail = await getCurrentUserEmail();
-    if (!userEmail) return;
+    if (!userEmail) {
+      console.error("[QC Tracker - Auth] Không lấy được thông tin Email người dùng từ hệ thống Shopee.");
+      return;
+    }
 
     const authz = await checkAuthorization(userEmail);
-    if (!authz.allowed) return;
+    if (!authz.allowed) {
+      console.error("[QC Tracker - Auth] Tài khoản không được cấp quyền sử dụng hệ thống tracker hoặc API lỗi:", authz.reason);
+      return;
+    }
 
     await flushPendingLogs();
 
     const bind = () => {
-      // 1. Gắn sự kiện click vào nút Complete / Confirm
+      // 1. Gắn sự kiện click
       const button = findActionButton(PAGE_CONFIG[pageType].actionText);
       if (button && button.dataset.qcTrackerBound !== "1") {
         button.dataset.qcTrackerBound = "1";
         button.addEventListener(
           "click",
           async function () {
-            await handleActionClick(
-              pageType,
-              userEmail,
-              authz.session_token || "",
-            );
+            console.log("[QC Tracker - Event] Phát hiện hành động Click chuột vào nút Complete/Confirm.");
+            await handleActionClick(pageType, userEmail, authz.session_token || "");
           },
           true,
         );
       }
       
-      // 2. Gắn sự kiện keyup bắt phím Enter của súng PDA Scanner
+      // 2. Gắn sự kiện keyup bắt phím Enter từ súng PDA Scanner
       if (!document.body.dataset.qcKeyupBound) {
         document.body.dataset.qcKeyupBound = "1";
         document.body.addEventListener("keyup", async function (e) {
           if (e.key === "Enter" || e.keyCode === 13) {
-            // Cho một delay nhỏ 150ms để dữ liệu scan kịp binding lên DOM và API kịp hoàn tất phản hồi
+            console.log("%c[QC Tracker - Event] Súng PDA Scanner vừa tít mã (Bắt được phím Enter từ keyup)!", "color: #2196f3; font-weight: bold;");
+            
+            // Delay 150ms chờ text nạp đủ vào ô input và API hoàn tất trả dữ liệu
             setTimeout(async () => {
-              await handleActionClick(
-                pageType,
-                userEmail,
-                authz.session_token || "",
-              );
+              await handleActionClick(pageType, userEmail, authz.session_token || "");
             }, 150);
           }
         }, true);

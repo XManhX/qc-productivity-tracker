@@ -362,9 +362,20 @@ function createTrackerSource() {
   }
 
   async function checkAuthorization(userEmail) {
-    // Tạm thời ÉP cho qua (Bypass) để tránh sập script nếu hệ thống phân quyền backend lỗi hoặc cấu hình sai môi trường
-    console.log("%c[QC Tracker - Auth Bypass] Đang ép kích hoạt để kiểm tra giao diện & Scanner...", "color: #ff9800; font-weight: bold;");
-    return { allowed: true, session_token: "bypass_token_active" };
+    try {
+      const resp = await gmRequest(
+        "POST",
+        CONFIG.API_BASE_URL + "/api/qc-productivity/authz", // Đường dẫn API login/authz của bạn
+        { email: userEmail }
+      );
+      if (resp.status === 200) {
+        const data = JSON.parse(resp.responseText);
+        return { allowed: true, session_token: data.session_token };
+      }
+    } catch (err) {
+      console.error("Auth error:", err);
+    }
+    return { allowed: false, session_token: "" };
   }
 
   async function sendRecord(record, sessionToken = "") {

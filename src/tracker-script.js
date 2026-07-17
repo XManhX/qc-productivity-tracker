@@ -158,7 +158,6 @@
       const response = await origFetch.apply(this, args);
       const url = typeof args[0] === "string" ? args[0] : args[0].url;
 
-      // Intercept login info
       if (url && url.includes("/api/v2/apps/system/user/get_login_info")) {
         try {
           const clone = response.clone();
@@ -172,7 +171,6 @@
         } catch (e) {}
       }
 
-      // Intercept scan sheet APIs
       Object.entries(PAGE_CONFIG).forEach(([pageType, cfg]) => {
         if (cfg.apiWatchUrl && url && url.includes(cfg.apiWatchUrl)) {
           (async () => {
@@ -211,9 +209,8 @@
 
   // ----- Get Email (localStorage + GM cache, no fetch) -----
   const getEmail = () => {
-    // 1. Thử localStorage / sessionStorage
     try {
-      const keys = ['user_email', 'useremail', 'email', 'user', 'userInfo', 'profile'];
+      const keys = ['user_email', 'email', 'user', 'userInfo', 'profile'];
       for (const key of keys) {
         let val = localStorage.getItem(key) || sessionStorage.getItem(key);
         if (val) {
@@ -233,7 +230,6 @@
       }
     } catch {}
 
-    // 2. GM cache
     let email = getStore("user_email", "");
     const ts = getStore("user_email_timestamp", 0);
     if (email && Date.now() - ts < CONFIG.EMAIL_CACHE_MS) {
@@ -281,7 +277,7 @@
     return btns.find((b) => normalize(b.innerText).toLowerCase() === text.toLowerCase()) || null;
   };
 
-  // ----- Record & send -----
+  // ----- Record & send (token sent in body) -----
   const makeRecord = (pageType, userEmail) => {
     const fields = collectFields(pageType);
     const scanVal = fields.scan_value || "";
@@ -307,9 +303,9 @@
 
   const sendRecord = async (record, sessionToken = "") => {
     try {
-      const headers = {};
-      if (sessionToken) headers["X-QC-Session-Token"] = sessionToken;
-      const resp = await gmRequest("POST", CONFIG.API_BASE_URL + CONFIG.LOG_ENDPOINT, record, headers);
+      // Gửi token trong body thay vì header để tránh bị cắt
+      const payload = { ...record, session_token: sessionToken };
+      const resp = await gmRequest("POST", CONFIG.API_BASE_URL + CONFIG.LOG_ENDPOINT, payload);
       log("Log sent, status:", resp.status);
       return true;
     } catch (e) {

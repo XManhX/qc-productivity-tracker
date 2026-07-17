@@ -41,7 +41,11 @@ export default async (req, res) => {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
   try {
-    const sessionToken = req.headers['x-qc-session-token'];
+    // Ưu tiên lấy token từ body (mới), fallback header (cũ)
+    const bodyToken = req.body?.session_token;
+    const headerToken = req.headers['x-qc-session-token'];
+    const sessionToken = bodyToken || headerToken;
+
     const verification = verifySessionToken(sessionToken);
     if (!verification.valid) {
       console.error(`[Log API] Token verification failed: ${verification.reason}`);

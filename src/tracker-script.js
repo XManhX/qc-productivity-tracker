@@ -5,31 +5,44 @@
 (function () {
   "use strict";
 
+  // ===== LOG NGAY KHI SCRIPT BẮT ĐẦU =====
+  console.log("[QC Tracker] Script started at", new Date().toISOString());
+
+  // Kiểm tra môi trường Tampermonkey
   if (typeof GM_xmlhttpRequest === 'undefined' || typeof GM_setValue === 'undefined') {
-    console.warn('[QC Tracker] Tampermonkey APIs not available.');
+    console.warn('[QC Tracker] Tampermonkey APIs not available. Script will not work.');
     return;
   }
 
+  // ===== CẤU HÌNH =====
   const CONFIG = {
     VERSION: "__VERSION__",
     API_BASE_URL: "__API_BASE_URL__",
     LOGIN_INFO_URL: "https://wms.ssc.shopee.vn/api/v2/apps/system/user/get_login_info",
     AUTH_ENDPOINT: "/api/qc-productivity/authz",
     LOG_ENDPOINT: "/api/qc-productivity/log",
-    DEBUG: true,
+    DEBUG: true,  // Bật debug để kiểm tra
     AUTH_CACHE_MS: 5 * 60 * 1000,
     DUPLICATE_WINDOW_MS: 3000,
   };
+
+  console.log("[QC Tracker] Config:", CONFIG);
 
   // PAGE_CONFIG sẽ được thay thế bởi build script
   const PAGE_CONFIG = {};
 
   let fieldTimestamps = {};
 
+  // ===== HÀM LOG DEBUG =====
   function logDebug(...args) {
-    if (CONFIG.DEBUG) console.log("[QC Tracker]", ...args);
+    if (CONFIG.DEBUG) {
+      console.log("[QC Tracker]", ...args);
+    }
   }
 
+  logDebug("Debug mode is ON");
+
+  // ===== CÁC HÀM TIỆN ÍCH =====
   function normalizeText(text) {
     return (text || "").replace(/\s+/g, " ").trim();
   }
@@ -49,6 +62,7 @@
     return entry ? entry[0] : "unknown";
   }
 
+  // ===== LƯU TRỮ LOCAL =====
   function getStorage(key, fallback = null) {
     try {
       const value = GM_getValue(key);
@@ -67,9 +81,11 @@
     }
   }
 
+  // ===== GỬI REQUEST QUA GM_xmlhttpRequest =====
   function gmRequest(method, url, data = null, headers = {}) {
     return new Promise((resolve, reject) => {
       try {
+        logDebug(`gmRequest: ${method} ${url}`);
         GM_xmlhttpRequest({
           method,
           url,
@@ -79,6 +95,7 @@
           },
           data: data ? JSON.stringify(data) : undefined,
           onload: function (response) {
+            logDebug(`gmRequest response status: ${response.status}`);
             if (response.status < 200 || response.status >= 300) {
               reject(new Error(`HTTP ${response.status}: ${response.statusText}`));
               return;
@@ -93,6 +110,7 @@
             resolve({ status: response.status, data: parsedData });
           },
           onerror: function (error) {
+            logDebug("gmRequest error", error);
             reject(error);
           },
           ontimeout: function () {
@@ -101,18 +119,21 @@
           timeout: 10000
         });
       } catch (e) {
+        logDebug("gmRequest exception", e);
         reject(e);
       }
     });
   }
 
-  // -------------------- Floating Widget --------------------
+  // ===== FLOATING WIDGET =====
   function updateFloatingWidget() {
+    logDebug("updateFloatingWidget called");
     const today = getTodayKey();
     const stats = getStorage(`stats_${today}`, { qc: 0, judgement: 0, rimassreceive: 0 });
 
     let widget = document.getElementById("qc-tracker-floating-widget");
     if (!widget) {
+      logDebug("Creating floating widget");
       widget = document.createElement("div");
       widget.id = "qc-tracker-floating-widget";
 
@@ -201,8 +222,9 @@
     }
   }
 
-  // -------------------- API Interceptor --------------------
+  // ===== API INTERCEPTOR =====
   function initApiInterceptor() {
+    logDebug("initApiInterceptor called");
     const originalFetch = window.fetch;
     window.fetch = async function (...args) {
       const response = await originalFetch.apply(this, args);
@@ -210,6 +232,7 @@
 
       Object.entries(PAGE_CONFIG).forEach(async ([pageType, cfg]) => {
         if (cfg.apiWatchUrl && url.includes(cfg.apiWatchUrl)) {
+          logDebug(`Intercepting ${pageType} API: ${url}`);
           try {
             const cloneResp = response.clone();
             const json = await cloneResp.json();
@@ -254,6 +277,7 @@
     };
   }
 
+  // ===== THEO DÕI FOCUS INPUT =====
   function setupFieldFocusListeners(pageType) {
     const cfg = PAGE_CONFIG[pageType];
     if (!cfg) return;
@@ -276,6 +300,7 @@
           inputEl.addEventListener("focus", () => {
             if (!fieldTimestamps[fieldName]) {
               fieldTimestamps[fieldName] = nowISO();
+              logDebug(`Field ${fieldName} focused at ${fieldTimestamps[fieldName]}`);
             }
           });
         }
@@ -283,23 +308,34 @@
     });
   }
 
+  // ===== LẤY EMAIL USER =====
   async function getCurrentUserEmail() {
     try {
+      logDebug("Fetching user email from", CONFIG.LOGIN_INFO_URL);
       const resp = await fetch(CONFIG.LOGIN_INFO_URL, {
         method: "GET",
         credentials: "include",
         headers: { Accept: "application/json" },
       });
-      if (!resp.ok) return "";
+      if (!resp.ok) {
+        logDebug(`getCurrentUserEmail HTTP error: ${resp.status}`);
+        return "";
+      }
       const data = await resp.json();
-      if (data?.retcode !== 0) return "";
-      return normalizeText(data?.data?.email || "").toLowerCase();
+      if (data?.retcode !== 0) {
+        logDebug(`getCurrentUserEmail retcode: ${data.retcode}`);
+        return "";
+      }
+      const email = normalizeText(data?.data?.email || "").toLowerCase();
+      logDebug(`User email: ${email}`);
+      return email;
     } catch (e) {
       logDebug("getCurrentUserEmail error", e);
       return "";
     }
   }
 
+  // ===== LẤY GIÁ TRỊ INPUT =====
   function getInputValueByKeywords(keywords = []) {
     for (const keyword of keywords) {
       if (keyword.startsWith("#")) {
@@ -322,6 +358,7 @@
     return "";
   }
 
+  // ===== TÌM NÚT ACTION =====
   function findActionButton(actionText) {
     const buttons = Array.from(document.querySelectorAll("button"));
     return (
@@ -333,6 +370,7 @@
     );
   }
 
+  // ===== THU THẬP CÁC TRƯỜNG =====
   function collectFields(pageType) {
     const cfg = PAGE_CONFIG[pageType];
     const result = {
@@ -349,12 +387,13 @@
     return result;
   }
 
+  // ===== TẠO RECORD =====
   function makeRecord(pageType, userEmail) {
     const fieldsData = collectFields(pageType);
     const currentScanVal = fieldsData.scan_value;
     const extraApiData = getStorage(`intercepted_${pageType}_${currentScanVal}`, { inbound_id: "", return_tn: "" });
 
-    return {
+    const record = {
       version: CONFIG.VERSION,
       timestamp: nowISO(),
       page: pageType,
@@ -366,13 +405,22 @@
       api_return_tn: extraApiData.return_tn,
       field_timestamps: { ...fieldTimestamps }
     };
+
+    logDebug("Record created:", record);
+    return record;
   }
 
   function shouldSkipRecord(record, pageType) {
     const requiredFields = PAGE_CONFIG[pageType]?.requiredFields || [];
-    return requiredFields.some((field) => !record[field]);
+    const missing = requiredFields.filter((field) => !record[field]);
+    if (missing.length) {
+      logDebug(`Skip record: missing fields ${missing.join(', ')}`);
+      return true;
+    }
+    return false;
   }
 
+  // ===== AUTHZ =====
   async function checkAuthorization(userEmail) {
     if (!userEmail) return { allowed: false, reason: "missing_user_email" };
 
@@ -380,18 +428,17 @@
     const cached = getStorage(cacheKey, null);
 
     if (cached && cached.expireAt && Date.now() < cached.expireAt) {
+      logDebug("Authz cached:", cached.value);
       return cached.value;
     }
 
     try {
-      const resp = await gmRequest(
-        "POST",
-        CONFIG.API_BASE_URL + CONFIG.AUTH_ENDPOINT,
-        {
-          email: userEmail,
-          page: location.pathname,
-        },
-      );
+      const url = CONFIG.API_BASE_URL + CONFIG.AUTH_ENDPOINT;
+      logDebug("Calling Authz:", url);
+      const resp = await gmRequest("POST", url, {
+        email: userEmail,
+        page: location.pathname,
+      });
 
       const value = {
         allowed: !!resp?.data?.allowed,
@@ -399,6 +446,8 @@
         user: resp?.data?.user || null,
         session_token: resp?.data?.session_token || "",
       };
+
+      logDebug("Authz response:", value);
 
       setStorage(cacheKey, {
         expireAt: Date.now() + CONFIG.AUTH_CACHE_MS,
@@ -412,19 +461,19 @@
     }
   }
 
+  // ===== GỬI LOG =====
   async function sendRecord(record, sessionToken = "") {
     try {
       const headers = {};
       if (sessionToken) headers["X-QC-Session-Token"] = sessionToken;
 
-      const resp = await gmRequest(
-        "POST",
-        CONFIG.API_BASE_URL + CONFIG.LOG_ENDPOINT,
-        record,
-        headers,
-      );
+      const url = CONFIG.API_BASE_URL + CONFIG.LOG_ENDPOINT;
+      logDebug("Sending log to", url);
+      const resp = await gmRequest("POST", url, record, headers);
 
-      return resp.status >= 200 && resp.status < 300;
+      const success = resp.status >= 200 && resp.status < 300;
+      logDebug(`Send record ${success ? 'success' : 'failed'} (status ${resp.status})`);
+      return success;
     } catch (e) {
       logDebug("sendRecord error", e);
       const pending = getStorage("qc_pending_logs", []);
@@ -434,10 +483,12 @@
     }
   }
 
+  // ===== FLUSH PENDING LOGS =====
   async function flushPendingLogs() {
     const pending = getStorage("qc_pending_logs", []);
     if (!Array.isArray(pending) || pending.length === 0) return;
 
+    logDebug(`Flushing ${pending.length} pending logs`);
     const remain = [];
     for (const item of pending) {
       const ok = await sendRecord(item.record, item.sessionToken || "");
@@ -445,16 +496,24 @@
     }
 
     setStorage("qc_pending_logs", remain);
+    if (remain.length === 0) {
+      logDebug("All pending logs flushed");
+    } else {
+      logDebug(`${remain.length} pending logs remain`);
+    }
   }
 
+  // ===== XỬ LÝ KHI CLICK ACTION =====
   async function handleActionClick(pageType, userEmail, sessionToken = "") {
+    logDebug("handleActionClick called for", pageType);
     const record = makeRecord(pageType, userEmail);
 
     if (shouldSkipRecord(record, pageType)) {
-      logDebug("skip record due to missing required fields", record);
+      logDebug("skip record due to missing required fields");
       return;
     }
 
+    // Chống duplicate
     const fingerprint = [
       record.page,
       record.action,
@@ -470,7 +529,7 @@
       fingerprint === lastFingerprint &&
       Date.now() - lastTime < CONFIG.DUPLICATE_WINDOW_MS
     ) {
-      logDebug("duplicate record skipped");
+      logDebug("duplicate record skipped (within window)");
       return;
     }
 
@@ -479,62 +538,88 @@
 
     const success = await sendRecord(record, sessionToken);
     if (success) {
+      logDebug("Record sent successfully");
       fieldTimestamps = {};
 
+      // Tăng số đếm
       const today = getTodayKey();
       const stats = getStorage(`stats_${today}`, { qc: 0, judgement: 0, rimassreceive: 0 });
       if (stats.hasOwnProperty(pageType)) {
         stats[pageType] += 1;
         setStorage(`stats_${today}`, stats);
         updateFloatingWidget();
+        logDebug(`Updated stats for ${pageType}: ${stats[pageType]}`);
       }
+    } else {
+      logDebug("Record send failed, saved to pending");
     }
   }
 
+  // ===== INIT =====
   async function init() {
+    console.log("[QC Tracker] init() started");
+
     initApiInterceptor();
 
     const pageType = getPageType(location.href);
+    console.log("[QC Tracker] Page type:", pageType);
 
-    if (pageType !== "unknown") {
-      updateFloatingWidget();
-    } else {
+    if (pageType === "unknown") {
+      console.log("[QC Tracker] Page not supported");
       return;
     }
 
+    updateFloatingWidget();
+
     const userEmail = await getCurrentUserEmail();
-    if (!userEmail) return;
+    if (!userEmail) {
+      console.warn("[QC Tracker] No user email");
+      return;
+    }
 
     const authz = await checkAuthorization(userEmail);
-    if (!authz.allowed) return;
+    console.log("[QC Tracker] Authz result:", authz);
+    if (!authz.allowed) {
+      console.warn("[QC Tracker] Not authorized:", authz.reason);
+      return;
+    }
 
     await flushPendingLogs();
 
     const bind = () => {
-      const button = findActionButton(PAGE_CONFIG[pageType].actionText);
+      const button = findActionButton(PAGE_CONFIG[pageType]?.actionText);
       if (button && button.dataset.qcTrackerBound !== "1") {
         button.dataset.qcTrackerBound = "1";
-        button.addEventListener(
-          "click",
-          async function () {
-            await handleActionClick(
-              pageType,
-              userEmail,
-              authz.session_token || "",
-            );
-          },
-          true,
-        );
+        button.addEventListener("click", async function () {
+          console.log("[QC Tracker] Button clicked");
+          await handleActionClick(pageType, userEmail, authz.session_token || "");
+        }, true);
+        console.log("[QC Tracker] Bound action button");
+      } else if (button) {
+        console.log("[QC Tracker] Button already bound");
+      } else {
+        console.warn("[QC Tracker] Action button not found");
       }
-
       setupFieldFocusListeners(pageType);
     };
 
     bind();
 
-    const observer = new MutationObserver(bind);
+    // Observer cho các button được thêm sau
+    const observer = new MutationObserver(() => {
+      const button = findActionButton(PAGE_CONFIG[pageType]?.actionText);
+      if (button && button.dataset.qcTrackerBound !== "1") {
+        console.log("[QC Tracker] Detected new button, binding...");
+        bind();
+      }
+    });
     observer.observe(document.body, { childList: true, subtree: true });
+    console.log("[QC Tracker] Observer started");
+
+    console.log("[QC Tracker] init() completed");
   }
 
-  init();
+  // ===== CHẠY INIT =====
+  console.log("[QC Tracker] Calling init()...");
+  init().catch(err => console.error("[QC Tracker] Fatal error:", err));
 })();

@@ -465,7 +465,12 @@
   async function sendRecord(record, sessionToken = "") {
     try {
       const headers = {};
-      if (sessionToken) headers["X-QC-Session-Token"] = sessionToken;
+      if (sessionToken) {
+        headers["X-QC-Session-Token"] = sessionToken;
+        logDebug("Sending with token:", sessionToken.substring(0, 20) + "..."); // chỉ log một phần
+      } else {
+        logDebug("Sending WITHOUT session token!");
+      }
 
       const url = CONFIG.API_BASE_URL + CONFIG.LOG_ENDPOINT;
       logDebug("Sending log to", url);
@@ -473,6 +478,9 @@
 
       const success = resp.status >= 200 && resp.status < 300;
       logDebug(`Send record ${success ? 'success' : 'failed'} (status ${resp.status})`);
+      if (!success && resp.data && resp.data.error) {
+        logDebug("Server error detail:", resp.data.error);
+      }
       return success;
     } catch (e) {
       logDebug("sendRecord error", e);

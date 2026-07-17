@@ -125,6 +125,41 @@
     });
   }
 
+  // ===== HÀM GIỚI HẠN WIDGET TRONG VIEWPORT =====
+  function enforceWidgetBounds(widget) {
+    if (!widget) return;
+    const rect = widget.getBoundingClientRect();
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+
+    // Nếu widget đang dùng right/bottom, chuyển sang left/top để dễ tính
+    let newTop = parseFloat(widget.style.top) || 0;
+    let newLeft = parseFloat(widget.style.left) || 0;
+    const right = parseFloat(widget.style.right);
+    const bottom = parseFloat(widget.style.bottom);
+
+    if (!isNaN(right) && widget.style.right !== 'auto') {
+      newLeft = vw - rect.width - right;
+      widget.style.left = newLeft + 'px';
+      widget.style.right = 'auto';
+    }
+    if (!isNaN(bottom) && widget.style.bottom !== 'auto') {
+      newTop = vh - rect.height - bottom;
+      widget.style.top = newTop + 'px';
+      widget.style.bottom = 'auto';
+    }
+
+    // Giới hạn trong viewport
+    newTop = Math.max(0, Math.min(newTop, vh - rect.height));
+    newLeft = Math.max(0, Math.min(newLeft, vw - rect.width));
+
+    widget.style.top = newTop + 'px';
+    widget.style.left = newLeft + 'px';
+
+    // Lưu lại vị trí đã điều chỉnh
+    setStorage("widget_position", { top: newTop + 'px', left: newLeft + 'px' });
+  }
+
   // ===== FLOATING WIDGET =====
   function updateFloatingWidget() {
     logDebug("updateFloatingWidget called");
@@ -132,19 +167,25 @@
     const stats = getStorage(`stats_${today}`, { qc: 0, judgement: 0, rimassreceive: 0 });
 
     let widget = document.getElementById("qc-tracker-floating-widget");
+    const defaultPos = { top: "80px", right: "20px" };
+    let savedPos = getStorage("widget_position", defaultPos);
+
+    // Nếu vị trí lưu không hợp lệ, dùng default
+    if (!savedPos || typeof savedPos !== 'object' || !savedPos.top || !savedPos.left) {
+      savedPos = { ...defaultPos };
+    }
+
     if (!widget) {
       logDebug("Creating floating widget");
       widget = document.createElement("div");
       widget.id = "qc-tracker-floating-widget";
 
-      const savedPos = getStorage("widget_position", { top: "80px", right: "20px" });
-
       widget.style.cssText = `
         position: fixed;
         top: ${savedPos.top};
-        right: ${savedPos.right};
-        left: ${savedPos.left || 'auto'};
-        bottom: ${savedPos.bottom || 'auto'};
+        right: auto;
+        left: ${savedPos.left};
+        bottom: auto;
         width: 200px;
         background: rgba(33, 33, 33, 0.9);
         color: #fff;
@@ -170,6 +211,12 @@
 
       document.body.appendChild(widget);
       makeWidgetDraggable(widget, header);
+
+      // Sau khi append, kiểm tra và điều chỉnh vị trí
+      enforceWidgetBounds(widget);
+    } else {
+      // Nếu widget đã tồn tại, cập nhật nội dung và kiểm tra giới hạn
+      enforceWidgetBounds(widget);
     }
 
     const contentEl = document.getElementById("qc-tracker-widget-content");
@@ -203,11 +250,21 @@
       pos3 = e.clientX;
       pos4 = e.clientY;
 
-      const newTop = (elmnt.offsetTop - pos2) + "px";
-      const newLeft = (elmnt.offsetLeft - pos1) + "px";
+      let newTop = elmnt.offsetTop - pos2;
+      let newLeft = elmnt.offsetLeft - pos1;
 
-      elmnt.style.top = newTop;
-      elmnt.style.left = newLeft;
+      // Giới hạn trong viewport
+      const vw = window.innerWidth;
+      const vh = window.innerHeight;
+      const rect = elmnt.getBoundingClientRect();
+      const w = rect.width;
+      const h = rect.height;
+
+      newTop = Math.max(0, Math.min(newTop, vh - h));
+      newLeft = Math.max(0, Math.min(newLeft, vw - w));
+
+      elmnt.style.top = newTop + "px";
+      elmnt.style.left = newLeft + "px";
       elmnt.style.right = "auto";
       elmnt.style.bottom = "auto";
     }
@@ -215,10 +272,9 @@
     function closeDragElement() {
       document.onmouseup = null;
       document.onmousemove = null;
-      setStorage("widget_position", {
-        top: elmnt.style.top,
-        left: elmnt.style.left
-      });
+      const top = elmnt.style.top;
+      const left = elmnt.style.left;
+      setStorage("widget_position", { top, left });
     }
   }
 
@@ -467,7 +523,7 @@
       const headers = {};
       if (sessionToken) {
         headers["X-QC-Session-Token"] = sessionToken;
-        logDebug("Sending with token:", sessionToken.substring(0, 20) + "..."); // chỉ log một phần
+        logDebug("Sending with token:", sessionToken.substring(0, 20) + "...");
       } else {
         logDebug("Sending WITHOUT session token!");
       }

@@ -277,7 +277,7 @@
     return btns.find((b) => normalize(b.innerText).toLowerCase() === text.toLowerCase()) || null;
   };
 
-  // ----- Record & send (token sent in body) -----
+  // ----- Record & send (no token) -----
   const makeRecord = (pageType, userEmail) => {
     const fields = collectFields(pageType);
     const scanVal = fields.scan_value || "";
@@ -301,17 +301,15 @@
     return required.some((f) => !record[f]);
   };
 
-  const sendRecord = async (record, sessionToken = "") => {
+  const sendRecord = async (record) => {
     try {
-      // Gửi token trong body thay vì header để tránh bị cắt
-      const payload = { ...record, session_token: sessionToken };
-      const resp = await gmRequest("POST", CONFIG.API_BASE_URL + CONFIG.LOG_ENDPOINT, payload);
+      const resp = await gmRequest("POST", CONFIG.API_BASE_URL + CONFIG.LOG_ENDPOINT, record);
       log("Log sent, status:", resp.status);
       return true;
     } catch (e) {
       log("Send failed, queued:", e);
       const pending = getStore("qc_pending_logs", []);
-      pending.push({ record, sessionToken });
+      pending.push(record);
       setStore("qc_pending_logs", pending);
       return false;
     }
@@ -322,9 +320,9 @@
     if (!pending.length) return;
     log(`Flushing ${pending.length} pending logs`);
     const remain = [];
-    for (const item of pending) {
-      const ok = await sendRecord(item.record, item.sessionToken || "");
-      if (!ok) remain.push(item);
+    for (const record of pending) {
+      const ok = await sendRecord(record);
+      if (!ok) remain.push(record);
     }
     setStore("qc_pending_logs", remain);
   };
@@ -342,7 +340,6 @@
       const value = {
         allowed: !!resp?.data?.allowed,
         reason: resp?.data?.reason || "",
-        session_token: resp?.data?.session_token || "",
       };
       setStore(cacheKey, { expireAt: Date.now() + CONFIG.AUTH_CACHE_MS, value });
       return value;
@@ -352,7 +349,7 @@
   };
 
   // ----- Handle click -----
-  const handleAction = async (pageType, userEmail, sessionToken) => {
+  const handleAction = async (pageType, userEmail) => {
     const record = makeRecord(pageType, userEmail);
     if (shouldSkip(record, pageType)) {
       log("Skipped due to missing required fields");
@@ -369,7 +366,7 @@
     setStore("qc_last_fingerprint", fingerprint);
     setStore("qc_last_fingerprint_time", Date.now());
 
-    const ok = await sendRecord(record, sessionToken);
+    const ok = await sendRecord(record);
     if (ok) {
       fieldTimestamps = {};
       const stats = getStore(`stats_${todayKey()}`, { qc: 0, judgement: 0, rimassreceive: 0 });
@@ -440,7 +437,7 @@
         btn.dataset.qcTrackerBound = "1";
         btn.addEventListener("click", () => {
           log("Action button clicked");
-          handleAction(pageType, email, auth.session_token || "");
+          handleAction(pageType, email);
         }, true);
         log("Button bound");
       }

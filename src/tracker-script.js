@@ -210,7 +210,7 @@
   // ----- Get Email (localStorage + GM cache, no fetch) -----
   const getEmail = () => {
     try {
-      const keys = ['user_email', 'email', 'user', 'userInfo', 'profile'];
+      const keys = ['user_email', 'useremail', 'email', 'user', 'userInfo', 'profile'];
       for (const key of keys) {
         let val = localStorage.getItem(key) || sessionStorage.getItem(key);
         if (val) {

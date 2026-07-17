@@ -11,6 +11,8 @@
     AUTH_CACHE_MS: 5 * 60 * 1000,
     DUPLICATE_WINDOW_MS: 3000,
     EMAIL_CACHE_MS: 5 * 60 * 1000,
+    WAIT_FOR_INTERCEPT_MS: 5000,
+    POLL_INTERVAL_MS: 300,
   };
 
   const PAGE_CONFIG = {};
@@ -27,6 +29,11 @@
       href.includes(cfg.pathIncludes),
     );
     return entry ? entry[0] : "unknown";
+  };
+
+  const getInboundIdFromUrl = () => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get("id") || params.get("inbound_id") || "";
   };
 
   const getStore = (key, fallback = null) => {
@@ -220,6 +227,7 @@
                     return_tn: returnTn,
                     intercepted_at: nowISO(),
                   });
+                  log(`Intercepted ${pageType} data for ID: ${id}`);
                   if (pageType === "qc") {
                     const lastId = getStore("last_qc_inbound_id", "");
                     if (lastId && lastId !== id) {
@@ -249,17 +257,33 @@
     };
   };
 
+  // ----- Wait for intercepted data -----
+  const waitForInterceptedData = (pageType, id) => {
+    return new Promise((resolve) => {
+      const start = Date.now();
+      const key = `intercepted_${pageType}_${id}`;
+      const check = () => {
+        const data = getStore(key, null);
+        if (data) {
+          log(`Intercepted data found for ${pageType} ID ${id}`);
+          resolve(data);
+          return;
+        }
+        if (Date.now() - start > CONFIG.WAIT_FOR_INTERCEPT_MS) {
+          log(`Timeout waiting for intercept data for ${pageType} ID ${id}`);
+          resolve(null);
+          return;
+        }
+        setTimeout(check, CONFIG.POLL_INTERVAL_MS);
+      };
+      check();
+    });
+  };
+
   // ----- Get Email (localStorage + GM cache, no fetch) -----
   const getEmail = () => {
     try {
-      const keys = [
-        "user_email",
-        "useremail",
-        "email",
-        "user",
-        "userInfo",
-        "profile",
-      ];
+      const keys = ["user_email", "email", "user", "userInfo", "profile"];
       for (const key of keys) {
         let val = localStorage.getItem(key) || sessionStorage.getItem(key);
         if (val) {
@@ -320,6 +344,14 @@
     Object.entries(cfg.fields).forEach(([field, keywords]) => {
       result[field] = getInputByKeywords(keywords);
     });
+    // Nếu là judgement và scan_value rỗng, thử lấy từ URL
+    if (pageType === "judgement" && !result.scan_value) {
+      const idFromUrl = getInboundIdFromUrl();
+      if (idFromUrl) {
+        result.scan_value = idFromUrl;
+        log("Judgement: scan_value taken from URL id:", idFromUrl);
+      }
+    }
     return result;
   };
 
@@ -503,6 +535,15 @@
     }
 
     updateWidget();
+
+    // Nếu là judgement và có ID trên URL, chờ interceptor bắt dữ liệu
+    if (pageType === "judgement") {
+      const id = getInboundIdFromUrl();
+      if (id) {
+        log(`Judgement page with ID: ${id}, waiting for intercept...`);
+        await waitForInterceptedData("judgement", id);
+      }
+    }
 
     const email = getEmail();
     if (!email) {

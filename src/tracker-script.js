@@ -1,689 +1,514 @@
-// src/tracker-script.js
-// Đây là file JS thông thường, không phải module.
-// Sẽ được đọc và nhúng vào userscript khi build.
-
+// ==/UserScript==
 (function () {
   "use strict";
 
-  // ===== LOG NGAY KHI SCRIPT BẮT ĐẦU =====
-  console.log("[QC Tracker] Script started at", new Date().toISOString());
-
-  // Kiểm tra môi trường Tampermonkey
-  if (typeof GM_xmlhttpRequest === 'undefined' || typeof GM_setValue === 'undefined') {
-    console.warn('[QC Tracker] Tampermonkey APIs not available. Script will not work.');
-    return;
-  }
-
-  // ===== CẤU HÌNH =====
+  // ======================== CONFIG ========================
   const CONFIG = {
     VERSION: "__VERSION__",
     API_BASE_URL: "__API_BASE_URL__",
     LOGIN_INFO_URL: "https://wms.ssc.shopee.vn/api/v2/apps/system/user/get_login_info",
     AUTH_ENDPOINT: "/api/qc-productivity/authz",
     LOG_ENDPOINT: "/api/qc-productivity/log",
-    DEBUG: true,  // Bật debug để kiểm tra
+    DEBUG: true,
     AUTH_CACHE_MS: 5 * 60 * 1000,
     DUPLICATE_WINDOW_MS: 3000,
+    EMAIL_CACHE_MS: 5 * 60 * 1000,
+    POLL_INTERVAL: 200,
+    POLL_TIMEOUT: 5000,
   };
 
-  console.log("[QC Tracker] Config:", CONFIG);
-
-  // PAGE_CONFIG sẽ được thay thế bởi build script
-  const PAGE_CONFIG = {};
+  const PAGE_CONFIG = {}; // sẽ được thay thế khi build
 
   let fieldTimestamps = {};
 
-  // ===== HÀM LOG DEBUG =====
-  function logDebug(...args) {
-    if (CONFIG.DEBUG) {
-      console.log("[QC Tracker]", ...args);
-    }
-  }
+  // ======================== UTILITIES ========================
+  const log = (...args) => CONFIG.DEBUG && console.log("[QC Tracker]", ...args);
+  const normalize = (s) => (s || "").replace(/\s+/g, " ").trim();
+  const nowISO = () => new Date().toISOString();
+  const todayKey = () => new Date().toISOString().split("T")[0];
 
-  logDebug("Debug mode is ON");
-
-  // ===== CÁC HÀM TIỆN ÍCH =====
-  function normalizeText(text) {
-    return (text || "").replace(/\s+/g, " ").trim();
-  }
-
-  function nowISO() {
-    return new Date().toISOString();
-  }
-
-  function getTodayKey() {
-    return new Date().toISOString().split('T')[0];
-  }
-
-  function getPageType(href) {
-    const entry = Object.entries(PAGE_CONFIG).find(([, cfg]) =>
-      href.includes(cfg.pathIncludes)
-    );
+  const getPageType = (href) => {
+    const entry = Object.entries(PAGE_CONFIG).find(([, cfg]) => href.includes(cfg.pathIncludes));
     return entry ? entry[0] : "unknown";
-  }
+  };
 
-  // ===== LƯU TRỮ LOCAL =====
-  function getStorage(key, fallback = null) {
+  // ======================== STORAGE ========================
+  const getStore = (key, fallback = null) => {
     try {
-      const value = GM_getValue(key);
-      return value === undefined ? fallback : value;
-    } catch (e) {
-      logDebug("getStorage error", e);
-      return fallback;
-    }
-  }
+      const val = GM_getValue(key);
+      return val === undefined ? fallback : val;
+    } catch { return fallback; }
+  };
+  const setStore = (key, val) => {
+    try { GM_setValue(key, val); } catch {}
+  };
 
-  function setStorage(key, value) {
-    try {
-      GM_setValue(key, value);
-    } catch (e) {
-      logDebug("setStorage error", e);
-    }
-  }
-
-  // ===== GỬI REQUEST QUA GM_xmlhttpRequest =====
-  function gmRequest(method, url, data = null, headers = {}) {
-    return new Promise((resolve, reject) => {
-      try {
-        logDebug(`gmRequest: ${method} ${url}`);
-        GM_xmlhttpRequest({
-          method,
-          url,
-          headers: {
-            "Content-Type": "application/json",
-            ...headers,
-          },
-          data: data ? JSON.stringify(data) : undefined,
-          onload: function (response) {
-            logDebug(`gmRequest response status: ${response.status}`);
-            if (response.status < 200 || response.status >= 300) {
-              reject(new Error(`HTTP ${response.status}: ${response.statusText}`));
-              return;
-            }
-            let parsedData = null;
-            try {
-              parsedData = response.responseText ? JSON.parse(response.responseText) : {};
-            } catch (e) {
-              reject(new Error(`Invalid JSON: ${response.responseText}`));
-              return;
-            }
-            resolve({ status: response.status, data: parsedData });
-          },
-          onerror: function (error) {
-            logDebug("gmRequest error", error);
-            reject(error);
-          },
-          ontimeout: function () {
-            reject(new Error('Request timeout'));
-          },
-          timeout: 10000
-        });
-      } catch (e) {
-        logDebug("gmRequest exception", e);
-        reject(e);
-      }
+  // ======================== GM REQUEST ========================
+  const gmRequest = (method, url, data = null, headers = {}) =>
+    new Promise((resolve, reject) => {
+      GM_xmlhttpRequest({
+        method,
+        url,
+        headers: { "Content-Type": "application/json", ...headers },
+        data: data ? JSON.stringify(data) : undefined,
+        onload: (resp) => {
+          if (resp.status < 200 || resp.status >= 300) {
+            return reject(new Error(`HTTP ${resp.status}`));
+          }
+          try {
+            resolve({ status: resp.status, data: JSON.parse(resp.responseText || "{}") });
+          } catch {
+            reject(new Error("Invalid JSON"));
+          }
+        },
+        onerror: reject,
+        ontimeout: () => reject(new Error("Timeout")),
+        timeout: 10000,
+      });
     });
-  }
 
-  // ===== HÀM GIỚI HẠN WIDGET TRONG VIEWPORT =====
-  function enforceWidgetBounds(widget) {
-    if (!widget) return;
-    const rect = widget.getBoundingClientRect();
-    const vw = window.innerWidth;
-    const vh = window.innerHeight;
+  // ======================== WIDGET (draggable, bound to viewport) ========================
+  const enforceBounds = (el) => {
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const vw = window.innerWidth,
+      vh = window.innerHeight;
+    let top = parseFloat(el.style.top) || 0,
+      left = parseFloat(el.style.left) || 0;
 
-    // Nếu widget đang dùng right/bottom, chuyển sang left/top để dễ tính
-    let newTop = parseFloat(widget.style.top) || 0;
-    let newLeft = parseFloat(widget.style.left) || 0;
-    const right = parseFloat(widget.style.right);
-    const bottom = parseFloat(widget.style.bottom);
-
-    if (!isNaN(right) && widget.style.right !== 'auto') {
-      newLeft = vw - rect.width - right;
-      widget.style.left = newLeft + 'px';
-      widget.style.right = 'auto';
+    // convert from right/bottom if used
+    if (el.style.right !== "auto") {
+      left = vw - rect.width - parseFloat(el.style.right);
+      el.style.left = left + "px";
+      el.style.right = "auto";
     }
-    if (!isNaN(bottom) && widget.style.bottom !== 'auto') {
-      newTop = vh - rect.height - bottom;
-      widget.style.top = newTop + 'px';
-      widget.style.bottom = 'auto';
+    if (el.style.bottom !== "auto") {
+      top = vh - rect.height - parseFloat(el.style.bottom);
+      el.style.top = top + "px";
+      el.style.bottom = "auto";
     }
 
-    // Giới hạn trong viewport
-    newTop = Math.max(0, Math.min(newTop, vh - rect.height));
-    newLeft = Math.max(0, Math.min(newLeft, vw - rect.width));
+    top = Math.max(0, Math.min(top, vh - rect.height));
+    left = Math.max(0, Math.min(left, vw - rect.width));
 
-    widget.style.top = newTop + 'px';
-    widget.style.left = newLeft + 'px';
+    el.style.top = top + "px";
+    el.style.left = left + "px";
+    setStore("widget_position", { top: top + "px", left: left + "px" });
+  };
 
-    // Lưu lại vị trí đã điều chỉnh
-    setStorage("widget_position", { top: newTop + 'px', left: newLeft + 'px' });
-  }
-
-  // ===== FLOATING WIDGET =====
-  function updateFloatingWidget() {
-    logDebug("updateFloatingWidget called");
-    const today = getTodayKey();
-    const stats = getStorage(`stats_${today}`, { qc: 0, judgement: 0, rimassreceive: 0 });
+  const updateWidget = () => {
+    const stats = getStore(`stats_${todayKey()}`, { qc: 0, judgement: 0, rimassreceive: 0 });
+    const defaultPos = { top: "80px", left: "20px" };
+    let pos = getStore("widget_position", defaultPos);
+    if (!pos || !pos.top || !pos.left) pos = { ...defaultPos };
 
     let widget = document.getElementById("qc-tracker-floating-widget");
-    const defaultPos = { top: "80px", right: "20px" };
-    let savedPos = getStorage("widget_position", defaultPos);
-
-    // Nếu vị trí lưu không hợp lệ, dùng default
-    if (!savedPos || typeof savedPos !== 'object' || !savedPos.top || !savedPos.left) {
-      savedPos = { ...defaultPos };
-    }
-
     if (!widget) {
-      logDebug("Creating floating widget");
       widget = document.createElement("div");
       widget.id = "qc-tracker-floating-widget";
-
       widget.style.cssText = `
         position: fixed;
-        top: ${savedPos.top};
-        right: auto;
-        left: ${savedPos.left};
-        bottom: auto;
+        top: ${pos.top}; left: ${pos.left}; right: auto; bottom: auto;
         width: 200px;
-        background: rgba(33, 33, 33, 0.9);
-        color: #fff;
-        padding: 12px;
-        border-radius: 8px;
+        background: rgba(33,33,33,0.9); color: #fff;
+        padding: 12px; border-radius: 8px;
         box-shadow: 0 4px 12px rgba(0,0,0,0.3);
         z-index: 999999;
-        font-family: Arial, sans-serif;
-        font-size: 13px;
-        user-select: none;
-        border: 1px solid #ff5722;
+        font-family: Arial, sans-serif; font-size: 13px;
+        user-select: none; border: 1px solid #ff5722;
       `;
-
       const header = document.createElement("div");
       header.id = "qc-tracker-widget-header";
       header.innerText = "📊 NĂNG SUẤT HÔM NAY";
-      header.style.cssText = "font-weight: bold; border-bottom: 1px solid #555; padding-bottom: 6px; margin-bottom: 8px; cursor: move; color: #ff5722; text-align: center;";
+      header.style.cssText =
+        "font-weight:bold; border-bottom:1px solid #555; padding-bottom:6px; margin-bottom:8px; cursor:move; color:#ff5722; text-align:center;";
       widget.appendChild(header);
-
       const content = document.createElement("div");
       content.id = "qc-tracker-widget-content";
       widget.appendChild(content);
-
       document.body.appendChild(widget);
-      makeWidgetDraggable(widget, header);
-
-      // Sau khi append, kiểm tra và điều chỉnh vị trí
-      enforceWidgetBounds(widget);
+      makeDraggable(widget, header);
+      enforceBounds(widget);
     } else {
-      // Nếu widget đã tồn tại, cập nhật nội dung và kiểm tra giới hạn
-      enforceWidgetBounds(widget);
+      enforceBounds(widget);
     }
 
-    const contentEl = document.getElementById("qc-tracker-widget-content");
-    if (contentEl) {
-      contentEl.innerHTML = `
+    const content = document.getElementById("qc-tracker-widget-content");
+    if (content) {
+      content.innerHTML = `
         <div style="display:flex; justify-content:space-between; margin-bottom:4px;"><span>1. Đã QC:</span> <strong style="color:#00e676">${stats.qc}</strong></div>
         <div style="display:flex; justify-content:space-between; margin-bottom:4px;"><span>2. Đã Judge:</span> <strong style="color:#29b6f6">${stats.judgement}</strong></div>
-        <div style="display:flex; justify-content:space-between;"><span>3. Đã Recieve:</span> <strong style="color:#ffca28">${stats.rimassreceive}</strong></div>
+        <div style="display:flex; justify-content:space-between;"><span>3. Đã Nhận:</span> <strong style="color:#ffca28">${stats.rimassreceive}</strong></div>
       `;
     }
-  }
+  };
 
-  function makeWidgetDraggable(elmnt, header) {
-    let pos1 = 0, pos2 = 0, pos3 = 0, pos4 = 0;
-    header.onmousedown = dragMouseDown;
-
-    function dragMouseDown(e) {
+  const makeDraggable = (elm, header) => {
+    let pos1 = 0,
+      pos2 = 0,
+      pos3 = 0,
+      pos4 = 0;
+    const dragMouseDown = (e) => {
       e = e || window.event;
       e.preventDefault();
       pos3 = e.clientX;
       pos4 = e.clientY;
-      document.onmouseup = closeDragElement;
+      document.onmouseup = closeDrag;
       document.onmousemove = elementDrag;
-    }
-
-    function elementDrag(e) {
+    };
+    const elementDrag = (e) => {
       e = e || window.event;
       e.preventDefault();
       pos1 = pos3 - e.clientX;
       pos2 = pos4 - e.clientY;
       pos3 = e.clientX;
       pos4 = e.clientY;
-
-      let newTop = elmnt.offsetTop - pos2;
-      let newLeft = elmnt.offsetLeft - pos1;
-
-      // Giới hạn trong viewport
-      const vw = window.innerWidth;
-      const vh = window.innerHeight;
-      const rect = elmnt.getBoundingClientRect();
-      const w = rect.width;
-      const h = rect.height;
-
-      newTop = Math.max(0, Math.min(newTop, vh - h));
-      newLeft = Math.max(0, Math.min(newLeft, vw - w));
-
-      elmnt.style.top = newTop + "px";
-      elmnt.style.left = newLeft + "px";
-      elmnt.style.right = "auto";
-      elmnt.style.bottom = "auto";
-    }
-
-    function closeDragElement() {
+      let top = elm.offsetTop - pos2,
+        left = elm.offsetLeft - pos1;
+      const rect = elm.getBoundingClientRect();
+      const vw = window.innerWidth,
+        vh = window.innerHeight;
+      top = Math.max(0, Math.min(top, vh - rect.height));
+      left = Math.max(0, Math.min(left, vw - rect.width));
+      elm.style.top = top + "px";
+      elm.style.left = left + "px";
+      elm.style.right = "auto";
+      elm.style.bottom = "auto";
+    };
+    const closeDrag = () => {
       document.onmouseup = null;
       document.onmousemove = null;
-      const top = elmnt.style.top;
-      const left = elmnt.style.left;
-      setStorage("widget_position", { top, left });
-    }
-  }
+      setStore("widget_position", { top: elm.style.top, left: elm.style.left });
+    };
+    header.onmousedown = dragMouseDown;
+  };
 
-  // ===== API INTERCEPTOR =====
-  function initApiInterceptor() {
-    logDebug("initApiInterceptor called");
-    const originalFetch = window.fetch;
+  // ======================== FETCH INTERCEPTOR ========================
+  const initInterceptor = () => {
+    const origFetch = window.fetch;
     window.fetch = async function (...args) {
-      const response = await originalFetch.apply(this, args);
+      const response = await origFetch.apply(this, args);
       const url = typeof args[0] === "string" ? args[0] : args[0].url;
 
-      Object.entries(PAGE_CONFIG).forEach(async ([pageType, cfg]) => {
-        if (cfg.apiWatchUrl && url.includes(cfg.apiWatchUrl)) {
-          logDebug(`Intercepting ${pageType} API: ${url}`);
-          try {
-            const cloneResp = response.clone();
-            const json = await cloneResp.json();
+      // Intercept login info
+      if (url && url.includes("/api/v2/apps/system/user/get_login_info")) {
+        try {
+          const clone = response.clone();
+          const json = await clone.json();
+          if (json?.retcode === 0 && json?.data?.email) {
+            const email = normalize(json.data.email).toLowerCase();
+            setStore("user_email", email);
+            setStore("user_email_timestamp", Date.now());
+            log("Intercepted login email:", email);
+          }
+        } catch (e) { /* ignore */ }
+      }
 
-            if (json && json.retcode === 0 && json.data && json.data.list && json.data.list.length > 0) {
-              const item = json.data.list[0];
-              const inboundId = item.inbound_id || item.asn || "";
-              const returnTn = item.return_tn || "";
-
-              if (inboundId) {
-                logDebug(`Intercepted ${pageType} data:`, { inboundId, returnTn });
-
-                setStorage(`intercepted_${pageType}_${inboundId}`, {
-                  inbound_id: inboundId,
-                  return_tn: returnTn,
-                  intercepted_at: nowISO()
-                });
-
-                if (pageType === "qc") {
-                  const lastQcInboundId = getStorage("last_qc_inbound_id", "");
-                  if (lastQcInboundId && lastQcInboundId !== inboundId) {
-                    const isJudged = getStorage(`judgement_completed_${lastQcInboundId}`, false);
-                    if (!isJudged) {
-                      alert(`⚠️ CẢNH BÁO: Đơn [${lastQcInboundId}] vừa QC xong NHƯNG CHƯA ĐƯỢC thực hiện Judgement! Vui lòng kiểm tra lại quy trình.`);
+      // Intercept scan sheet APIs
+      Object.entries(PAGE_CONFIG).forEach(([pageType, cfg]) => {
+        if (cfg.apiWatchUrl && url && url.includes(cfg.apiWatchUrl)) {
+          (async () => {
+            try {
+              const clone = response.clone();
+              const json = await clone.json();
+              if (json?.retcode === 0 && json?.data?.list?.length) {
+                const item = json.data.list[0];
+                const id = item.inbound_id || item.asn || "";
+                const returnTn = item.return_tn || "";
+                if (id) {
+                  setStore(`intercepted_${pageType}_${id}`, { inbound_id: id, return_tn: returnTn, intercepted_at: nowISO() });
+                  if (pageType === "qc") {
+                    const lastId = getStore("last_qc_inbound_id", "");
+                    if (lastId && lastId !== id) {
+                      const judged = getStore(`judgement_completed_${lastId}`, false);
+                      if (!judged) {
+                        alert(`⚠️ CẢNH BÁO: Đơn [${lastId}] vừa QC xong NHƯNG CHƯA ĐƯỢC Judgement!`);
+                      }
                     }
+                    setStore("last_qc_inbound_id", id);
                   }
-                  setStorage("last_qc_inbound_id", inboundId);
-                }
-
-                if (pageType === "judgement") {
-                  setStorage(`judgement_completed_${inboundId}`, true);
+                  if (pageType === "judgement") {
+                    setStore(`judgement_completed_${id}`, true);
+                  }
                 }
               }
-            }
-          } catch (err) {
-            logDebug("Error parsing intercepted fetch", err);
-          }
+            } catch (e) { /* ignore */ }
+          })();
         }
       });
 
       return response;
     };
-  }
+  };
 
-  // ===== THEO DÕI FOCUS INPUT =====
-  function setupFieldFocusListeners(pageType) {
-    const cfg = PAGE_CONFIG[pageType];
-    if (!cfg) return;
-
-    Object.entries(cfg.fields).forEach(([fieldName, keywords]) => {
-      for (const keyword of keywords) {
-        let inputEl = null;
-        if (keyword.startsWith("#")) {
-          const target = document.querySelector(keyword);
-          if (target) {
-            inputEl = target.tagName === "INPUT" || target.tagName === "TEXTAREA" ? target : target.querySelector("input, textarea");
-          }
-        } else {
-          const parent = document.querySelector(`[data-for="${keyword}"]`);
-          if (parent) inputEl = parent.querySelector("input, textarea");
-        }
-
-        if (inputEl && !inputEl.dataset.qcTimeBound) {
-          inputEl.dataset.qcTimeBound = "1";
-          inputEl.addEventListener("focus", () => {
-            if (!fieldTimestamps[fieldName]) {
-              fieldTimestamps[fieldName] = nowISO();
-              logDebug(`Field ${fieldName} focused at ${fieldTimestamps[fieldName]}`);
-            }
-          });
-        }
-      }
-    });
-  }
-
-  // ===== LẤY EMAIL USER =====
-  async function getCurrentUserEmail() {
-    try {
-      logDebug("Fetching user email from", CONFIG.LOGIN_INFO_URL);
-      const resp = await fetch(CONFIG.LOGIN_INFO_URL, {
-        method: "GET",
-        credentials: "include",
-        headers: { Accept: "application/json" },
-      });
-      if (!resp.ok) {
-        logDebug(`getCurrentUserEmail HTTP error: ${resp.status}`);
-        return "";
-      }
-      const data = await resp.json();
-      if (data?.retcode !== 0) {
-        logDebug(`getCurrentUserEmail retcode: ${data.retcode}`);
-        return "";
-      }
-      const email = normalizeText(data?.data?.email || "").toLowerCase();
-      logDebug(`User email: ${email}`);
+  // ======================== GET USER EMAIL (via interceptor + fallback) ========================
+  const getEmail = async () => {
+    let email = getStore("user_email", "");
+    const ts = getStore("user_email_timestamp", 0);
+    if (email && Date.now() - ts < CONFIG.EMAIL_CACHE_MS) {
+      log("Email from cache:", email);
       return email;
-    } catch (e) {
-      logDebug("getCurrentUserEmail error", e);
-      return "";
     }
-  }
 
-  // ===== LẤY GIÁ TRỊ INPUT =====
-  function getInputValueByKeywords(keywords = []) {
-    for (const keyword of keywords) {
-      if (keyword.startsWith("#")) {
-        const targetEl = document.querySelector(keyword);
-        if (targetEl) {
-          if (targetEl.tagName === "INPUT" || targetEl.tagName === "TEXTAREA") {
-            return normalizeText(targetEl.value || "");
-          }
-          const inputEl = targetEl.querySelector("input, textarea");
-          if (inputEl) return normalizeText(inputEl.value || "");
+    log("Triggering login info fetch to intercept...");
+    try {
+      await fetch(CONFIG.LOGIN_INFO_URL, { credentials: "include" });
+    } catch {}
+
+    const start = Date.now();
+    while (Date.now() - start < CONFIG.POLL_TIMEOUT) {
+      email = getStore("user_email", "");
+      if (email) {
+        log("Email via interceptor:", email);
+        return email;
+      }
+      await new Promise((r) => setTimeout(r, CONFIG.POLL_INTERVAL));
+    }
+
+    log("Fallback to direct fetch");
+    try {
+      const resp = await fetch(CONFIG.LOGIN_INFO_URL, { credentials: "include" });
+      if (resp.ok) {
+        const data = await resp.json();
+        if (data?.retcode === 0 && data?.data?.email) {
+          email = normalize(data.data.email).toLowerCase();
+          setStore("user_email", email);
+          setStore("user_email_timestamp", Date.now());
+          return email;
+        }
+      }
+    } catch {}
+
+    return "";
+  };
+
+  // ======================== FIELD EXTRACTION ========================
+  const getInputByKeywords = (keywords = []) => {
+    for (const kw of keywords) {
+      if (kw.startsWith("#")) {
+        const target = document.querySelector(kw);
+        if (target) {
+          const input = target.tagName === "INPUT" || target.tagName === "TEXTAREA" ? target : target.querySelector("input, textarea");
+          if (input) return normalize(input.value);
         }
       } else {
-        const parentEl = document.querySelector(`[data-for="${keyword}"]`);
-        if (parentEl) {
-          const inputEl = parentEl.querySelector("input, textarea");
-          if (inputEl) return normalizeText(inputEl.value || "");
+        const parent = document.querySelector(`[data-for="${kw}"]`);
+        if (parent) {
+          const input = parent.querySelector("input, textarea");
+          if (input) return normalize(input.value);
         }
       }
     }
     return "";
-  }
+  };
 
-  // ===== TÌM NÚT ACTION =====
-  function findActionButton(actionText) {
-    const buttons = Array.from(document.querySelectorAll("button"));
-    return (
-      buttons.find(
-        (btn) =>
-          normalizeText(btn.innerText).toLowerCase() ===
-          actionText.toLowerCase(),
-      ) || null
-    );
-  }
-
-  // ===== THU THẬP CÁC TRƯỜNG =====
-  function collectFields(pageType) {
+  const collectFields = (pageType) => {
     const cfg = PAGE_CONFIG[pageType];
-    const result = {
-      device_id: "",
-      scan_value: "",
-    };
-
-    if (!cfg) return result;
-
+    if (!cfg) return { device_id: "", scan_value: "" };
+    const result = {};
     Object.entries(cfg.fields).forEach(([field, keywords]) => {
-      result[field] = getInputValueByKeywords(keywords);
+      result[field] = getInputByKeywords(keywords);
     });
-
     return result;
-  }
+  };
 
-  // ===== TẠO RECORD =====
-  function makeRecord(pageType, userEmail) {
-    const fieldsData = collectFields(pageType);
-    const currentScanVal = fieldsData.scan_value;
-    const extraApiData = getStorage(`intercepted_${pageType}_${currentScanVal}`, { inbound_id: "", return_tn: "" });
+  // ======================== ACTION BUTTON BINDING ========================
+  const findActionButton = (text) => {
+    const btns = Array.from(document.querySelectorAll("button"));
+    return btns.find((b) => normalize(b.innerText).toLowerCase() === text.toLowerCase()) || null;
+  };
 
-    const record = {
+  // ======================== RECORD & SEND ========================
+  const makeRecord = (pageType, userEmail) => {
+    const fields = collectFields(pageType);
+    const scanVal = fields.scan_value || "";
+    const extra = getStore(`intercepted_${pageType}_${scanVal}`, { inbound_id: "", return_tn: "" });
+    return {
       version: CONFIG.VERSION,
       timestamp: nowISO(),
       page: pageType,
       action: PAGE_CONFIG[pageType]?.actionText || "",
-      operator: userEmail || "",
+      operator: userEmail,
       url: location.href,
-      ...fieldsData,
-      api_inbound_id: extraApiData.inbound_id,
-      api_return_tn: extraApiData.return_tn,
-      field_timestamps: { ...fieldTimestamps }
+      ...fields,
+      api_inbound_id: extra.inbound_id,
+      api_return_tn: extra.return_tn,
+      field_timestamps: { ...fieldTimestamps },
     };
+  };
 
-    logDebug("Record created:", record);
-    return record;
-  }
+  const shouldSkip = (record, pageType) => {
+    const required = PAGE_CONFIG[pageType]?.requiredFields || [];
+    return required.some((f) => !record[f]);
+  };
 
-  function shouldSkipRecord(record, pageType) {
-    const requiredFields = PAGE_CONFIG[pageType]?.requiredFields || [];
-    const missing = requiredFields.filter((field) => !record[field]);
-    if (missing.length) {
-      logDebug(`Skip record: missing fields ${missing.join(', ')}`);
-      return true;
-    }
-    return false;
-  }
-
-  // ===== AUTHZ =====
-  async function checkAuthorization(userEmail) {
-    if (!userEmail) return { allowed: false, reason: "missing_user_email" };
-
-    const cacheKey = "qc_authz_" + userEmail;
-    const cached = getStorage(cacheKey, null);
-
-    if (cached && cached.expireAt && Date.now() < cached.expireAt) {
-      logDebug("Authz cached:", cached.value);
-      return cached.value;
-    }
-
-    try {
-      const url = CONFIG.API_BASE_URL + CONFIG.AUTH_ENDPOINT;
-      logDebug("Calling Authz:", url);
-      const resp = await gmRequest("POST", url, {
-        email: userEmail,
-        page: location.pathname,
-      });
-
-      const value = {
-        allowed: !!resp?.data?.allowed,
-        reason: resp?.data?.reason || "",
-        user: resp?.data?.user || null,
-        session_token: resp?.data?.session_token || "",
-      };
-
-      logDebug("Authz response:", value);
-
-      setStorage(cacheKey, {
-        expireAt: Date.now() + CONFIG.AUTH_CACHE_MS,
-        value,
-      });
-
-      return value;
-    } catch (e) {
-      logDebug("checkAuthorization error", e);
-      return { allowed: false, reason: "authz_api_error" };
-    }
-  }
-
-  // ===== GỬI LOG =====
-  async function sendRecord(record, sessionToken = "") {
+  const sendRecord = async (record, sessionToken = "") => {
     try {
       const headers = {};
       if (sessionToken) {
         headers["X-QC-Session-Token"] = sessionToken;
-        logDebug("Sending with token:", sessionToken.substring(0, 20) + "...");
-      } else {
-        logDebug("Sending WITHOUT session token!");
+        log("Sending with token:", sessionToken.substring(0, 20) + "...");
       }
-
       const url = CONFIG.API_BASE_URL + CONFIG.LOG_ENDPOINT;
-      logDebug("Sending log to", url);
       const resp = await gmRequest("POST", url, record, headers);
-
-      const success = resp.status >= 200 && resp.status < 300;
-      logDebug(`Send record ${success ? 'success' : 'failed'} (status ${resp.status})`);
-      if (!success && resp.data && resp.data.error) {
-        logDebug("Server error detail:", resp.data.error);
-      }
-      return success;
+      log("Log sent, status:", resp.status);
+      return true;
     } catch (e) {
-      logDebug("sendRecord error", e);
-      const pending = getStorage("qc_pending_logs", []);
+      log("Send failed, queue pending:", e);
+      const pending = getStore("qc_pending_logs", []);
       pending.push({ record, sessionToken });
-      setStorage("qc_pending_logs", pending);
+      setStore("qc_pending_logs", pending);
       return false;
     }
-  }
+  };
 
-  // ===== FLUSH PENDING LOGS =====
-  async function flushPendingLogs() {
-    const pending = getStorage("qc_pending_logs", []);
-    if (!Array.isArray(pending) || pending.length === 0) return;
-
-    logDebug(`Flushing ${pending.length} pending logs`);
+  const flushPending = async () => {
+    const pending = getStore("qc_pending_logs", []);
+    if (!pending.length) return;
+    log(`Flushing ${pending.length} pending logs`);
     const remain = [];
     for (const item of pending) {
       const ok = await sendRecord(item.record, item.sessionToken || "");
       if (!ok) remain.push(item);
     }
+    setStore("qc_pending_logs", remain);
+  };
 
-    setStorage("qc_pending_logs", remain);
-    if (remain.length === 0) {
-      logDebug("All pending logs flushed");
-    } else {
-      logDebug(`${remain.length} pending logs remain`);
+  // ======================== AUTHZ ========================
+  const checkAuth = async (email) => {
+    if (!email) return { allowed: false, reason: "missing_email" };
+    const cacheKey = "qc_authz_" + email;
+    const cached = getStore(cacheKey, null);
+    if (cached && cached.expireAt && Date.now() < cached.expireAt) {
+      return cached.value;
     }
-  }
+    try {
+      const resp = await gmRequest("POST", CONFIG.API_BASE_URL + CONFIG.AUTH_ENDPOINT, { email, page: location.pathname });
+      const value = {
+        allowed: !!resp?.data?.allowed,
+        reason: resp?.data?.reason || "",
+        session_token: resp?.data?.session_token || "",
+      };
+      setStore(cacheKey, { expireAt: Date.now() + CONFIG.AUTH_CACHE_MS, value });
+      return value;
+    } catch {
+      return { allowed: false, reason: "authz_error" };
+    }
+  };
 
-  // ===== XỬ LÝ KHI CLICK ACTION =====
-  async function handleActionClick(pageType, userEmail, sessionToken = "") {
-    logDebug("handleActionClick called for", pageType);
+  // ======================== HANDLE CLICK ========================
+  const handleAction = async (pageType, userEmail, sessionToken) => {
     const record = makeRecord(pageType, userEmail);
-
-    if (shouldSkipRecord(record, pageType)) {
-      logDebug("skip record due to missing required fields");
+    if (shouldSkip(record, pageType)) {
+      log("Skipped due to missing required fields");
       return;
     }
 
-    // Chống duplicate
-    const fingerprint = [
-      record.page,
-      record.action,
-      record.operator,
-      record.device_id,
-      record.scan_value,
-    ].join("|");
-
-    const lastFingerprint = getStorage("qc_last_fingerprint", "");
-    const lastTime = getStorage("qc_last_fingerprint_time", 0);
-
-    if (
-      fingerprint === lastFingerprint &&
-      Date.now() - lastTime < CONFIG.DUPLICATE_WINDOW_MS
-    ) {
-      logDebug("duplicate record skipped (within window)");
+    const fingerprint = [record.page, record.action, record.operator, record.device_id, record.scan_value].join("|");
+    const lastFinger = getStore("qc_last_fingerprint", "");
+    const lastTime = getStore("qc_last_fingerprint_time", 0);
+    if (fingerprint === lastFinger && Date.now() - lastTime < CONFIG.DUPLICATE_WINDOW_MS) {
+      log("Duplicate within window, skipped");
       return;
     }
+    setStore("qc_last_fingerprint", fingerprint);
+    setStore("qc_last_fingerprint_time", Date.now());
 
-    setStorage("qc_last_fingerprint", fingerprint);
-    setStorage("qc_last_fingerprint_time", Date.now());
-
-    const success = await sendRecord(record, sessionToken);
-    if (success) {
-      logDebug("Record sent successfully");
+    const ok = await sendRecord(record, sessionToken);
+    if (ok) {
       fieldTimestamps = {};
-
-      // Tăng số đếm
-      const today = getTodayKey();
-      const stats = getStorage(`stats_${today}`, { qc: 0, judgement: 0, rimassreceive: 0 });
+      const stats = getStore(`stats_${todayKey()}`, { qc: 0, judgement: 0, rimassreceive: 0 });
       if (stats.hasOwnProperty(pageType)) {
         stats[pageType] += 1;
-        setStorage(`stats_${today}`, stats);
-        updateFloatingWidget();
-        logDebug(`Updated stats for ${pageType}: ${stats[pageType]}`);
+        setStore(`stats_${todayKey()}`, stats);
+        updateWidget();
       }
-    } else {
-      logDebug("Record send failed, saved to pending");
     }
-  }
+  };
 
-  // ===== INIT =====
-  async function init() {
-    console.log("[QC Tracker] init() started");
+  // ======================== SETUP FOCUS LISTENERS ========================
+  const setupFocus = (pageType) => {
+    const cfg = PAGE_CONFIG[pageType];
+    if (!cfg) return;
+    Object.entries(cfg.fields).forEach(([field, keywords]) => {
+      for (const kw of keywords) {
+        let input = null;
+        if (kw.startsWith("#")) {
+          const target = document.querySelector(kw);
+          if (target) input = target.tagName === "INPUT" || target.tagName === "TEXTAREA" ? target : target.querySelector("input, textarea");
+        } else {
+          const parent = document.querySelector(`[data-for="${kw}"]`);
+          if (parent) input = parent.querySelector("input, textarea");
+        }
+        if (input && !input.dataset.qcTimeBound) {
+          input.dataset.qcTimeBound = "1";
+          input.addEventListener("focus", () => {
+            if (!fieldTimestamps[field]) {
+              fieldTimestamps[field] = nowISO();
+            }
+          });
+        }
+      }
+    });
+  };
 
-    initApiInterceptor();
+  // ======================== INIT ========================
+  const init = async () => {
+    log("Initializing...");
+    initInterceptor();
 
     const pageType = getPageType(location.href);
-    console.log("[QC Tracker] Page type:", pageType);
-
     if (pageType === "unknown") {
-      console.log("[QC Tracker] Page not supported");
+      log("Unsupported page");
       return;
     }
 
-    updateFloatingWidget();
+    updateWidget();
 
-    const userEmail = await getCurrentUserEmail();
-    if (!userEmail) {
-      console.warn("[QC Tracker] No user email");
+    const email = await getEmail();
+    if (!email) {
+      console.warn("[QC Tracker] No email found");
       return;
     }
 
-    const authz = await checkAuthorization(userEmail);
-    console.log("[QC Tracker] Authz result:", authz);
-    if (!authz.allowed) {
-      console.warn("[QC Tracker] Not authorized:", authz.reason);
+    const auth = await checkAuth(email);
+    if (!auth.allowed) {
+      console.warn("[QC Tracker] Not authorized:", auth.reason);
       return;
     }
 
-    await flushPendingLogs();
+    await flushPending();
 
-    const bind = () => {
-      const button = findActionButton(PAGE_CONFIG[pageType]?.actionText);
-      if (button && button.dataset.qcTrackerBound !== "1") {
-        button.dataset.qcTrackerBound = "1";
-        button.addEventListener("click", async function () {
-          console.log("[QC Tracker] Button clicked");
-          await handleActionClick(pageType, userEmail, authz.session_token || "");
+    const bindButton = () => {
+      const btn = findActionButton(PAGE_CONFIG[pageType]?.actionText);
+      if (btn && !btn.dataset.qcTrackerBound) {
+        btn.dataset.qcTrackerBound = "1";
+        btn.addEventListener("click", () => {
+          log("Action button clicked");
+          handleAction(pageType, email, auth.session_token || "");
         }, true);
-        console.log("[QC Tracker] Bound action button");
-      } else if (button) {
-        console.log("[QC Tracker] Button already bound");
-      } else {
-        console.warn("[QC Tracker] Action button not found");
+        log("Button bound");
       }
-      setupFieldFocusListeners(pageType);
+      setupFocus(pageType);
     };
 
-    bind();
+    bindButton();
 
-    // Observer cho các button được thêm sau
     const observer = new MutationObserver(() => {
-      const button = findActionButton(PAGE_CONFIG[pageType]?.actionText);
-      if (button && button.dataset.qcTrackerBound !== "1") {
-        console.log("[QC Tracker] Detected new button, binding...");
-        bind();
+      const btn = findActionButton(PAGE_CONFIG[pageType]?.actionText);
+      if (btn && !btn.dataset.qcTrackerBound) {
+        bindButton();
       }
     });
     observer.observe(document.body, { childList: true, subtree: true });
-    console.log("[QC Tracker] Observer started");
 
-    console.log("[QC Tracker] init() completed");
+    log("Init complete");
+  };
+
+  if (typeof GM_xmlhttpRequest === "undefined" || typeof GM_setValue === "undefined") {
+    console.warn("[QC Tracker] Tampermonkey APIs missing");
+    return;
   }
 
-  // ===== CHẠY INIT =====
-  console.log("[QC Tracker] Calling init()...");
-  init().catch(err => console.error("[QC Tracker] Fatal error:", err));
+  init().catch((e) => console.error("[QC Tracker] Fatal:", e));
 })();

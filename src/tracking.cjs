@@ -244,6 +244,14 @@ function createTrackerSource() {
     };
   }
 
+  // --- CHUYỂN ĐỔI SELECTOR LINH HOẠT ---
+  function getTargetElement(keyword) {
+    if (keyword.startsWith("#") || keyword.startsWith(".") || keyword.startsWith("[")) {
+      return document.querySelector(keyword);
+    }
+    return document.querySelector(\`[data-for="\${keyword}"]\`);
+  }
+
   function setupFieldFocusListeners(pageType) {
     const cfg = PAGE_CONFIG[pageType];
     if (!cfg) return;
@@ -251,14 +259,12 @@ function createTrackerSource() {
     Object.entries(cfg.fields).forEach(([fieldName, keywords]) => {
       for (const keyword of keywords) {
         let inputEl = null;
-        if (keyword.startsWith("#")) {
-          const target = document.querySelector(keyword);
-          if (target) {
-            inputEl = target.tagName === "INPUT" || target.tagName === "TEXTAREA" ? target : target.querySelector("input, textarea");
-          }
-        } else {
-          const parent = document.querySelector(\`[data-for="\${keyword}"]\`);
-          if (parent) inputEl = parent.querySelector("input, textarea");
+        const targetEl = getTargetElement(keyword);
+        
+        if (targetEl) {
+          inputEl = (targetEl.tagName === "INPUT" || targetEl.tagName === "TEXTAREA") 
+            ? targetEl 
+            : targetEl.querySelector("input, textarea");
         }
 
         if (inputEl && !inputEl.dataset.qcTimeBound) {
@@ -292,21 +298,13 @@ function createTrackerSource() {
 
   function getInputValueByKeywords(keywords = []) {
     for (const keyword of keywords) {
-      if (keyword.startsWith("#")) {
-        const targetEl = document.querySelector(keyword);
-        if (targetEl) {
-          if (targetEl.tagName === "INPUT" || targetEl.tagName === "TEXTAREA") {
-            return normalizeText(targetEl.value || "");
-          }
-          const inputEl = targetEl.querySelector("input, textarea");
-          if (inputEl) return normalizeText(inputEl.value || "");
+      const targetEl = getTargetElement(keyword);
+      if (targetEl) {
+        if (targetEl.tagName === "INPUT" || targetEl.tagName === "TEXTAREA") {
+          return normalizeText(targetEl.value || "");
         }
-      } else {
-        const parentEl = document.querySelector(\`[data-for="\${keyword}"]\`);
-        if (parentEl) {
-          const inputEl = parentEl.querySelector("input, textarea");
-          if (inputEl) return normalizeText(inputEl.value || "");
-        }
+        const inputEl = targetEl.querySelector("input, textarea");
+        if (inputEl) return normalizeText(inputEl.value || "");
       }
     }
     return "";
@@ -486,8 +484,8 @@ function createTrackerSource() {
     initApiInterceptor();
 
     const pageType = getPageType(location.href);
-    
-    // Hiển thị Floating Widget đếm số lượng đơn ở cả 3 trang
+
+    // Hiển thị Floating Widget đếm số lượng đơn ở cả 3 trang    
     if (pageType !== "unknown") {
       updateFloatingWidget();
     } else {
@@ -503,6 +501,7 @@ function createTrackerSource() {
     await flushPendingLogs();
 
     const bind = () => {
+      // 1. Gắn sự kiện click vào nút Complete / Confirm
       const button = findActionButton(PAGE_CONFIG[pageType].actionText);
       if (button && button.dataset.qcTrackerBound !== "1") {
         button.dataset.qcTrackerBound = "1";
@@ -517,6 +516,23 @@ function createTrackerSource() {
           },
           true,
         );
+      }
+      
+      // 2. Gắn sự kiện keyup bắt phím Enter của súng PDA Scanner
+      if (!document.body.dataset.qcKeyupBound) {
+        document.body.dataset.qcKeyupBound = "1";
+        document.body.addEventListener("keyup", async function (e) {
+          if (e.key === "Enter" || e.keyCode === 13) {
+            // Cho một delay nhỏ 150ms để dữ liệu scan kịp binding lên DOM và API kịp hoàn tất phản hồi
+            setTimeout(async () => {
+              await handleActionClick(
+                pageType,
+                userEmail,
+                authz.session_token || "",
+              );
+            }, 150);
+          }
+        }, true);
       }
       
       setupFieldFocusListeners(pageType);

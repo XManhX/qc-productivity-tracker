@@ -2,26 +2,21 @@
 (function () {
   "use strict";
 
-  // ======================== CONFIG ========================
   const CONFIG = {
     VERSION: "__VERSION__",
     API_BASE_URL: "__API_BASE_URL__",
-    LOGIN_INFO_URL: "https://wms.ssc.shopee.vn/api/v2/apps/system/user/get_login_info",
     AUTH_ENDPOINT: "/api/qc-productivity/authz",
     LOG_ENDPOINT: "/api/qc-productivity/log",
     DEBUG: true,
     AUTH_CACHE_MS: 5 * 60 * 1000,
     DUPLICATE_WINDOW_MS: 3000,
     EMAIL_CACHE_MS: 5 * 60 * 1000,
-    POLL_INTERVAL: 200,
-    POLL_TIMEOUT: 5000,
   };
 
-  const PAGE_CONFIG = {}; // sẽ được thay thế khi build
+  const PAGE_CONFIG = {};
 
   let fieldTimestamps = {};
 
-  // ======================== UTILITIES ========================
   const log = (...args) => CONFIG.DEBUG && console.log("[QC Tracker]", ...args);
   const normalize = (s) => (s || "").replace(/\s+/g, " ").trim();
   const nowISO = () => new Date().toISOString();
@@ -32,18 +27,13 @@
     return entry ? entry[0] : "unknown";
   };
 
-  // ======================== STORAGE ========================
   const getStore = (key, fallback = null) => {
-    try {
-      const val = GM_getValue(key);
-      return val === undefined ? fallback : val;
-    } catch { return fallback; }
+    try { const v = GM_getValue(key); return v === undefined ? fallback : v; } catch { return fallback; }
   };
   const setStore = (key, val) => {
     try { GM_setValue(key, val); } catch {}
   };
 
-  // ======================== GM REQUEST ========================
   const gmRequest = (method, url, data = null, headers = {}) =>
     new Promise((resolve, reject) => {
       GM_xmlhttpRequest({
@@ -52,14 +42,8 @@
         headers: { "Content-Type": "application/json", ...headers },
         data: data ? JSON.stringify(data) : undefined,
         onload: (resp) => {
-          if (resp.status < 200 || resp.status >= 300) {
-            return reject(new Error(`HTTP ${resp.status}`));
-          }
-          try {
-            resolve({ status: resp.status, data: JSON.parse(resp.responseText || "{}") });
-          } catch {
-            reject(new Error("Invalid JSON"));
-          }
+          if (resp.status < 200 || resp.status >= 300) return reject(new Error(`HTTP ${resp.status}`));
+          try { resolve({ status: resp.status, data: JSON.parse(resp.responseText || "{}") }); } catch { reject(new Error("Invalid JSON")); }
         },
         onerror: reject,
         ontimeout: () => reject(new Error("Timeout")),
@@ -67,16 +51,12 @@
       });
     });
 
-  // ======================== WIDGET (draggable, bound to viewport) ========================
+  // ----- Widget (draggable, bounded) -----
   const enforceBounds = (el) => {
     if (!el) return;
     const rect = el.getBoundingClientRect();
-    const vw = window.innerWidth,
-      vh = window.innerHeight;
-    let top = parseFloat(el.style.top) || 0,
-      left = parseFloat(el.style.left) || 0;
-
-    // convert from right/bottom if used
+    const vw = window.innerWidth, vh = window.innerHeight;
+    let top = parseFloat(el.style.top) || 0, left = parseFloat(el.style.left) || 0;
     if (el.style.right !== "auto") {
       left = vw - rect.width - parseFloat(el.style.right);
       el.style.left = left + "px";
@@ -87,13 +67,41 @@
       el.style.top = top + "px";
       el.style.bottom = "auto";
     }
-
     top = Math.max(0, Math.min(top, vh - rect.height));
     left = Math.max(0, Math.min(left, vw - rect.width));
-
     el.style.top = top + "px";
     el.style.left = left + "px";
     setStore("widget_position", { top: top + "px", left: left + "px" });
+  };
+
+  const makeDraggable = (elm, header) => {
+    let p1 = 0, p2 = 0, p3 = 0, p4 = 0;
+    const dragStart = (e) => {
+      e = e || window.event; e.preventDefault();
+      p3 = e.clientX; p4 = e.clientY;
+      document.onmouseup = dragEnd;
+      document.onmousemove = dragMove;
+    };
+    const dragMove = (e) => {
+      e = e || window.event; e.preventDefault();
+      p1 = p3 - e.clientX; p2 = p4 - e.clientY;
+      p3 = e.clientX; p4 = e.clientY;
+      let top = elm.offsetTop - p2, left = elm.offsetLeft - p1;
+      const rect = elm.getBoundingClientRect();
+      const vw = window.innerWidth, vh = window.innerHeight;
+      top = Math.max(0, Math.min(top, vh - rect.height));
+      left = Math.max(0, Math.min(left, vw - rect.width));
+      elm.style.top = top + "px";
+      elm.style.left = left + "px";
+      elm.style.right = "auto";
+      elm.style.bottom = "auto";
+    };
+    const dragEnd = () => {
+      document.onmouseup = null;
+      document.onmousemove = null;
+      setStore("widget_position", { top: elm.style.top, left: elm.style.left });
+    };
+    header.onmousedown = dragStart;
   };
 
   const updateWidget = () => {
@@ -143,47 +151,7 @@
     }
   };
 
-  const makeDraggable = (elm, header) => {
-    let pos1 = 0,
-      pos2 = 0,
-      pos3 = 0,
-      pos4 = 0;
-    const dragMouseDown = (e) => {
-      e = e || window.event;
-      e.preventDefault();
-      pos3 = e.clientX;
-      pos4 = e.clientY;
-      document.onmouseup = closeDrag;
-      document.onmousemove = elementDrag;
-    };
-    const elementDrag = (e) => {
-      e = e || window.event;
-      e.preventDefault();
-      pos1 = pos3 - e.clientX;
-      pos2 = pos4 - e.clientY;
-      pos3 = e.clientX;
-      pos4 = e.clientY;
-      let top = elm.offsetTop - pos2,
-        left = elm.offsetLeft - pos1;
-      const rect = elm.getBoundingClientRect();
-      const vw = window.innerWidth,
-        vh = window.innerHeight;
-      top = Math.max(0, Math.min(top, vh - rect.height));
-      left = Math.max(0, Math.min(left, vw - rect.width));
-      elm.style.top = top + "px";
-      elm.style.left = left + "px";
-      elm.style.right = "auto";
-      elm.style.bottom = "auto";
-    };
-    const closeDrag = () => {
-      document.onmouseup = null;
-      document.onmousemove = null;
-      setStore("widget_position", { top: elm.style.top, left: elm.style.left });
-    };
-    header.onmousedown = dragMouseDown;
-  };
-
-  // ======================== FETCH INTERCEPTOR ========================
+  // ----- Interceptor -----
   const initInterceptor = () => {
     const origFetch = window.fetch;
     window.fetch = async function (...args) {
@@ -201,7 +169,7 @@
             setStore("user_email_timestamp", Date.now());
             log("Intercepted login email:", email);
           }
-        } catch (e) { /* ignore */ }
+        } catch (e) {}
       }
 
       // Intercept scan sheet APIs
@@ -232,7 +200,7 @@
                   }
                 }
               }
-            } catch (e) { /* ignore */ }
+            } catch (e) {}
           })();
         }
       });
@@ -241,48 +209,43 @@
     };
   };
 
-  // ======================== GET USER EMAIL (via interceptor + fallback) ========================
-  const getEmail = async () => {
-    let email = getStore("user_email", "");
-    const ts = getStore("user_email_timestamp", 0);
-    if (email && Date.now() - ts < CONFIG.EMAIL_CACHE_MS) {
-      log("Email from cache:", email);
-      return email;
-    }
-
-    log("Triggering login info fetch to intercept...");
+  // ----- Get Email (localStorage + GM cache, no fetch) -----
+  const getEmail = () => {
+    // 1. Thử localStorage / sessionStorage
     try {
-      await fetch(CONFIG.LOGIN_INFO_URL, { credentials: "include" });
-    } catch {}
-
-    const start = Date.now();
-    while (Date.now() - start < CONFIG.POLL_TIMEOUT) {
-      email = getStore("user_email", "");
-      if (email) {
-        log("Email via interceptor:", email);
-        return email;
-      }
-      await new Promise((r) => setTimeout(r, CONFIG.POLL_INTERVAL));
-    }
-
-    log("Fallback to direct fetch");
-    try {
-      const resp = await fetch(CONFIG.LOGIN_INFO_URL, { credentials: "include" });
-      if (resp.ok) {
-        const data = await resp.json();
-        if (data?.retcode === 0 && data?.data?.email) {
-          email = normalize(data.data.email).toLowerCase();
-          setStore("user_email", email);
-          setStore("user_email_timestamp", Date.now());
-          return email;
+      const keys = ['user_email', 'useremail', 'email', 'user', 'userInfo', 'profile'];
+      for (const key of keys) {
+        let val = localStorage.getItem(key) || sessionStorage.getItem(key);
+        if (val) {
+          try {
+            const obj = JSON.parse(val);
+            if (obj.email) val = obj.email;
+            else if (obj.user && obj.user.email) val = obj.user.email;
+          } catch {}
+          const email = normalize(val).toLowerCase();
+          if (email) {
+            log("Email from localStorage/sessionStorage:", email);
+            setStore("user_email", email);
+            setStore("user_email_timestamp", Date.now());
+            return email;
+          }
         }
       }
     } catch {}
 
+    // 2. GM cache
+    let email = getStore("user_email", "");
+    const ts = getStore("user_email_timestamp", 0);
+    if (email && Date.now() - ts < CONFIG.EMAIL_CACHE_MS) {
+      log("Email from GM cache:", email);
+      return email;
+    }
+
+    log("No email found in storage");
     return "";
   };
 
-  // ======================== FIELD EXTRACTION ========================
+  // ----- Field extraction -----
   const getInputByKeywords = (keywords = []) => {
     for (const kw of keywords) {
       if (kw.startsWith("#")) {
@@ -312,13 +275,13 @@
     return result;
   };
 
-  // ======================== ACTION BUTTON BINDING ========================
+  // ----- Action button -----
   const findActionButton = (text) => {
     const btns = Array.from(document.querySelectorAll("button"));
     return btns.find((b) => normalize(b.innerText).toLowerCase() === text.toLowerCase()) || null;
   };
 
-  // ======================== RECORD & SEND ========================
+  // ----- Record & send -----
   const makeRecord = (pageType, userEmail) => {
     const fields = collectFields(pageType);
     const scanVal = fields.scan_value || "";
@@ -345,16 +308,12 @@
   const sendRecord = async (record, sessionToken = "") => {
     try {
       const headers = {};
-      if (sessionToken) {
-        headers["X-QC-Session-Token"] = sessionToken;
-        log("Sending with token:", sessionToken.substring(0, 20) + "...");
-      }
-      const url = CONFIG.API_BASE_URL + CONFIG.LOG_ENDPOINT;
-      const resp = await gmRequest("POST", url, record, headers);
+      if (sessionToken) headers["X-QC-Session-Token"] = sessionToken;
+      const resp = await gmRequest("POST", CONFIG.API_BASE_URL + CONFIG.LOG_ENDPOINT, record, headers);
       log("Log sent, status:", resp.status);
       return true;
     } catch (e) {
-      log("Send failed, queue pending:", e);
+      log("Send failed, queued:", e);
       const pending = getStore("qc_pending_logs", []);
       pending.push({ record, sessionToken });
       setStore("qc_pending_logs", pending);
@@ -374,7 +333,7 @@
     setStore("qc_pending_logs", remain);
   };
 
-  // ======================== AUTHZ ========================
+  // ----- AuthZ -----
   const checkAuth = async (email) => {
     if (!email) return { allowed: false, reason: "missing_email" };
     const cacheKey = "qc_authz_" + email;
@@ -396,7 +355,7 @@
     }
   };
 
-  // ======================== HANDLE CLICK ========================
+  // ----- Handle click -----
   const handleAction = async (pageType, userEmail, sessionToken) => {
     const record = makeRecord(pageType, userEmail);
     if (shouldSkip(record, pageType)) {
@@ -426,7 +385,7 @@
     }
   };
 
-  // ======================== SETUP FOCUS LISTENERS ========================
+  // ----- Focus listeners -----
   const setupFocus = (pageType) => {
     const cfg = PAGE_CONFIG[pageType];
     if (!cfg) return;
@@ -452,7 +411,7 @@
     });
   };
 
-  // ======================== INIT ========================
+  // ----- Init -----
   const init = async () => {
     log("Initializing...");
     initInterceptor();
@@ -465,9 +424,9 @@
 
     updateWidget();
 
-    const email = await getEmail();
+    const email = getEmail();
     if (!email) {
-      console.warn("[QC Tracker] No email found");
+      console.warn("[QC Tracker] No email found in localStorage or cache");
       return;
     }
 

@@ -16,6 +16,7 @@
   const PAGE_CONFIG = {};
 
   let fieldTimestamps = {};
+  let pageStartTime = null;
 
   const log = (...args) => CONFIG.DEBUG && console.log("[QC Tracker]", ...args);
   const normalize = (s) => (s || "").replace(/\s+/g, " ").trim();
@@ -29,9 +30,11 @@
     return entry ? entry[0] : "unknown";
   };
 
-  const getInboundIdFromUrl = () => {
+  const getIdFromUrl = (pageType) => {
+    const cfg = PAGE_CONFIG[pageType];
+    if (!cfg || !cfg.urlParam) return "";
     const params = new URLSearchParams(window.location.search);
-    return params.get("id") || params.get("inbound_id") || "";
+    return params.get(cfg.urlParam) || "";
   };
 
   const getStore = (key, fallback = null) => {
@@ -73,7 +76,7 @@
       });
     });
 
-  // ----- Widget (draggable, bounded) -----
+  // ==================== WIDGET ====================
   const enforceBounds = (el) => {
     if (!el) return;
     const rect = el.getBoundingClientRect();
@@ -189,81 +192,17 @@
     }
   };
 
-  // ----- Interceptor -----
-  const initInterceptor = () => {
-    const origFetch = window.fetch;
-    window.fetch = async function (...args) {
-      const response = await origFetch.apply(this, args);
-      const url = typeof args[0] === "string" ? args[0] : args[0].url;
-
-      if (url && url.includes("/api/v2/apps/system/user/get_login_info")) {
-        try {
-          const clone = response.clone();
-          const json = await clone.json();
-          if (json?.retcode === 0 && json?.data?.email) {
-            const email = normalize(json.data.email).toLowerCase();
-            setStore("user_email", email);
-            setStore("user_email_timestamp", Date.now());
-            log("Intercepted login email:", email);
-          }
-        } catch (e) {}
-      }
-
-      Object.entries(PAGE_CONFIG).forEach(([pageType, cfg]) => {
-        if (cfg.apiWatchUrl && url && url.includes(cfg.apiWatchUrl)) {
-          (async () => {
-            try {
-              const clone = response.clone();
-              const json = await clone.json();
-              if (json?.retcode === 0 && json?.data?.list?.length) {
-                const item = json.data.list[0];
-                const id = item.inbound_id || item.asn || "";
-                const returnTn = item.return_tn || "";
-                if (id) {
-                  setStore(`intercepted_${pageType}_${id}`, {
-                    inbound_id: id,
-                    return_tn: returnTn,
-                    intercepted_at: nowISO(),
-                  });
-                  if (pageType === "qc") {
-                    const lastId = getStore("last_qc_inbound_id", "");
-                    if (lastId && lastId !== id) {
-                      const judged = getStore(
-                        `judgement_completed_${lastId}`,
-                        false,
-                      );
-                      if (!judged) {
-                        alert(
-                          `⚠️ CẢNH BÁO: Đơn [${lastId}] vừa QC xong NHƯNG CHƯA ĐƯỢC Judgement!`,
-                        );
-                      }
-                    }
-                    setStore("last_qc_inbound_id", id);
-                  }
-                  if (pageType === "judgement") {
-                    setStore(`judgement_completed_${id}`, true);
-                  }
-                }
-              }
-            } catch (e) {}
-          })();
-        }
-      });
-
-      return response;
-    };
-  };
-
-  // ----- Get Email (localStorage + GM cache, no fetch) -----
+  // ==================== GET EMAIL ====================
   const getEmail = () => {
     try {
       const keys = [
         "user_email",
-        "useremail",
         "email",
         "user",
         "userInfo",
         "profile",
+        "useremail",
+        "userEmail",
       ];
       for (const key of keys) {
         let val = localStorage.getItem(key) || sessionStorage.getItem(key);
@@ -275,7 +214,7 @@
           } catch {}
           const email = normalize(val).toLowerCase();
           if (email) {
-            log("Email from localStorage/sessionStorage:", email);
+            log("Email from storage (key:", key, "):", email);
             setStore("user_email", email);
             setStore("user_email_timestamp", Date.now());
             return email;
@@ -295,7 +234,7 @@
     return "";
   };
 
-  // ----- Field extraction -----
+  // ==================== FIELD EXTRACTION ====================
   const getInputByKeywords = (keywords = []) => {
     for (const kw of keywords) {
       if (kw.startsWith("#")) {
@@ -318,6 +257,13 @@
     return "";
   };
 
+  const setPageStartTimeIfNeeded = (scanValue) => {
+    if (!pageStartTime && scanValue) {
+      pageStartTime = nowISO();
+      log("Page start time set (ID detected):", pageStartTime);
+    }
+  };
+
   const collectFields = (pageType) => {
     const cfg = PAGE_CONFIG[pageType];
     if (!cfg) return { device_id: "", scan_value: "" };
@@ -325,17 +271,27 @@
     Object.entries(cfg.fields).forEach(([field, keywords]) => {
       result[field] = getInputByKeywords(keywords);
     });
-    if (pageType === "judgement" && !result.scan_value) {
-      const idFromUrl = getInboundIdFromUrl();
+
+    if (!result.scan_value) {
+      const idFromUrl = getIdFromUrl(pageType);
       if (idFromUrl) {
         result.scan_value = idFromUrl;
-        log("Judgement: scan_value taken from URL id:", idFromUrl);
+        log(
+          `${pageType}: scan_value taken from URL (${cfg.urlParam}):`,
+          idFromUrl,
+        );
+        setPageStartTimeIfNeeded(idFromUrl);
       }
     }
+
+    if (result.scan_value) {
+      setPageStartTimeIfNeeded(result.scan_value);
+    }
+
     return result;
   };
 
-  // ----- Action button -----
+  // ==================== ACTION BUTTON ====================
   const findActionButton = (text) => {
     const btns = Array.from(document.querySelectorAll("button"));
     return (
@@ -345,14 +301,9 @@
     );
   };
 
-  // ----- Record & send (no token) -----
+  // ==================== RECORD ====================
   const makeRecord = (pageType, userEmail) => {
     const fields = collectFields(pageType);
-    const scanVal = fields.scan_value || "";
-    const extra = getStore(`intercepted_${pageType}_${scanVal}`, {
-      inbound_id: "",
-      return_tn: "",
-    });
     return {
       version: CONFIG.VERSION,
       timestamp: nowISO(),
@@ -360,10 +311,9 @@
       action: PAGE_CONFIG[pageType]?.actionText || "",
       operator: userEmail,
       url: location.href,
-      ...fields,
-      api_inbound_id: extra.inbound_id,
-      api_return_tn: extra.return_tn,
-      field_timestamps: { ...fieldTimestamps },
+      device_id: fields.device_id || "",
+      scan_value: fields.scan_value || "",
+      page_start_time: pageStartTime,
     };
   };
 
@@ -402,7 +352,7 @@
     setStore("qc_pending_logs", remain);
   };
 
-  // ----- AuthZ -----
+  // ==================== AUTHZ ====================
   const checkAuth = async (email) => {
     if (!email) return { allowed: false, reason: "missing_email" };
     const cacheKey = "qc_authz_" + email;
@@ -430,59 +380,54 @@
     }
   };
 
-  // ----- Pre-fetch data for judgement if ID in URL -----
-  const preFetchJudgementData = async () => {
-    const id = getInboundIdFromUrl();
-    if (!id) return;
-    const existing = getStore(`intercepted_judgement_${id}`, null);
-    if (existing) {
-      log("Judgement data already in storage for ID:", id);
+  // ==================== HANDLE JUDGEMENT ====================
+  const handleJudgementAction = (pageType, userEmail) => {
+    const record = makeRecord(pageType, userEmail);
+    if (shouldSkip(record, pageType)) {
+      log("Skipped due to missing required fields");
       return;
     }
-    log("Judgement: Pre-fetching data for ID:", id);
-    try {
-      const apiUrl =
-        "https://wms.ssc.shopee.vn/api/apps/process/returninbound/judge/scan_sheet_id";
-      const resp = await fetch(apiUrl, {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ scan_value: id }),
-      });
-      if (!resp.ok) {
-        log("Pre-fetch failed, status:", resp.status);
-        return;
-      }
-      const json = await resp.json();
-      if (json?.retcode === 0 && json?.data?.list?.length) {
-        const item = json.data.list[0];
-        const inboundId = item.inbound_id || item.asn || "";
-        const returnTn = item.return_tn || "";
-        if (inboundId) {
-          setStore(`intercepted_judgement_${inboundId}`, {
-            inbound_id: inboundId,
-            return_tn: returnTn,
-            intercepted_at: nowISO(),
-          });
-          log("Pre-fetch successful, stored data for:", inboundId);
-        }
-      }
-    } catch (e) {
-      log("Pre-fetch error:", e);
-    }
-  };
 
-  // ----- Xử lý action kèm popup Confirm -----
-  const handleActionWithPopup = (pageType, userEmail) => {
-    // Hàm gửi log thực tế
+    const fingerprint = [
+      record.page,
+      record.action,
+      record.operator,
+      record.device_id,
+      record.scan_value,
+    ].join("|");
+    const lastFinger = getStore("qc_last_fingerprint", "");
+    const lastTime = getStore("qc_last_fingerprint_time", 0);
+    if (
+      fingerprint === lastFinger &&
+      Date.now() - lastTime < CONFIG.DUPLICATE_WINDOW_MS
+    ) {
+      log("Duplicate within window, skipped");
+      return;
+    }
+
     const doSend = () => {
-      // Kiểm tra xem đã gửi chưa (tránh gửi 2 lần)
       if (window._qc_sent) return;
       window._qc_sent = true;
-      handleAction(pageType, userEmail);
+      setStore("qc_last_fingerprint", fingerprint);
+      setStore("qc_last_fingerprint_time", Date.now());
+
+      sendRecord(record).then((ok) => {
+        if (ok) {
+          fieldTimestamps = {};
+          const stats = getStore(`stats_${todayKey()}`, {
+            qc: 0,
+            judgement: 0,
+            rimassreceive: 0,
+          });
+          if (stats.hasOwnProperty(pageType)) {
+            stats[pageType] += 1;
+            setStore(`stats_${todayKey()}`, stats);
+            updateWidget();
+          }
+        }
+      });
     };
 
-    // Tìm nút Confirm trong popup
     let confirmBtn = document.querySelector(
       ".ssc-message-box-footer-primary .ssc-btn-type-primary",
     );
@@ -492,7 +437,6 @@
     ) {
       confirmBtn.addEventListener("click", doSend, { once: true });
       log("Popup Confirm found, waiting for click...");
-      // Nếu popup đã hiện, sau 5s nếu chưa click vẫn gửi (fallback)
       setTimeout(() => {
         if (!window._qc_sent) {
           log("Popup Confirm not clicked after timeout, sending anyway.");
@@ -502,7 +446,6 @@
       return;
     }
 
-    // Nếu chưa có popup, dùng MutationObserver để chờ
     log("Waiting for popup Confirm...");
     const observer = new MutationObserver(() => {
       confirmBtn = document.querySelector(
@@ -515,7 +458,6 @@
         confirmBtn.addEventListener("click", doSend, { once: true });
         observer.disconnect();
         log("Popup Confirm detected and listener attached.");
-        // Timeout sau 5s nếu chưa click vẫn gửi
         setTimeout(() => {
           if (!window._qc_sent) {
             log("Popup Confirm not clicked after timeout, sending anyway.");
@@ -526,7 +468,6 @@
     });
     observer.observe(document.body, { childList: true, subtree: true });
 
-    // Timeout tổng thể sau 10s nếu không thấy popup, vẫn gửi
     setTimeout(() => {
       observer.disconnect();
       if (!window._qc_sent) {
@@ -536,8 +477,8 @@
     }, 10000);
   };
 
-  // ----- Gửi log thực tế -----
-  const handleAction = async (pageType, userEmail) => {
+  // ==================== HANDLE DIRECT ACTION ====================
+  const handleDirectAction = async (pageType, userEmail) => {
     const record = makeRecord(pageType, userEmail);
     if (shouldSkip(record, pageType)) {
       log("Skipped due to missing required fields");
@@ -579,7 +520,7 @@
     }
   };
 
-  // ----- Focus listeners -----
+  // ==================== FOCUS LISTENERS ====================
   const setupFocus = (pageType) => {
     const cfg = PAGE_CONFIG[pageType];
     if (!cfg) return;
@@ -609,10 +550,9 @@
     });
   };
 
-  // ----- Init -----
+  // ==================== INIT ====================
   const init = async () => {
     log("Initializing...");
-    initInterceptor();
 
     const pageType = getPageType(location.href);
     if (pageType === "unknown") {
@@ -620,11 +560,12 @@
       return;
     }
 
-    updateWidget();
-
-    if (pageType === "judgement") {
-      await preFetchJudgementData();
+    const initialId = getIdFromUrl(pageType);
+    if (initialId) {
+      setPageStartTimeIfNeeded(initialId);
     }
+
+    updateWidget();
 
     const email = getEmail();
     if (!email) {
@@ -644,16 +585,26 @@
       const btn = findActionButton(PAGE_CONFIG[pageType]?.actionText);
       if (btn && !btn.dataset.qcTrackerBound) {
         btn.dataset.qcTrackerBound = "1";
-        btn.addEventListener(
-          "click",
-          () => {
-            log("Action button clicked, waiting for popup Confirm...");
-            // Sử dụng hàm có xử lý popup
-            handleActionWithPopup(pageType, email);
-          },
-          true,
-        );
-        log("Button bound");
+        if (pageType === "judgement") {
+          btn.addEventListener(
+            "click",
+            () => {
+              log("Confirm Judged clicked, waiting for popup...");
+              handleJudgementAction(pageType, email);
+            },
+            true,
+          );
+        } else {
+          btn.addEventListener(
+            "click",
+            () => {
+              log("Action button clicked, sending directly...");
+              handleDirectAction(pageType, email);
+            },
+            true,
+          );
+        }
+        log("Button bound for", pageType);
       }
       setupFocus(pageType);
     };
@@ -667,6 +618,16 @@
       }
     });
     observer.observe(document.body, { childList: true, subtree: true });
+
+    // ===== ĐỒNG BỘ DỮ LIỆU GIỮA CÁC TAB =====
+    if (typeof GM_addValueChangeListener !== "undefined") {
+      GM_addValueChangeListener((key, oldValue, newValue) => {
+        if (key && key.startsWith("stats_")) {
+          log("Storage changed, updating widget...");
+          updateWidget();
+        }
+      });
+    }
 
     log("Init complete");
   };

@@ -23,15 +23,24 @@
   const todayKey = () => new Date().toISOString().split("T")[0];
 
   const getPageType = (href) => {
-    const entry = Object.entries(PAGE_CONFIG).find(([, cfg]) => href.includes(cfg.pathIncludes));
+    const entry = Object.entries(PAGE_CONFIG).find(([, cfg]) =>
+      href.includes(cfg.pathIncludes),
+    );
     return entry ? entry[0] : "unknown";
   };
 
   const getStore = (key, fallback = null) => {
-    try { const v = GM_getValue(key); return v === undefined ? fallback : v; } catch { return fallback; }
+    try {
+      const v = GM_getValue(key);
+      return v === undefined ? fallback : v;
+    } catch {
+      return fallback;
+    }
   };
   const setStore = (key, val) => {
-    try { GM_setValue(key, val); } catch {}
+    try {
+      GM_setValue(key, val);
+    } catch {}
   };
 
   const gmRequest = (method, url, data = null, headers = {}) =>
@@ -42,8 +51,16 @@
         headers: { "Content-Type": "application/json", ...headers },
         data: data ? JSON.stringify(data) : undefined,
         onload: (resp) => {
-          if (resp.status < 200 || resp.status >= 300) return reject(new Error(`HTTP ${resp.status}`));
-          try { resolve({ status: resp.status, data: JSON.parse(resp.responseText || "{}") }); } catch { reject(new Error("Invalid JSON")); }
+          if (resp.status < 200 || resp.status >= 300)
+            return reject(new Error(`HTTP ${resp.status}`));
+          try {
+            resolve({
+              status: resp.status,
+              data: JSON.parse(resp.responseText || "{}"),
+            });
+          } catch {
+            reject(new Error("Invalid JSON"));
+          }
         },
         onerror: reject,
         ontimeout: () => reject(new Error("Timeout")),
@@ -55,8 +72,10 @@
   const enforceBounds = (el) => {
     if (!el) return;
     const rect = el.getBoundingClientRect();
-    const vw = window.innerWidth, vh = window.innerHeight;
-    let top = parseFloat(el.style.top) || 0, left = parseFloat(el.style.left) || 0;
+    const vw = window.innerWidth,
+      vh = window.innerHeight;
+    let top = parseFloat(el.style.top) || 0,
+      left = parseFloat(el.style.left) || 0;
     if (el.style.right !== "auto") {
       left = vw - rect.width - parseFloat(el.style.right);
       el.style.left = left + "px";
@@ -75,20 +94,30 @@
   };
 
   const makeDraggable = (elm, header) => {
-    let p1 = 0, p2 = 0, p3 = 0, p4 = 0;
+    let p1 = 0,
+      p2 = 0,
+      p3 = 0,
+      p4 = 0;
     const dragStart = (e) => {
-      e = e || window.event; e.preventDefault();
-      p3 = e.clientX; p4 = e.clientY;
+      e = e || window.event;
+      e.preventDefault();
+      p3 = e.clientX;
+      p4 = e.clientY;
       document.onmouseup = dragEnd;
       document.onmousemove = dragMove;
     };
     const dragMove = (e) => {
-      e = e || window.event; e.preventDefault();
-      p1 = p3 - e.clientX; p2 = p4 - e.clientY;
-      p3 = e.clientX; p4 = e.clientY;
-      let top = elm.offsetTop - p2, left = elm.offsetLeft - p1;
+      e = e || window.event;
+      e.preventDefault();
+      p1 = p3 - e.clientX;
+      p2 = p4 - e.clientY;
+      p3 = e.clientX;
+      p4 = e.clientY;
+      let top = elm.offsetTop - p2,
+        left = elm.offsetLeft - p1;
       const rect = elm.getBoundingClientRect();
-      const vw = window.innerWidth, vh = window.innerHeight;
+      const vw = window.innerWidth,
+        vh = window.innerHeight;
       top = Math.max(0, Math.min(top, vh - rect.height));
       left = Math.max(0, Math.min(left, vw - rect.width));
       elm.style.top = top + "px";
@@ -105,7 +134,11 @@
   };
 
   const updateWidget = () => {
-    const stats = getStore(`stats_${todayKey()}`, { qc: 0, judgement: 0, rimassreceive: 0 });
+    const stats = getStore(`stats_${todayKey()}`, {
+      qc: 0,
+      judgement: 0,
+      rimassreceive: 0,
+    });
     const defaultPos = { top: "80px", left: "20px" };
     let pos = getStore("widget_position", defaultPos);
     if (!pos || !pos.top || !pos.left) pos = { ...defaultPos };
@@ -182,13 +215,22 @@
                 const id = item.inbound_id || item.asn || "";
                 const returnTn = item.return_tn || "";
                 if (id) {
-                  setStore(`intercepted_${pageType}_${id}`, { inbound_id: id, return_tn: returnTn, intercepted_at: nowISO() });
+                  setStore(`intercepted_${pageType}_${id}`, {
+                    inbound_id: id,
+                    return_tn: returnTn,
+                    intercepted_at: nowISO(),
+                  });
                   if (pageType === "qc") {
                     const lastId = getStore("last_qc_inbound_id", "");
                     if (lastId && lastId !== id) {
-                      const judged = getStore(`judgement_completed_${lastId}`, false);
+                      const judged = getStore(
+                        `judgement_completed_${lastId}`,
+                        false,
+                      );
                       if (!judged) {
-                        alert(`⚠️ CẢNH BÁO: Đơn [${lastId}] vừa QC xong NHƯNG CHƯA ĐƯỢC Judgement!`);
+                        alert(
+                          `⚠️ CẢNH BÁO: Đơn [${lastId}] vừa QC xong NHƯNG CHƯA ĐƯỢC Judgement!`,
+                        );
                       }
                     }
                     setStore("last_qc_inbound_id", id);
@@ -210,7 +252,14 @@
   // ----- Get Email (localStorage + GM cache, no fetch) -----
   const getEmail = () => {
     try {
-      const keys = ['user_email', 'useremail', 'email', 'user', 'userInfo', 'profile'];
+      const keys = [
+        "user_email",
+        "useremail",
+        "email",
+        "user",
+        "userInfo",
+        "profile",
+      ];
       for (const key of keys) {
         let val = localStorage.getItem(key) || sessionStorage.getItem(key);
         if (val) {
@@ -247,7 +296,10 @@
       if (kw.startsWith("#")) {
         const target = document.querySelector(kw);
         if (target) {
-          const input = target.tagName === "INPUT" || target.tagName === "TEXTAREA" ? target : target.querySelector("input, textarea");
+          const input =
+            target.tagName === "INPUT" || target.tagName === "TEXTAREA"
+              ? target
+              : target.querySelector("input, textarea");
           if (input) return normalize(input.value);
         }
       } else {
@@ -274,14 +326,21 @@
   // ----- Action button -----
   const findActionButton = (text) => {
     const btns = Array.from(document.querySelectorAll("button"));
-    return btns.find((b) => normalize(b.innerText).toLowerCase() === text.toLowerCase()) || null;
+    return (
+      btns.find(
+        (b) => normalize(b.innerText).toLowerCase() === text.toLowerCase(),
+      ) || null
+    );
   };
 
   // ----- Record & send (no token) -----
   const makeRecord = (pageType, userEmail) => {
     const fields = collectFields(pageType);
     const scanVal = fields.scan_value || "";
-    const extra = getStore(`intercepted_${pageType}_${scanVal}`, { inbound_id: "", return_tn: "" });
+    const extra = getStore(`intercepted_${pageType}_${scanVal}`, {
+      inbound_id: "",
+      return_tn: "",
+    });
     return {
       version: CONFIG.VERSION,
       timestamp: nowISO(),
@@ -303,7 +362,11 @@
 
   const sendRecord = async (record) => {
     try {
-      const resp = await gmRequest("POST", CONFIG.API_BASE_URL + CONFIG.LOG_ENDPOINT, record);
+      const resp = await gmRequest(
+        "POST",
+        CONFIG.API_BASE_URL + CONFIG.LOG_ENDPOINT,
+        record,
+      );
       log("Log sent, status:", resp.status);
       return true;
     } catch (e) {
@@ -336,12 +399,19 @@
       return cached.value;
     }
     try {
-      const resp = await gmRequest("POST", CONFIG.API_BASE_URL + CONFIG.AUTH_ENDPOINT, { email, page: location.pathname });
+      const resp = await gmRequest(
+        "POST",
+        CONFIG.API_BASE_URL + CONFIG.AUTH_ENDPOINT,
+        { email, page: location.pathname },
+      );
       const value = {
         allowed: !!resp?.data?.allowed,
         reason: resp?.data?.reason || "",
       };
-      setStore(cacheKey, { expireAt: Date.now() + CONFIG.AUTH_CACHE_MS, value });
+      setStore(cacheKey, {
+        expireAt: Date.now() + CONFIG.AUTH_CACHE_MS,
+        value,
+      });
       return value;
     } catch {
       return { allowed: false, reason: "authz_error" };
@@ -356,10 +426,19 @@
       return;
     }
 
-    const fingerprint = [record.page, record.action, record.operator, record.device_id, record.scan_value].join("|");
+    const fingerprint = [
+      record.page,
+      record.action,
+      record.operator,
+      record.device_id,
+      record.scan_value,
+    ].join("|");
     const lastFinger = getStore("qc_last_fingerprint", "");
     const lastTime = getStore("qc_last_fingerprint_time", 0);
-    if (fingerprint === lastFinger && Date.now() - lastTime < CONFIG.DUPLICATE_WINDOW_MS) {
+    if (
+      fingerprint === lastFinger &&
+      Date.now() - lastTime < CONFIG.DUPLICATE_WINDOW_MS
+    ) {
       log("Duplicate within window, skipped");
       return;
     }
@@ -369,7 +448,11 @@
     const ok = await sendRecord(record);
     if (ok) {
       fieldTimestamps = {};
-      const stats = getStore(`stats_${todayKey()}`, { qc: 0, judgement: 0, rimassreceive: 0 });
+      const stats = getStore(`stats_${todayKey()}`, {
+        qc: 0,
+        judgement: 0,
+        rimassreceive: 0,
+      });
       if (stats.hasOwnProperty(pageType)) {
         stats[pageType] += 1;
         setStore(`stats_${todayKey()}`, stats);
@@ -387,7 +470,11 @@
         let input = null;
         if (kw.startsWith("#")) {
           const target = document.querySelector(kw);
-          if (target) input = target.tagName === "INPUT" || target.tagName === "TEXTAREA" ? target : target.querySelector("input, textarea");
+          if (target)
+            input =
+              target.tagName === "INPUT" || target.tagName === "TEXTAREA"
+                ? target
+                : target.querySelector("input, textarea");
         } else {
           const parent = document.querySelector(`[data-for="${kw}"]`);
           if (parent) input = parent.querySelector("input, textarea");
@@ -435,10 +522,14 @@
       const btn = findActionButton(PAGE_CONFIG[pageType]?.actionText);
       if (btn && !btn.dataset.qcTrackerBound) {
         btn.dataset.qcTrackerBound = "1";
-        btn.addEventListener("click", () => {
-          log("Action button clicked");
-          handleAction(pageType, email);
-        }, true);
+        btn.addEventListener(
+          "click",
+          () => {
+            log("Action button clicked");
+            handleAction(pageType, email);
+          },
+          true,
+        );
         log("Button bound");
       }
       setupFocus(pageType);
@@ -457,7 +548,10 @@
     log("Init complete");
   };
 
-  if (typeof GM_xmlhttpRequest === "undefined" || typeof GM_setValue === "undefined") {
+  if (
+    typeof GM_xmlhttpRequest === "undefined" ||
+    typeof GM_setValue === "undefined"
+  ) {
     console.warn("[QC Tracker] Tampermonkey APIs missing");
     return;
   }

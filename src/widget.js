@@ -128,7 +128,7 @@ const updateWidget = () => {
     );
     createStatLine(
       content,
-      "3. Đã Nhận:",
+      "3. Đã Receive:",
       "qc-tracker-value-rimassreceive",
       "#ffca28",
     );

@@ -39,10 +39,10 @@ export default async function handler(req, res) {
     // 2. Fetch logs for 'qc' page only
     const { data: logs, error } = await supabase
       .from("qc_logs")
-      .select("operator, timestamp")
+      .select("operator, created_at")
       .eq("page", "qc") // Filter by page 'qc'
-      .gte("timestamp", startOfDay)
-      .lte("timestamp", endOfDay);
+      .gte("created_at", startOfDay)
+      .lte("created_at", endOfDay);
 
     if (error) throw error;
 
@@ -52,7 +52,7 @@ export default async function handler(req, res) {
       if (!log.operator) return;
       const email = log.operator.toLowerCase();
       const dateVN = new Date(
-        new Date(log.timestamp).getTime() + 7 * 60 * 60 * 1000,
+        new Date(log.created_at).getTime() + 7 * 60 * 60 * 1000,
       );
       const hour = dateVN.getUTCHours();
 

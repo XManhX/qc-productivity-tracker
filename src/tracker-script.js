@@ -407,7 +407,7 @@
     }
   };
 
-  // ==================== FOCUS LISTENERS ====================
+  // ==================== FIELD LISTENERS ====================
   const setupFieldListeners = (pageType) => {
     const cfg = PAGE_CONFIG[pageType];
     if (!cfg) return;

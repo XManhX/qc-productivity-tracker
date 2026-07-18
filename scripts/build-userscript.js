@@ -21,31 +21,24 @@ const apiBaseUrl =
     ? `https://${process.env.VERCEL_URL}`
     : "http://localhost:3000");
 
-const rawSource = createTrackerSource();
 const version = pkg.version || "1.0.0";
 
-const finalSource = rawSource
+// 1. Read the metadata template from an external file
+const headerTemplate = fs.readFileSync(
+  path.join(__dirname, "userscript.header.txt"),
+  "utf8",
+);
+
+// 2. Replace placeholders in the metadata
+const metadata = headerTemplate
   .replace(/__VERSION__/g, version)
   .replace(/__API_BASE_URL__/g, apiBaseUrl);
 
-const metadata = `// ==UserScript==
-// @name         Shopee WMS QC Productivity Tracker
-// @namespace    http://tampermonkey.net/
-// @version      ${version}
-// @description  Track QC, Judgement and Receiving productivity with draggable floating dashboard.
-// @author       QC Team
-// @match        https://wms.ssc.shopee.vn/*
-// @grant        GM_xmlhttpRequest
-// @grant        GM_setValue
-// @grant        GM_getValue
-// @connect      wms.ssc.shopee.vn
-// @connect      *
-// @updateURL    ${apiBaseUrl}/install/qc-productivity-tracker.user.js
-// @downloadURL  ${apiBaseUrl}/install/qc-productivity-tracker.user.js
-// @run-at       document-end
-// ==/UserScript==
+// 3. Create the main script source and replace its placeholders
+const trackerSource = createTrackerSource()
+  .replace(/__VERSION__/g, version)
+  .replace(/__API_BASE_URL__/g, apiBaseUrl);
 
-`;
-
-fs.writeFileSync(OUTPUT_FILE, metadata + finalSource, "utf8");
+// 4. Combine metadata and script source and write to file
+fs.writeFileSync(OUTPUT_FILE, metadata + "\n" + trackerSource, "utf8");
 console.log(`✅ Userscript built successfully at: ${OUTPUT_FILE}`);

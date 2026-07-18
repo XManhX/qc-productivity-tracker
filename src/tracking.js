@@ -8,9 +8,15 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export function createTrackerSource() {
   const scriptPath = path.join(__dirname, "tracker-script.js");
-  let source = fs.readFileSync(scriptPath, "utf8");
+  const widgetPath = path.join(__dirname, "widget.js");
 
-  // Thay thế toàn bộ dòng `const PAGE_CONFIG = {};` bằng `const PAGE_CONFIG = <JSON>;`
+  let source = fs.readFileSync(scriptPath, "utf8");
+  const widgetSource = fs.readFileSync(widgetPath, "utf8");
+
+  // Inject widget code
+  source = source.replace("// __WIDGET_CODE__", widgetSource);
+
+  // Inject page config
   const configJson = JSON.stringify(PAGE_CONFIG, null, 2);
   source = source.replace(
     /const PAGE_CONFIG = \{\};/,

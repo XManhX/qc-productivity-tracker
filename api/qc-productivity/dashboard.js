@@ -24,15 +24,15 @@ export default async function handler(req, res) {
     ).toISOString();
     const endOfDay = new Date(`${targetDateStr}T23:59:59+07:00`).toISOString();
 
-    // 1. Fetch all users to map email to full_name
+    // 1. Fetch all users to map email to name
     const { data: users, error: usersError } = await supabase
       .from("qc_users")
-      .select("email, full_name");
+      .select("email, name");
 
     if (usersError) throw usersError;
 
     const userMap = users.reduce((acc, user) => {
-      if (user.email) acc[user.email.toLowerCase()] = user.full_name;
+      if (user.email) acc[user.email.toLowerCase()] = user.name;
       return acc;
     }, {});
 
@@ -59,7 +59,7 @@ export default async function handler(req, res) {
       if (!report[email]) {
         report[email] = {
           email,
-          full_name: userMap[email] || "", // 3. Add full_name
+          name: userMap[email] || "", // 3. Add name
           total: 0,
           hourly: Array(24).fill(0),
         };

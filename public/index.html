@@ -363,11 +363,11 @@
             <td class="px-6 py-4 text-left font-medium text-slate-900 border-r border-slate-100">
               <div class="flex items-center gap-3">
                 <div class="w-9 h-9 rounded-full bg-slate-100 flex items-center justify-center text-xs font-bold text-slate-600 uppercase border border-slate-200">
-                  ${user.full_name ? user.full_name.substring(0, 2) : user.email.substring(0, 2)}
+                  ${user.name ? user.name.substring(0, 2) : user.email.substring(0, 2)}
                 </div>
                 <div>
-                  <div class="font-semibold text-slate-800">${user.full_name || user.email}</div>
-                  <div class="text-xs text-slate-500">${user.full_name ? user.email : ""}</div>
+                  <div class="font-semibold text-slate-800">${user.name || user.email}</div>
+                  <div class="text-xs text-slate-500">${user.name ? user.email : ""}</div>
                 </div>
               </div>
             </td>

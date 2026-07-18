@@ -218,16 +218,24 @@
                 class="border-b border-slate-200 bg-slate-100 text-slate-600 text-xs uppercase tracking-wider font-semibold"
               >
                 <th
-                  class="px-6 py-4 text-left font-semibold text-slate-700"
+                  class="px-6 py-4 text-left font-semibold text-slate-700 cursor-pointer hover:bg-slate-200/70 transition-colors"
                   style="min-width: 250px"
+                  onclick="handleSort('name')"
                 >
-                  Nhân viên (Operator Email)
+                  <div class="flex items-center gap-1">
+                    Nhân viên
+                    <span id="sort-icon-name" class="text-slate-400"></span>
+                  </div>
                 </th>
                 <th
-                  class="px-4 py-4 bg-emerald-50 font-bold text-emerald-800"
+                  class="px-4 py-4 bg-emerald-50 font-bold text-emerald-800 cursor-pointer hover:bg-emerald-100 transition-colors"
                   style="min-width: 100px"
+                  onclick="handleSort('total')"
                 >
-                  Tổng Đơn
+                  <div class="flex items-center justify-center gap-1">
+                    Tổng Đơn
+                    <span id="sort-icon-total" class="text-emerald-500"></span>
+                  </div>
                 </th>
                 <!-- Cột mốc giờ từ JavaScript -->
               </tr>
@@ -258,6 +266,7 @@
       const startHour = 6,
         endHour = 22;
       let currentDashboardData = [];
+      let sortConfig = { key: "total", direction: "desc" };
 
       // Hiển thị loading state
       function showLoading() {
@@ -309,9 +318,6 @@
 
       async function loadDashboardData() {
         const selectedDate = document.getElementById("filter-date").value;
-        const tbody = document.getElementById("dashboard-body");
-
-        // Hiển thị loading
         showLoading();
 
         try {
@@ -330,36 +336,62 @@
             throw new Error(data.error || "Dữ liệu không hợp lệ");
           }
 
-          tbody.innerHTML = "";
-          const list = data.results;
-          currentDashboardData = list;
+          currentDashboardData = data.results;
+          renderTable();
+        } catch (err) {
+          showError(`Lỗi kết nối: ${err.message}`);
+          updateStats(0, 0, 0);
+        } finally {
+          lucide.createIcons();
+        }
+      }
 
-          if (list.length === 0) {
-            tbody.innerHTML = `
+      function renderTable() {
+        const tbody = document.getElementById("dashboard-body");
+        tbody.innerHTML = "";
+
+        // Sort data
+        const sortedData = [...currentDashboardData].sort((a, b) => {
+          let aValue = a[sortConfig.key];
+          let bValue = b[sortConfig.key];
+
+          // Handle name sorting (case-insensitive)
+          if (sortConfig.key === "name") {
+            aValue = (a.name || a.email).toLowerCase();
+            bValue = (b.name || b.email).toLowerCase();
+          }
+
+          if (aValue < bValue) return sortConfig.direction === "asc" ? -1 : 1;
+          if (aValue > bValue) return sortConfig.direction === "asc" ? 1 : -1;
+          return 0;
+        });
+
+        if (sortedData.length === 0) {
+          tbody.innerHTML = `
             <tr>
               <td colspan="30" class="py-12 text-center text-slate-400">
                 <div class="flex flex-col items-center justify-center gap-2">
                   <i data-lucide="inbox" class="w-12 h-12 text-slate-300"></i>
                   <span class="text-slate-500 font-medium text-base">Không có dữ liệu</span>
-                  <span class="text-xs">QC chưa hoạt động hoặc chưa ghi nhận lượt quét nào vào ngày ${selectedDate}</span>
+                  <span class="text-xs">QC chưa hoạt động hoặc chưa ghi nhận lượt quét nào.</span>
                 </div>
               </td>
             </tr>`;
-            updateStats(0, 0, 0);
-            lucide.createIcons();
-            return;
-          }
+          updateStats(0, 0, 0);
+          lucide.createIcons();
+          return;
+        }
 
-          let totalOrders = 0;
-          let activeQCs = list.length;
-          let totalActiveHours = 0;
+        let totalOrders = 0;
+        let activeQCs = sortedData.length;
+        let totalActiveHours = 0;
 
-          list.forEach((user) => {
-            totalOrders += user.total;
-            let tr = document.createElement("tr");
-            tr.className = "hover:bg-slate-50/80 transition duration-150";
+        sortedData.forEach((user) => {
+          totalOrders += user.total;
+          let tr = document.createElement("tr");
+          tr.className = "hover:bg-slate-50/80 transition duration-150";
 
-            tr.innerHTML = `
+          tr.innerHTML = `
             <td class="px-6 py-4 text-left font-medium text-slate-900 border-r border-slate-100">
               <div class="flex items-center gap-3">
                 <div class="w-9 h-9 rounded-full bg-slate-100 flex items-center justify-center text-xs font-bold text-slate-600 uppercase border border-slate-200">
@@ -374,43 +406,59 @@
             <td class="px-4 py-4 bg-emerald-50/50 font-bold text-emerald-700 border-r border-slate-100">${user.total}</td>
           `;
 
-            for (let h = startHour; h <= endHour; h++) {
-              const count = user.hourly[h] || 0;
-              const td = document.createElement("td");
-              td.className =
-                "px-3 py-4 border-l border-slate-100 transition-colors";
+          for (let h = startHour; h <= endHour; h++) {
+            const count = user.hourly[h] || 0;
+            if (count > 0) totalActiveHours++;
+            const td = document.createElement("td");
+            td.className =
+              "px-3 py-4 border-l border-slate-100 transition-colors";
 
-              if (count > 0) {
-                totalActiveHours++;
-                td.innerText = count;
-                if (count >= 50) {
-                  td.className += " bg-amber-500 text-white font-bold";
-                } else if (count >= 25) {
-                  td.className += " bg-amber-100 text-amber-800 font-semibold";
-                } else {
-                  td.className += " bg-amber-50 text-amber-700 font-medium";
-                }
-              } else {
-                td.innerText = "-";
-                td.className += " text-slate-300";
-              }
-              tr.appendChild(td);
+            if (count > 0) {
+              td.innerText = count;
+              if (count >= 50)
+                td.className += " bg-amber-500 text-white font-bold";
+              else if (count >= 25)
+                td.className += " bg-amber-100 text-amber-800 font-semibold";
+              else td.className += " bg-amber-50 text-amber-700 font-medium";
+            } else {
+              td.innerText = "-";
+              td.className += " text-slate-300";
             }
-            tbody.appendChild(tr);
-          });
+            tr.appendChild(td);
+          }
+          tbody.appendChild(tr);
+        });
 
-          const avgPerformance =
-            totalActiveHours > 0
-              ? Math.round(totalOrders / totalActiveHours)
-              : 0;
-          updateStats(totalOrders, activeQCs, avgPerformance);
-        } catch (err) {
-          showError(`Lỗi kết nối: ${err.message}`);
-          // Reset stats về 0
-          updateStats(0, 0, 0);
-        } finally {
-          lucide.createIcons();
+        const avgPerformance =
+          totalActiveHours > 0 ? Math.round(totalOrders / totalActiveHours) : 0;
+        updateStats(totalOrders, activeQCs, avgPerformance);
+        updateSortIcons();
+        lucide.createIcons();
+      }
+
+      function handleSort(key) {
+        if (sortConfig.key === key) {
+          sortConfig.direction =
+            sortConfig.direction === "asc" ? "desc" : "asc";
+        } else {
+          sortConfig.key = key;
+          sortConfig.direction = "desc"; // Default to descending for new column
         }
+        renderTable();
+      }
+
+      function updateSortIcons() {
+        // Reset all icons
+        document.getElementById("sort-icon-name").innerHTML = "";
+        document.getElementById("sort-icon-total").innerHTML = "";
+
+        const iconEl = document.getElementById(`sort-icon-${sortConfig.key}`);
+        if (iconEl) {
+          const icon =
+            sortConfig.direction === "asc" ? "arrow-up" : "arrow-down";
+          iconEl.innerHTML = `<i data-lucide="${icon}" class="w-3.5 h-3.5"></i>`;
+        }
+        lucide.createIcons();
       }
 
       function updateStats(total, qcs, avg) {

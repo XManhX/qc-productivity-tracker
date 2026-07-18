@@ -1,158 +1,268 @@
 <!-- public/index.html -->
-<!DOCTYPE html>
+<!doctype html>
 <html lang="vi">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>⚡ WMS QC MONITOR - Dashboard</title>
-  <!-- Tailwind CSS & Lucide Icons -->
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script src="https://unpkg.com/lucide@latest"></script>
-  <!-- SheetJS -->
-  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
-    body { font-family: 'Inter', sans-serif; }
-    ::-webkit-scrollbar { width: 6px; height: 6px; }
-    ::-webkit-scrollbar-track { background: #f1f5f9; }
-    ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
-    ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
-    .loading-spinner { animation: spin 1s linear infinite; }
-    @keyframes spin { 100% { transform: rotate(360deg); } }
-  </style>
-</head>
-<body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col">
-
-  <!-- Navigation Bar -->
-  <nav class="bg-slate-900 border-b border-slate-800 sticky top-0 z-50 shadow-md">
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-      <div class="flex items-center justify-between h-16">
-        <div class="flex items-center space-x-3">
-          <div class="bg-amber-500 text-slate-950 p-2 rounded-lg flex items-center justify-center shadow-inner">
-            <i data-lucide="zap" class="w-5 h-5"></i>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>⚡ WMS QC MONITOR - Dashboard</title>
+    <!-- Tailwind CSS & Lucide Icons -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- SheetJS -->
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <style>
+      @import url("https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap");
+      body {
+        font-family: "Inter", sans-serif;
+      }
+      ::-webkit-scrollbar {
+        width: 6px;
+        height: 6px;
+      }
+      ::-webkit-scrollbar-track {
+        background: #f1f5f9;
+      }
+      ::-webkit-scrollbar-thumb {
+        background: #cbd5e1;
+        border-radius: 4px;
+      }
+      ::-webkit-scrollbar-thumb:hover {
+        background: #94a3b8;
+      }
+      .loading-spinner {
+        animation: spin 1s linear infinite;
+      }
+      @keyframes spin {
+        100% {
+          transform: rotate(360deg);
+        }
+      }
+    </style>
+  </head>
+  <body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col">
+    <!-- Navigation Bar -->
+    <nav
+      class="bg-slate-900 border-b border-slate-800 sticky top-0 z-50 shadow-md"
+    >
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div class="flex items-center justify-between h-16">
+          <div class="flex items-center space-x-3">
+            <div
+              class="bg-amber-500 text-slate-950 p-2 rounded-lg flex items-center justify-center shadow-inner"
+            >
+              <i data-lucide="zap" class="w-5 h-5"></i>
+            </div>
+            <span class="text-white font-bold text-lg tracking-wider"
+              >WMS QC MONITOR</span
+            >
           </div>
-          <span class="text-white font-bold text-lg tracking-wider">WMS QC MONITOR</span>
-        </div>
-        <div class="flex space-x-1">
-          <a href="/" class="flex items-center space-x-2 px-4 py-2 rounded-lg text-sm font-medium bg-slate-800 text-amber-400 border border-slate-700">
-            <i data-lucide="bar-chart-3" class="w-4 h-4"></i>
-            <span>Sản Lượng Theo Giờ</span>
-          </a>
-          <a href="/users.html" class="flex items-center space-x-2 px-4 py-2 rounded-lg text-sm font-medium text-slate-300 hover:bg-slate-800 hover:text-white transition">
-            <i data-lucide="users" class="w-4 h-4"></i>
-            <span>Quản Lý Nhân Sự</span>
-          </a>
-        </div>
-      </div>
-    </div>
-  </nav>
-
-  <!-- Main Content -->
-  <main class="flex-grow max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
-    
-    <!-- Control Header Card -->
-    <div class="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 mb-6">
-      <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-        <div>
-          <h1 class="text-2xl font-bold text-slate-900 flex items-center gap-2">
-            <i data-lucide="trending-up" class="text-emerald-500"></i>
-            Theo Dõi Năng Suất Thời Gian Thực
-          </h1>
-          <p class="text-slate-500 text-sm mt-1">Phân tích chi tiết lượng đơn quét của từng QC theo từng khung giờ trong ngày.</p>
-        </div>
-        
-        <div class="flex flex-wrap items-center gap-3">
-          <div class="flex items-center bg-slate-100 border border-slate-200 rounded-xl px-3 py-2">
-            <i data-lucide="calendar" class="w-4 h-4 text-slate-400 mr-2"></i>
-            <input type="date" id="filter-date" class="bg-transparent border-0 text-slate-700 text-sm font-semibold focus:ring-0 focus:outline-none" onchange="loadDashboardData()">
+          <div class="flex space-x-1">
+            <a
+              href="/"
+              class="flex items-center space-x-2 px-4 py-2 rounded-lg text-sm font-medium bg-slate-800 text-amber-400 border border-slate-700"
+            >
+              <i data-lucide="bar-chart-3" class="w-4 h-4"></i>
+              <span>Sản Lượng Theo Giờ</span>
+            </a>
+            <a
+              href="/users.html"
+              class="flex items-center space-x-2 px-4 py-2 rounded-lg text-sm font-medium text-slate-300 hover:bg-slate-800 hover:text-white transition"
+            >
+              <i data-lucide="users" class="w-4 h-4"></i>
+              <span>Quản Lý Nhân Sự</span>
+            </a>
           </div>
-          <button id="btn-export" onclick="exportToExcel()" class="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-sm px-5 py-2.5 rounded-xl transition duration-150 shadow-sm">
-            <i data-lucide="download" class="w-4 h-4"></i>
-            Xuất Excel
-          </button>
-          <button onclick="loadDashboardData()" class="flex items-center gap-2 bg-slate-900 hover:bg-slate-800 text-white font-semibold text-sm px-5 py-2.5 rounded-xl transition duration-150 shadow-sm">
-            <i data-lucide="refresh-cw" class="w-4 h-4"></i>
-            Làm Mới
-          </button>
         </div>
       </div>
-    </div>
+    </nav>
 
-    <!-- Quick Stats Overview -->
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-      <div class="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm flex items-center justify-between">
-        <div>
-          <span class="text-slate-400 text-xs font-semibold uppercase tracking-wider">Tổng Đơn Quét</span>
-          <h3 id="stat-total-orders" class="text-3xl font-bold text-slate-900 mt-1">0</h3>
-        </div>
-        <div class="bg-emerald-50 text-emerald-600 p-4 rounded-xl">
-          <i data-lucide="check-circle" class="w-6 h-6"></i>
-        </div>
-      </div>
-      <div class="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm flex items-center justify-between">
-        <div>
-          <span class="text-slate-400 text-xs font-semibold uppercase tracking-wider">QC Đang Hoạt Động</span>
-          <h3 id="stat-active-qcs" class="text-3xl font-bold text-slate-900 mt-1">0</h3>
-        </div>
-        <div class="bg-indigo-50 text-indigo-600 p-4 rounded-xl">
-          <i data-lucide="user-check" class="w-6 h-6"></i>
-        </div>
-      </div>
-      <div class="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm flex items-center justify-between">
-        <div>
-          <span class="text-slate-400 text-xs font-semibold uppercase tracking-wider">Hiệu Suất Trung Bình</span>
-          <h3 id="stat-avg-performance" class="text-3xl font-bold text-slate-900 mt-1">0 <span class="text-xs text-slate-400 font-normal">đơn/giờ</span></h3>
-        </div>
-        <div class="bg-amber-50 text-amber-600 p-4 rounded-xl">
-          <i data-lucide="gauge" class="w-6 h-6"></i>
-        </div>
-      </div>
-    </div>
+    <!-- Main Content -->
+    <main class="flex-grow max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <!-- Control Header Card -->
+      <div
+        class="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 mb-6"
+      >
+        <div
+          class="flex flex-col md:flex-row md:items-center md:justify-between gap-4"
+        >
+          <div>
+            <h1
+              class="text-2xl font-bold text-slate-900 flex items-center gap-2"
+            >
+              <i data-lucide="trending-up" class="text-emerald-500"></i>
+              Theo Dõi Năng Suất Thời Gian Thực
+            </h1>
+            <p class="text-slate-500 text-sm mt-1">
+              Phân tích chi tiết lượng đơn quét của từng QC theo từng khung giờ
+              trong ngày.
+            </p>
+          </div>
 
-    <!-- Productivity Heatmap Table Card -->
-    <div class="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
-      <div class="px-6 py-4 border-b border-slate-100 bg-slate-50 flex items-center justify-between">
-        <h2 class="font-bold text-slate-800 flex items-center gap-2">
-          <i data-lucide="grid" class="text-slate-400 w-5 h-5"></i>
-          Bảng Thống Kê Sản Lượng Từng Giờ
-        </h2>
-        <span class="bg-emerald-100 text-emerald-800 text-xs font-semibold px-2.5 py-1 rounded-full flex items-center gap-1">
-          <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-          Cập nhật trực tiếp
-        </span>
+          <div class="flex flex-wrap items-center gap-3">
+            <div
+              class="flex items-center bg-slate-100 border border-slate-200 rounded-xl px-3 py-2"
+            >
+              <i data-lucide="calendar" class="w-4 h-4 text-slate-400 mr-2"></i>
+              <input
+                type="date"
+                id="filter-date"
+                class="bg-transparent border-0 text-slate-700 text-sm font-semibold focus:ring-0 focus:outline-none"
+                onchange="loadDashboardData()"
+              />
+            </div>
+            <button
+              id="btn-export"
+              onclick="exportToExcel()"
+              class="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-sm px-5 py-2.5 rounded-xl transition duration-150 shadow-sm"
+            >
+              <i data-lucide="download" class="w-4 h-4"></i>
+              Xuất Excel
+            </button>
+            <button
+              onclick="loadDashboardData()"
+              class="flex items-center gap-2 bg-slate-900 hover:bg-slate-800 text-white font-semibold text-sm px-5 py-2.5 rounded-xl transition duration-150 shadow-sm"
+            >
+              <i data-lucide="refresh-cw" class="w-4 h-4"></i>
+              Làm Mới
+            </button>
+          </div>
+        </div>
       </div>
-      <div class="overflow-x-auto">
-        <table class="w-full text-center border-collapse">
-          <thead>
-            <tr id="table-header" class="border-b border-slate-200 bg-slate-100 text-slate-600 text-xs uppercase tracking-wider font-semibold">
-              <th class="px-6 py-4 text-left font-semibold text-slate-700" style="min-width: 250px;">Nhân viên (Operator Email)</th>
-              <th class="px-4 py-4 bg-emerald-50 font-bold text-emerald-800" style="min-width: 100px;">Tổng Đơn</th>
-              <!-- Cột mốc giờ từ JavaScript -->
-            </tr>
-          </thead>
-          <tbody id="dashboard-body" class="divide-y divide-slate-100 text-sm">
-            <!-- Loading state sẽ hiển thị ở đây -->
-          </tbody>
-        </table>
+
+      <!-- Quick Stats Overview -->
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        <div
+          class="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm flex items-center justify-between"
+        >
+          <div>
+            <span
+              class="text-slate-400 text-xs font-semibold uppercase tracking-wider"
+              >Tổng Đơn Quét</span
+            >
+            <h3
+              id="stat-total-orders"
+              class="text-3xl font-bold text-slate-900 mt-1"
+            >
+              0
+            </h3>
+          </div>
+          <div class="bg-emerald-50 text-emerald-600 p-4 rounded-xl">
+            <i data-lucide="check-circle" class="w-6 h-6"></i>
+          </div>
+        </div>
+        <div
+          class="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm flex items-center justify-between"
+        >
+          <div>
+            <span
+              class="text-slate-400 text-xs font-semibold uppercase tracking-wider"
+              >QC Đang Hoạt Động</span
+            >
+            <h3
+              id="stat-active-qcs"
+              class="text-3xl font-bold text-slate-900 mt-1"
+            >
+              0
+            </h3>
+          </div>
+          <div class="bg-indigo-50 text-indigo-600 p-4 rounded-xl">
+            <i data-lucide="user-check" class="w-6 h-6"></i>
+          </div>
+        </div>
+        <div
+          class="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm flex items-center justify-between"
+        >
+          <div>
+            <span
+              class="text-slate-400 text-xs font-semibold uppercase tracking-wider"
+              >Hiệu Suất Trung Bình</span
+            >
+            <h3
+              id="stat-avg-performance"
+              class="text-3xl font-bold text-slate-900 mt-1"
+            >
+              0 <span class="text-xs text-slate-400 font-normal">đơn/giờ</span>
+            </h3>
+          </div>
+          <div class="bg-amber-50 text-amber-600 p-4 rounded-xl">
+            <i data-lucide="gauge" class="w-6 h-6"></i>
+          </div>
+        </div>
       </div>
-    </div>
-  </main>
 
-  <!-- Footer -->
-  <footer class="bg-slate-900 border-t border-slate-800 py-6 mt-12 text-center text-sm text-slate-500">
-    <div class="container mx-auto px-4">
-      <p>© 2026 QC Productivity Tracker. Đo lường chính xác - Vận hành tối ưu.</p>
-    </div>
-  </footer>
+      <!-- Productivity Heatmap Table Card -->
+      <div
+        class="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden"
+      >
+        <div
+          class="px-6 py-4 border-b border-slate-100 bg-slate-50 flex items-center justify-between"
+        >
+          <h2 class="font-bold text-slate-800 flex items-center gap-2">
+            <i data-lucide="grid" class="text-slate-400 w-5 h-5"></i>
+            Bảng Thống Kê Sản Lượng Từng Giờ
+          </h2>
+          <span
+            class="bg-emerald-100 text-emerald-800 text-xs font-semibold px-2.5 py-1 rounded-full flex items-center gap-1"
+          >
+            <span
+              class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"
+            ></span>
+            Cập nhật trực tiếp
+          </span>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-center border-collapse">
+            <thead>
+              <tr
+                id="table-header"
+                class="border-b border-slate-200 bg-slate-100 text-slate-600 text-xs uppercase tracking-wider font-semibold"
+              >
+                <th
+                  class="px-6 py-4 text-left font-semibold text-slate-700"
+                  style="min-width: 250px"
+                >
+                  Nhân viên (Operator Email)
+                </th>
+                <th
+                  class="px-4 py-4 bg-emerald-50 font-bold text-emerald-800"
+                  style="min-width: 100px"
+                >
+                  Tổng Đơn
+                </th>
+                <!-- Cột mốc giờ từ JavaScript -->
+              </tr>
+            </thead>
+            <tbody
+              id="dashboard-body"
+              class="divide-y divide-slate-100 text-sm"
+            >
+              <!-- Loading state sẽ hiển thị ở đây -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </main>
 
-  <script>
-    const startHour = 6, endHour = 22;
-    let currentDashboardData = [];
+    <!-- Footer -->
+    <footer
+      class="bg-slate-900 border-t border-slate-800 py-6 mt-12 text-center text-sm text-slate-500"
+    >
+      <div class="container mx-auto px-4">
+        <p>
+          © 2026 QC Productivity Tracker. Đo lường chính xác - Vận hành tối ưu.
+        </p>
+      </div>
+    </footer>
 
-    // Hiển thị loading state
-    function showLoading() {
-      const tbody = document.getElementById('dashboard-body');
-      tbody.innerHTML = `
+    <script>
+      const startHour = 6,
+        endHour = 22;
+      let currentDashboardData = [];
+
+      // Hiển thị loading state
+      function showLoading() {
+        const tbody = document.getElementById("dashboard-body");
+        tbody.innerHTML = `
         <tr>
           <td colspan="30" class="py-12 text-center text-slate-400">
             <div class="flex flex-col items-center justify-center gap-2">
@@ -162,11 +272,11 @@
           </td>
         </tr>
       `;
-    }
+      }
 
-    function showError(message) {
-      const tbody = document.getElementById('dashboard-body');
-      tbody.innerHTML = `
+      function showError(message) {
+        const tbody = document.getElementById("dashboard-body");
+        tbody.innerHTML = `
         <tr>
           <td colspan="30" class="py-12 text-rose-500 text-center font-medium">
             <div class="flex flex-col items-center justify-center gap-2">
@@ -176,51 +286,56 @@
           </td>
         </tr>
       `;
-      lucide.createIcons();
-    }
-
-    function setInitialDate() {
-      const nowVN = new Date(new Date().getTime() + 7 * 60 * 60 * 1000);
-      document.getElementById('filter-date').value = nowVN.toISOString().split('T')[0];
-    }
-
-    function initTableHeader() {
-      const headerRow = document.getElementById('table-header');
-      for (let h = startHour; h <= endHour; h++) {
-        const th = document.createElement('th');
-        th.className = 'px-3 py-4 text-slate-700 font-semibold border-l border-slate-200/50';
-        th.innerText = `${h}h`;
-        headerRow.appendChild(th);
+        lucide.createIcons();
       }
-    }
 
-    async function loadDashboardData() {
-      const selectedDate = document.getElementById('filter-date').value;
-      const tbody = document.getElementById('dashboard-body');
-      
-      // Hiển thị loading
-      showLoading();
+      function setInitialDate() {
+        const nowVN = new Date(new Date().getTime() + 7 * 60 * 60 * 1000);
+        document.getElementById("filter-date").value = nowVN
+          .toISOString()
+          .split("T")[0];
+      }
 
-      try {
-        const res = await fetch(`/api/qc-productivity/dashboard?date=${selectedDate}`);
-        
-        if (!res.ok) {
-          const errorData = await res.json().catch(() => ({}));
-          throw new Error(errorData.error || `HTTP ${res.status}`);
+      function initTableHeader() {
+        const headerRow = document.getElementById("table-header");
+        for (let h = startHour; h <= endHour; h++) {
+          const th = document.createElement("th");
+          th.className =
+            "px-3 py-4 text-slate-700 font-semibold border-l border-slate-200/50";
+          th.innerText = `${h}h`;
+          headerRow.appendChild(th);
         }
+      }
 
-        const data = await res.json();
-        
-        if (!data.success) {
-          throw new Error(data.error || 'Dữ liệu không hợp lệ');
-        }
-        
-        tbody.innerHTML = '';
-        const list = data.results;
-        currentDashboardData = list;
+      async function loadDashboardData() {
+        const selectedDate = document.getElementById("filter-date").value;
+        const tbody = document.getElementById("dashboard-body");
 
-        if (list.length === 0) {
-          tbody.innerHTML = `
+        // Hiển thị loading
+        showLoading();
+
+        try {
+          const res = await fetch(
+            `/api/qc-productivity/dashboard?date=${selectedDate}`,
+          );
+
+          if (!res.ok) {
+            const errorData = await res.json().catch(() => ({}));
+            throw new Error(errorData.error || `HTTP ${res.status}`);
+          }
+
+          const data = await res.json();
+
+          if (!data.success) {
+            throw new Error(data.error || "Dữ liệu không hợp lệ");
+          }
+
+          tbody.innerHTML = "";
+          const list = data.results;
+          currentDashboardData = list;
+
+          if (list.length === 0) {
+            tbody.innerHTML = `
             <tr>
               <td colspan="30" class="py-12 text-center text-slate-400">
                 <div class="flex flex-col items-center justify-center gap-2">
@@ -230,117 +345,129 @@
                 </div>
               </td>
             </tr>`;
-          updateStats(0, 0, 0);
-          lucide.createIcons();
-          return;
-        }
+            updateStats(0, 0, 0);
+            lucide.createIcons();
+            return;
+          }
 
-        let totalOrders = 0;
-        let activeQCs = list.length;
-        let totalActiveHours = 0;
+          let totalOrders = 0;
+          let activeQCs = list.length;
+          let totalActiveHours = 0;
 
-        list.forEach(user => {
-          totalOrders += user.total;
-          let tr = document.createElement('tr');
-          tr.className = "hover:bg-slate-50/80 transition duration-150";
-          
-          tr.innerHTML = `
-            <td class="px-6 py-4 text-left font-medium text-slate-900 border-r border-slate-100 flex items-center gap-2">
-              <div class="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-xs font-bold text-slate-600 uppercase border border-slate-200">
-                ${user.email.substring(0, 2)}
+          list.forEach((user) => {
+            totalOrders += user.total;
+            let tr = document.createElement("tr");
+            tr.className = "hover:bg-slate-50/80 transition duration-150";
+
+            tr.innerHTML = `
+            <td class="px-6 py-4 text-left font-medium text-slate-900 border-r border-slate-100">
+              <div class="flex items-center gap-3">
+                <div class="w-9 h-9 rounded-full bg-slate-100 flex items-center justify-center text-xs font-bold text-slate-600 uppercase border border-slate-200">
+                  ${user.full_name ? user.full_name.substring(0, 2) : user.email.substring(0, 2)}
+                </div>
+                <div>
+                  <div class="font-semibold text-slate-800">${user.full_name || user.email}</div>
+                  <div class="text-xs text-slate-500">${user.full_name ? user.email : ""}</div>
+                </div>
               </div>
-              <span class="truncate max-w-[200px]" title="${user.email}">${user.email}</span>
             </td>
             <td class="px-4 py-4 bg-emerald-50/50 font-bold text-emerald-700 border-r border-slate-100">${user.total}</td>
           `;
-          
-          for (let h = startHour; h <= endHour; h++) {
-            const count = user.hourly[h] || 0;
-            const td = document.createElement('td');
-            td.className = 'px-3 py-4 border-l border-slate-100 transition-colors';
-            
-            if (count > 0) {
-              totalActiveHours++;
-              td.innerText = count;
-              if (count >= 50) {
-                td.className += ' bg-amber-500 text-white font-bold';
-              } else if (count >= 25) {
-                td.className += ' bg-amber-100 text-amber-800 font-semibold';
+
+            for (let h = startHour; h <= endHour; h++) {
+              const count = user.hourly[h] || 0;
+              const td = document.createElement("td");
+              td.className =
+                "px-3 py-4 border-l border-slate-100 transition-colors";
+
+              if (count > 0) {
+                totalActiveHours++;
+                td.innerText = count;
+                if (count >= 50) {
+                  td.className += " bg-amber-500 text-white font-bold";
+                } else if (count >= 25) {
+                  td.className += " bg-amber-100 text-amber-800 font-semibold";
+                } else {
+                  td.className += " bg-amber-50 text-amber-700 font-medium";
+                }
               } else {
-                td.className += ' bg-amber-50 text-amber-700 font-medium';
+                td.innerText = "-";
+                td.className += " text-slate-300";
               }
-            } else {
-              td.innerText = '-';
-              td.className += ' text-slate-300';
+              tr.appendChild(td);
             }
-            tr.appendChild(td);
+            tbody.appendChild(tr);
+          });
+
+          const avgPerformance =
+            totalActiveHours > 0
+              ? Math.round(totalOrders / totalActiveHours)
+              : 0;
+          updateStats(totalOrders, activeQCs, avgPerformance);
+        } catch (err) {
+          showError(`Lỗi kết nối: ${err.message}`);
+          // Reset stats về 0
+          updateStats(0, 0, 0);
+        } finally {
+          lucide.createIcons();
+        }
+      }
+
+      function updateStats(total, qcs, avg) {
+        document.getElementById("stat-total-orders").innerText =
+          total.toLocaleString("vi-VN");
+        document.getElementById("stat-active-qcs").innerText = qcs;
+        document.getElementById("stat-avg-performance").innerHTML =
+          `${avg} <span class="text-xs text-slate-400 font-normal">đơn/giờ</span>`;
+      }
+
+      function exportToExcel() {
+        if (!currentDashboardData || currentDashboardData.length === 0) {
+          alert("Không có dữ liệu tại ngày đã chọn để xuất file!");
+          return;
+        }
+
+        const selectedDate = document.getElementById("filter-date").value;
+
+        const sheetData = currentDashboardData.map((user, index) => {
+          const row = {
+            STT: index + 1,
+            "Nhân viên (Operator Email)": user.email,
+            "Tổng Đơn": user.total,
+          };
+          for (let h = startHour; h <= endHour; h++) {
+            row[`${h}h`] = user.hourly[h] || 0;
           }
-          tbody.appendChild(tr);
+          return row;
         });
 
-        const avgPerformance = totalActiveHours > 0 ? Math.round(totalOrders / totalActiveHours) : 0;
-        updateStats(totalOrders, activeQCs, avgPerformance);
-        
-      } catch (err) {
-        showError(`Lỗi kết nối: ${err.message}`);
-        // Reset stats về 0
-        updateStats(0, 0, 0);
-      } finally {
-        lucide.createIcons();
-      }
-    }
-
-    function updateStats(total, qcs, avg) {
-      document.getElementById('stat-total-orders').innerText = total.toLocaleString('vi-VN');
-      document.getElementById('stat-active-qcs').innerText = qcs;
-      document.getElementById('stat-avg-performance').innerHTML = `${avg} <span class="text-xs text-slate-400 font-normal">đơn/giờ</span>`;
-    }
-
-    function exportToExcel() {
-      if (!currentDashboardData || currentDashboardData.length === 0) {
-        alert('Không có dữ liệu tại ngày đã chọn để xuất file!');
-        return;
-      }
-
-      const selectedDate = document.getElementById('filter-date').value;
-
-      const sheetData = currentDashboardData.map((user, index) => {
-        const row = {
-          "STT": index + 1,
-          "Nhân viên (Operator Email)": user.email,
-          "Tổng Đơn": user.total
-        };
+        const worksheet = XLSX.utils.json_to_sheet(sheetData);
+        const colWidths = [{ wch: 6 }, { wch: 30 }, { wch: 12 }];
         for (let h = startHour; h <= endHour; h++) {
-          row[`${h}h`] = user.hourly[h] || 0;
+          colWidths.push({ wch: 8 });
         }
-        return row;
-      });
+        worksheet["!cols"] = colWidths;
 
-      const worksheet = XLSX.utils.json_to_sheet(sheetData);
-      const colWidths = [{ wch: 6 }, { wch: 30 }, { wch: 12 }];
-      for (let h = startHour; h <= endHour; h++) {
-        colWidths.push({ wch: 8 });
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, "Năng Suất QC");
+        XLSX.writeFile(workbook, `WMS_QC_Productivity_${selectedDate}.xlsx`);
       }
-      worksheet['!cols'] = colWidths;
 
-      const workbook = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(workbook, worksheet, "Năng Suất QC");
-      XLSX.writeFile(workbook, `WMS_QC_Productivity_${selectedDate}.xlsx`);
-    }
+      // Khởi chạy
+      setInitialDate();
+      initTableHeader();
+      loadDashboardData();
+      lucide.createIcons();
 
-    // Khởi chạy
-    setInitialDate();
-    initTableHeader();
-    loadDashboardData();
-    lucide.createIcons();
-
-    // Tự động refresh mỗi 2 phút nếu đang xem ngày hôm nay
-    setInterval(() => {
-      const nowVN = new Date(new Date().getTime() + 7 * 60 * 60 * 1000).toISOString().split('T')[0];
-      if (document.getElementById('filter-date').value === nowVN) {
-        loadDashboardData();
-      }
-    }, 120000);
-  </script>
-</body>
+      // Tự động refresh mỗi 2 phút nếu đang xem ngày hôm nay
+      setInterval(() => {
+        const nowVN = new Date(new Date().getTime() + 7 * 60 * 60 * 1000)
+          .toISOString()
+          .split("T")[0];
+        if (document.getElementById("filter-date").value === nowVN) {
+          loadDashboardData();
+        }
+      }, 120000);
+    </script>
+  </body>
 </html>

@@ -702,7 +702,15 @@
         });
 
         if (sortedData.length === 0) {
-          tbody.innerHTML = `<tr><td colspan="30" class="py-12 text-center text-slate-400">Không có dữ liệu</td></tr>`;
+          tbody.innerHTML = `
+            <tr>
+              <td colspan="30" class="py-12 text-center text-slate-400">
+                <div class="flex flex-col items-center gap-2">
+                  <i data-lucide="inbox" class="w-10 h-10 text-slate-300"></i>
+                  <span>Không có dữ liệu</span>
+                </div>
+              </td>
+            </tr>`;
           updateStats(0, 0, 0);
           safeCreateIcons();
           return;

@@ -99,8 +99,9 @@
           </div>
 
           <div class="flex flex-wrap items-center gap-3">
+            <!-- Filter date -->
             <div
-              class="flex items-center bg-slate-100 border border-slate-200 rounded-xl px-3 py-2"
+              class="flex items-center bg-slate-100 border border-slate-200 rounded-xl px-3 h-11"
             >
               <i data-lucide="calendar" class="w-4 h-4 text-slate-400 mr-2"></i>
               <input
@@ -113,20 +114,26 @@
                 "
               />
             </div>
+
+            <!-- Filter search -->
             <div
-              class="flex items-center bg-white border border-slate-200 rounded-xl px-3 py-2"
+              class="flex items-center bg-white border border-slate-200 rounded-xl px-3 h-11"
             >
               <i data-lucide="search" class="w-4 h-4 text-slate-400 mr-2"></i>
               <input
                 id="filter-q"
                 placeholder="Tìm theo tên hoặc email"
-                class="text-sm focus:outline-none"
+                class="text-sm focus:outline-none w-44"
               />
             </div>
+
+            <!-- Filter min total -->
             <div
-              class="flex items-center bg-white border border-slate-200 rounded-xl px-3 py-2"
+              class="flex items-center bg-white border border-slate-200 rounded-xl px-3 h-11"
             >
-              <label class="text-sm text-slate-500 mr-2">Min Tổng</label>
+              <label class="text-sm text-slate-500 mr-2 whitespace-nowrap"
+                >Min Tổng</label
+              >
               <input
                 id="filter-min-total"
                 type="number"
@@ -135,10 +142,14 @@
                 class="w-20 text-sm focus:outline-none"
               />
             </div>
+
+            <!-- Filter giờ start -> end -->
             <div
-              class="flex items-center bg-white border border-slate-200 rounded-xl px-3 py-2"
+              class="flex items-center bg-white border border-slate-200 rounded-xl px-3 h-11"
             >
-              <label class="text-sm text-slate-500 mr-2">Giờ</label>
+              <label class="text-sm text-slate-500 mr-2 whitespace-nowrap"
+                >Giờ</label
+              >
               <input
                 id="filter-hour-start"
                 type="number"
@@ -157,40 +168,46 @@
                 class="w-14 text-sm focus:outline-none ml-2"
               />
             </div>
+
+            <!-- Filter active only -->
             <div
-              class="flex items-center bg-white border border-slate-200 rounded-xl px-3 py-2"
+              class="flex items-center bg-white border border-slate-200 rounded-xl px-3 h-11"
             >
               <label
-                class="inline-flex items-center gap-2 text-sm text-slate-600"
-                ><input id="filter-active-only" type="checkbox" />
-                <span>Chỉ hiển thị đang active</span></label
+                class="inline-flex items-center gap-2 text-sm text-slate-600 cursor-pointer whitespace-nowrap"
               >
+                <input id="filter-active-only" type="checkbox" />
+                <span>Chỉ hiển thị đang active</span>
+              </label>
             </div>
 
-            <button
-              id="btn-export"
-              onclick="exportToExcel()"
-              class="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-sm px-5 py-2.5 rounded-xl transition duration-150 shadow-sm"
-            >
-              <i data-lucide="download" class="w-4 h-4"></i>
-              Xuất Excel
-            </button>
-            <button
-              id="btn-reset-filters"
-              onclick="resetFilters()"
-              class="flex items-center gap-2 bg-rose-500 hover:bg-rose-600 text-white font-semibold text-sm px-4 py-2.5 rounded-xl transition duration-150 shadow-sm"
-              title="Đặt lại bộ lọc"
-            >
-              <i data-lucide="trash-2" class="w-4 h-4"></i>
-              Đặt lại bộ lọc
-            </button>
-            <button
-              onclick="loadDashboardData()"
-              class="flex items-center gap-2 bg-slate-900 hover:bg-slate-800 text-white font-semibold text-sm px-5 py-2.5 rounded-xl transition duration-150 shadow-sm"
-            >
-              <i data-lucide="refresh-cw" class="w-4 h-4"></i>
-              Làm Mới
-            </button>
+            <!-- Nhóm button đẩy về phải -->
+            <div class="flex items-center gap-3 ml-auto">
+              <button
+                id="btn-export"
+                onclick="exportToExcel()"
+                class="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-sm px-5 h-11 rounded-xl transition duration-150 shadow-sm"
+              >
+                <i data-lucide="download" class="w-4 h-4"></i>
+                Xuất Excel
+              </button>
+              <button
+                id="btn-reset-filters"
+                onclick="resetFilters()"
+                class="flex items-center gap-2 bg-rose-500 hover:bg-rose-600 text-white font-semibold text-sm px-4 h-11 rounded-xl transition duration-150 shadow-sm"
+                title="Đặt lại bộ lọc"
+              >
+                <i data-lucide="trash-2" class="w-4 h-4"></i>
+                Đặt lại bộ lọc
+              </button>
+              <button
+                onclick="loadDashboardData()"
+                class="flex items-center gap-2 bg-slate-900 hover:bg-slate-800 text-white font-semibold text-sm px-5 h-11 rounded-xl transition duration-150 shadow-sm"
+              >
+                <i data-lucide="refresh-cw" class="w-4 h-4"></i>
+                Làm Mới
+              </button>
+            </div>
           </div>
         </div>
       </div>

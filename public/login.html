@@ -11,11 +11,28 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <style>
     body { font-family: 'Inter', sans-serif; }
+    /* Đảm bảo font cho button do SDK tạo */
+    #seatalk_login_button,
+    #seatalk_login_button * {
+      font-family: 'Inter', sans-serif;
+    }
+    .loader {
+      border: 3px solid #f3f3f3;
+      border-top: 3px solid #f59e0b;
+      border-radius: 50%;
+      width: 30px;
+      height: 30px;
+      animation: spin 1s linear infinite;
+      margin: 0 auto;
+    }
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
   </style>
 </head>
 <body class="bg-slate-900 h-screen flex items-center justify-center">
   <div class="bg-white rounded-2xl shadow-xl p-8 max-w-md w-full text-center">
-    <!-- Logo -->
     <div class="text-amber-500 mb-4">
       <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 mx-auto" viewBox="0 0 24 24" fill="currentColor">
         <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
@@ -24,90 +41,158 @@
     <h1 class="text-2xl font-bold text-slate-900 mb-2">WMS QC Monitor</h1>
     <p class="text-slate-500 text-sm mb-6">Đăng nhập bằng tài khoản SeaTalk để tiếp tục</p>
 
-    <!--
-      Element ẩn chứa cấu hình App (theo đúng tài liệu SeaTalk)
-      SDK sẽ tự động đọc các data-* attribute này.
-    -->
-    <div id="seatalk_login_app_info"
-         data-response_type="code"
-         style="display: none;"></div>
+    <!-- Vùng chứa nút đăng nhập và trạng thái loading -->
+    <div id="login-container">
+      <div id="loading-indicator" class="flex justify-center">
+        <div class="loader"></div>
+      </div>
+      <!-- Hai thẻ này sẽ được SDK sử dụng -->
+      <div id="seatalk_login_app_info"></div>
+      <div id="seatalk_login_button"></div>
+    </div>
 
-    <!-- Vị trí render nút Login with SeaTalk -->
-    <div id="seatalk_login_button" class="flex justify-center"></div>
-
-    <!-- Thông báo lỗi -->
     <div id="error-message" class="hidden mt-4 p-3 bg-red-50 text-red-700 rounded-lg text-sm"></div>
   </div>
 
+  <!-- SeaTalk SDK -->
+  <script src="https://static.cdn.haiserve.com/seatalk/client/shared/sop/auth.js"></script>
+
   <script>
-    (async function () {
-      // ----- 1. Kiểm tra session token hợp lệ -----
-      const token = localStorage.getItem('qc_session_token');
-      if (token) {
+    (function() {
+      'use strict';
+
+      // Helper: lấy phần tử
+      const $ = id => document.getElementById(id);
+      const errorEl = $('error-message');
+      const loadingEl = $('loading-indicator');
+      const appInfoEl = $('seatalk_login_app_info');
+      const buttonEl = $('seatalk_login_button');
+
+      function showError(message) {
+        errorEl.textContent = message;
+        errorEl.classList.remove('hidden');
+      }
+
+      function hideError() {
+        errorEl.classList.add('hidden');
+      }
+
+      function showLoading(show) {
+        loadingEl.style.display = show ? 'flex' : 'none';
+      }
+
+      // 1. Kiểm tra token có sẵn
+      async function checkExistingToken() {
+        const token = localStorage.getItem('qc_session_token');
+        if (!token) return false;
+
         try {
-          const payload = JSON.parse(atob(token.split('.')[0]));
-          // SỬA: exp là giây -> nhân 1000 để so sánh với millisecond
-          if (payload.exp && payload.exp * 1000 > Date.now()) {
+          // Gọi API xác thực token (nên thay bằng endpoint thực tế)
+          const resp = await fetch('/api/verify-token', {
+            headers: { Authorization: `Bearer ${token}` }
+          });
+          if (resp.ok) {
             window.location.href = '/index.html';
-            return; // Dừng xử lý, không cần hiển thị login
+            return true;
+          } else {
+            localStorage.removeItem('qc_session_token');
+            return false;
           }
-        } catch (e) {
-          // Token không đúng định dạng -> xoá để tránh lặp
-          localStorage.removeItem('qc_session_token');
+        } catch {
+          return false;
         }
       }
 
-      // ----- 2. Hiển thị lỗi từ URL callback (nếu có) -----
-      const params = new URLSearchParams(window.location.search);
-      const error = params.get('error');
-      if (error) {
-        const el = document.getElementById('error-message');
-        el.classList.remove('hidden');
-        const messages = {
-          missing_code: 'Thiếu mã xác thực từ SeaTalk.',
-          token_exchange_failed: 'Xác thực không thành công. Vui lòng thử lại.',
-          profile_fetch_failed: 'Không thể lấy thông tin người dùng.',
-          unauthorized: 'Tài khoản của bạn không được phép truy cập hệ thống này.',
-          internal_error: 'Lỗi hệ thống. Vui lòng thử lại sau.',
-        };
-        el.textContent = messages[error] || 'Đã xảy ra lỗi không xác định.';
+      // 2. Xử lý lỗi từ query parameter
+      function handleUrlError() {
+        const params = new URLSearchParams(window.location.search);
+        const error = params.get('error');
+        if (error) {
+          const messages = {
+            missing_code: 'Thiếu mã xác thực từ SeaTalk.',
+            token_exchange_failed: 'Xác thực không thành công. Vui lòng thử lại.',
+            profile_fetch_failed: 'Không thể lấy thông tin người dùng.',
+            unauthorized: 'Tài khoản của bạn không được phép truy cập hệ thống này.',
+            internal_error: 'Lỗi hệ thống. Vui lòng thử lại sau.',
+            state_mismatch: 'Yêu cầu không hợp lệ (state không khớp).',
+          };
+          showError(messages[error] || 'Đã xảy ra lỗi không xác định.');
+          return true;
+        }
+        return false;
       }
 
-      // ----- 3. Lấy cấu hình và nạp SDK theo đúng tài liệu -----
-      try {
-        const res = await fetch('/api/config');
-        if (!res.ok) throw new Error('Không thể tải cấu hình.');
-        const config = await res.json();
+      // 3. Khởi tạo login button theo đúng tài liệu SeaTalk
+      async function initLoginButton() {
+        try {
+          // Fetch config
+          const res = await fetch('/api/config');
+          if (!res.ok) throw new Error('Không thể tải cấu hình');
+          const config = await res.json();
 
-        if (!config.seatalkAppId || !config.seatalkRedirectUri) {
-          throw new Error('Thiếu cấu hình Seatalk (App ID hoặc Redirect URI).');
+          const { seatalkAppId, seatalkRedirectUri } = config;
+          if (!seatalkAppId || !seatalkRedirectUri) {
+            throw new Error('Thiếu cấu hình Seatalk (appId hoặc redirectUri)');
+          }
+
+          // Sinh state ngẫu nhiên (phòng CSRF)
+          const state = crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2, 15);
+          sessionStorage.setItem('seatalk_oauth_state', state);
+
+          // Gán data attributes cho thẻ app_info (theo đúng tài liệu)
+          appInfoEl.setAttribute('data-appid', seatalkAppId);
+          appInfoEl.setAttribute('data-redirect_uri', seatalkRedirectUri);
+          appInfoEl.setAttribute('data-response_type', 'code');
+          appInfoEl.setAttribute('data-state', state);
+
+          // Cấu hình nút (tùy chỉnh theo ý muốn)
+          buttonEl.setAttribute('data-size', 'small');
+          buttonEl.setAttribute('data-align', 'center');
+          buttonEl.setAttribute('data-theme', 'light');
+          buttonEl.setAttribute('data-logo_size', '22');
+          buttonEl.setAttribute('data-copywriting', 'Đăng nhập với SeaTalk');
+
+          // Hiển thị button và ẩn loading
+          showLoading(false);
+
+          // SDK sẽ tự động render button khi các thẻ này có mặt
+          // Nếu SDK chưa load xong, sự kiện 'load' sẽ kích hoạt
+          if (typeof SOPAuth !== 'undefined' && SOPAuth.init) {
+            // Một số SDK có method init để quét DOM, nếu có thì gọi
+            // Nhưng thường thì SDK tự động chạy khi script load
+            // Chúng ta có thể gọi thủ công nếu cần
+            if (typeof SOPAuth.render === 'function') {
+              SOPAuth.render();
+            }
+          }
+
+        } catch (err) {
+          console.error('Init login error:', err);
+          showError('Không thể khởi tạo chức năng đăng nhập: ' + err.message);
+          showLoading(false);
+        }
+      }
+
+      // 4. Khởi chạy
+      (async function main() {
+        hideError();
+        showLoading(true);
+
+        // Kiểm tra token
+        const hasValidToken = await checkExistingToken();
+        if (hasValidToken) return; // đã redirect
+
+        // Xử lý lỗi URL
+        const hasError = handleUrlError();
+        if (hasError) {
+          showLoading(false);
+          return;
         }
 
-        // Gán dữ liệu vào data-* attributes cho #seatalk_login_app_info
-        const appInfo = document.getElementById('seatalk_login_app_info');
-        appInfo.setAttribute('data-appid', config.seatalkAppId);
-        appInfo.setAttribute('data-redirect_uri', config.seatalkRedirectUri);
-        // data-response_type đã được đặt cứng trong HTML là "code"
-        // (có thể thêm data-state nếu cần chống CSRF)
+        // Khởi tạo button
+        await initLoginButton();
+      })();
 
-        // Chỉ tải SDK SAU KHI đã có đủ cấu hình
-        const script = document.createElement('script');
-        script.src = 'https://static.cdn.haiserve.com/seatalk/client/shared/sop/auth.js';
-        script.onload = () => {
-          // SDK sẽ tự động đọc các data-* và render nút vào #seatalk_login_button
-          console.log('SeaTalk SDK đã sẵn sàng.');
-        };
-        script.onerror = () => {
-          const el = document.getElementById('error-message');
-          el.classList.remove('hidden');
-          el.textContent = 'Không thể tải SeaTalk SDK. Vui lòng thử lại sau.';
-        };
-        document.head.appendChild(script);
-      } catch (e) {
-        const el = document.getElementById('error-message');
-        el.classList.remove('hidden');
-        el.textContent = 'Không thể khởi tạo chức năng đăng nhập. ' + e.message;
-      }
     })();
   </script>
 </body>

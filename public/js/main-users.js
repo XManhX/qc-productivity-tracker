@@ -2,6 +2,7 @@ import { userStore } from "./store/UserStore.js";
 import { UserForm } from "./components/UserForm.js";
 import { ImportSection } from "./components/ImportSection.js";
 import { UserList } from "./components/UserList.js";
+import { NavBar } from "./components/NavBar.js";
 // import { checkAuth, handleAuthToken, isAdmin } from './services/auth.js'; // nếu cần auth
 
 async function init() {

@@ -1075,7 +1075,74 @@
       document.getElementById("import-submit-btn").disabled = true;
 
       // ===================== Init =====================
+      // ===================== Auth Check =====================
+      function isTokenValid(token) {
+        try {
+          const parts = token.split(".");
+          if (parts.length !== 2) return false;
+          const payload = JSON.parse(atob(parts[0]));
+          return payload.email && payload.exp > Date.now();
+        } catch {
+          return false;
+        }
+      }
+
+      function isAdmin() {
+        return localStorage.getItem("user_role") === "admin";
+      }
+
+      function checkAuth() {
+        const token = localStorage.getItem("qc_session_token");
+        if (token && isTokenValid(token)) {
+          // Lưu email để backend xác thực (theo cơ chế hiện tại)
+          const payload = JSON.parse(atob(token.split(".")[0]));
+          localStorage.setItem("user_email", payload.email);
+          return true;
+        }
+        // Xóa dữ liệu cũ và redirect
+        localStorage.removeItem("qc_session_token");
+        localStorage.removeItem("user_email");
+        window.location.href = "/login.html";
+        return false;
+      }
+
+      async function fetchAndStoreRole(token) {
+        try {
+          const res = await fetch("/api/qc-productivity/me", {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          if (res.ok) {
+            const data = await res.json();
+            localStorage.setItem("user_role", data.role_key);
+          }
+        } catch (e) {
+          console.error("Fetch role error:", e);
+        }
+      }
+
+      function handleAuthToken() {
+        const params = new URLSearchParams(window.location.search);
+        const token = params.get("token");
+        if (token && isTokenValid(token)) {
+          fetchAndStoreRole(token);
+          localStorage.setItem("qc_session_token", token);
+          const payload = JSON.parse(atob(token.split(".")[0]));
+          localStorage.setItem("user_email", payload.email);
+          // Xóa token khỏi URL
+          history.replaceState(null, "", window.location.pathname);
+        }
+      }
+
+      // Trong initApp(), gọi checkAuth() đầu tiên:
       async function initApp() {
+        handleAuthToken();
+        if (!checkAuth()) return; // Ngăn không cho chạy tiếp nếu chưa đăng nhập
+        if (!isAdmin()) {
+          alert("Bạn không có quyền truy cập trang này.");
+          window.location.href = "/index.html";
+          return;
+        }
+
         await fetchRoles();
         await fetchUsers();
         safeCreateIcons();

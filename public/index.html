@@ -419,6 +419,67 @@
     </footer>
 
     <script>
+      function isAdmin() {
+        return localStorage.getItem("user_role") === "admin";
+      }
+      // Kiểm tra đăng nhập
+      function checkAuth() {
+        const token = localStorage.getItem("qc_session_token");
+        if (token) {
+          try {
+            const parts = token.split(".");
+            if (parts.length === 2) {
+              const payload = JSON.parse(atob(parts[0]));
+              if (payload.email && payload.exp > Date.now()) {
+                localStorage.setItem("user_email", payload.email);
+                return true;
+              }
+            }
+          } catch (e) {}
+        }
+        // Xóa token cũ
+        localStorage.removeItem("qc_session_token");
+        localStorage.removeItem("user_email");
+        window.location.href = "/login.html";
+        return false;
+      }
+
+      async function fetchAndStoreRole(token) {
+        try {
+          const res = await fetch("/api/qc-productivity/me", {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          if (res.ok) {
+            const data = await res.json();
+            localStorage.setItem("user_role", data.role_key);
+          }
+        } catch (e) {
+          console.error("Fetch role error:", e);
+        }
+      }
+
+      // Xử lý token từ URL (sau khi login thành công)
+      function handleAuthToken() {
+        const params = new URLSearchParams(window.location.search);
+        const token = params.get("token");
+        if (token) {
+          try {
+            fetchAndStoreRole(token);
+            const parts = token.split(".");
+            if (parts.length === 2) {
+              const payload = JSON.parse(atob(parts[0]));
+              if (payload.email && payload.exp > Date.now()) {
+                localStorage.setItem("qc_session_token", token);
+                localStorage.setItem("user_email", payload.email);
+                // Xóa token khỏi URL
+                const newUrl = window.location.pathname;
+                history.replaceState(null, "", newUrl);
+              }
+            }
+          } catch (e) {}
+        }
+      }
+
       // ========== Safe icon loader ==========
       function safeCreateIcons() {
         if (typeof lucide !== "undefined") lucide.createIcons();
@@ -665,7 +726,7 @@
               </div>
               <div class="min-w-0">
                 <div class="font-semibold text-slate-800 truncate" title="${user.name || user.email}">${user.name || user.email}</div>
-                <div class="text-xs text-slate-500 truncate" title="${user.name ? user.email : ''}">${user.name ? user.email : ""}</div>
+                <div class="text-xs text-slate-500 truncate" title="${user.name ? user.email : ""}">${user.name ? user.email : ""}</div>
               </div>
             </div></td>`;
 
@@ -857,11 +918,19 @@
 
       // ========== Init ==========
       async function initApp() {
-        setInitialDate();
-        await loadRoles();              // 1. Tải roles
-        loadFiltersFromURLorStorage();  // 2. Khôi phục filter (cập nhật startHour, endHour)
-        initTableHeader();              // 3. Tạo header bảng đúng theo filter
+        handleAuthToken(); // Xử lý nếu vừa từ login trở về
+        if (!checkAuth()) return; // Nếu chưa đăng nhập, redirect sang login (không chạy tiếp)
 
+        if (!isAdmin()) {
+          alert("Bạn không có quyền truy cập trang này.");
+          window.location.href = "/index.html";
+          return;
+        }
+
+        setInitialDate();
+        await loadRoles(); // 1. Tải roles
+        loadFiltersFromURLorStorage(); // 2. Khôi phục filter (cập nhật startHour, endHour)
+        initTableHeader(); // 3. Tạo header bảng đúng theo filter
 
         document.querySelectorAll("[data-sort-trigger]").forEach((btn) => {
           btn.addEventListener("click", () =>

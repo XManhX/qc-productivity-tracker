@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Đăng nhập - WMS QC Monitor</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body { font-family: 'Inter', sans-serif; }
+  </style>
+</head>
+<body class="bg-slate-900 h-screen flex items-center justify-center">
+  <div class="bg-white rounded-2xl shadow-xl p-8 max-w-md w-full text-center">
+    <div class="text-amber-500 mb-4">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 mx-auto" viewBox="0 0 24 24" fill="currentColor">
+        <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+      </svg>
+    </div>
+    <h1 class="text-2xl font-bold text-slate-900 mb-2">WMS QC Monitor</h1>
+    <p class="text-slate-500 text-sm mb-6">Đăng nhập bằng tài khoản SeaTalk để tiếp tục</p>
+    
+    <!-- Nút Login with SeaTalk -->
+    <div id="seatalk_login_app_info"
+         data-appid="YOUR_APP_ID"
+         data-redirect_uri="YOUR_REDIRECT_URI"
+         data-response_type="code">
+    </div>
+    <div id="seatalk_login_button"
+         data-size="large"
+         data-theme="default"
+         data-align="center">
+    </div>
+
+    <!-- Thông báo lỗi nếu có -->
+    <div id="error-message" class="hidden mt-4 p-3 bg-red-50 text-red-700 rounded-lg text-sm"></div>
+  </div>
+
+  <script src="https://sso.seatalk.io/widget/sdk.js"></script>
+  <script>
+    // Hiển thị lỗi từ URL
+    const params = new URLSearchParams(window.location.search);
+    const error = params.get('error');
+    if (error) {
+      const el = document.getElementById('error-message');
+      el.classList.remove('hidden');
+      const messages = {
+        missing_code: 'Thiếu mã xác thực từ SeaTalk.',
+        token_exchange_failed: 'Xác thực không thành công. Vui lòng thử lại.',
+        profile_fetch_failed: 'Không thể lấy thông tin người dùng.',
+        unauthorized: 'Tài khoản của bạn không được phép truy cập hệ thống này.',
+        internal_error: 'Lỗi hệ thống. Vui lòng thử lại sau.',
+      };
+      el.textContent = messages[error] || 'Đã xảy ra lỗi không xác định.';
+    }
+
+    // Nếu đã có session token hợp lệ, tự động redirect về dashboard
+    const token = localStorage.getItem('qc_session_token');
+    if (token) {
+      try {
+        const payload = JSON.parse(atob(token.split('.')[0]));
+        if (payload.exp > Date.now()) {
+          window.location.href = '/index.html';
+        }
+      } catch(e) {}
+    }
+  </script>
+</body>
+</html>

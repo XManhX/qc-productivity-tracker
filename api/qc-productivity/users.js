@@ -132,14 +132,29 @@ export default async function handler(req, res) {
   }
 
   if (method === "PUT") {
-    const { id, name, email } = req.body;
-    if (!id || !email) {
-      return res.status(400).json({ message: "Missing id or email" });
+    const { id, name, email, is_active } = req.body || {};
+    if (!id) {
+      return res.status(400).json({ message: "Missing id" });
+    }
+
+    const updatePayload = {};
+    if (typeof name === "string") {
+      updatePayload.name = normalizeName(name);
+    }
+    if (typeof email === "string") {
+      updatePayload.email = normalizeEmail(email);
+    }
+    if (typeof is_active === "boolean") {
+      updatePayload.is_active = is_active;
+    }
+
+    if (Object.keys(updatePayload).length === 0) {
+      return res.status(400).json({ message: "No valid update fields provided" });
     }
 
     const { data, error } = await supabase
       .from("qc_users")
-      .update({ name, email: normalizeEmail(email), is_active: true })
+      .update(updatePayload)
       .eq("id", id)
       .select();
 

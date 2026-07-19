@@ -363,7 +363,7 @@
     </footer>
 
     <script>
-      const startHour = 6,
+      let startHour = 6,
         endHour = 22;
       let currentDashboardData = [];
       let sortConfig = { key: "total", direction: "desc" };
@@ -411,6 +411,9 @@
 
       function initTableHeader() {
         const headerRow = document.getElementById("table-header");
+        // remove existing hour columns if present (preserve first two columns)
+        while (headerRow.children.length > 2)
+          headerRow.removeChild(headerRow.lastChild);
         for (let h = startHour; h <= endHour; h++) {
           const th = document.createElement("th");
           th.className =
@@ -712,6 +715,11 @@
 
       // Khởi chạy
       setInitialDate();
+      // Initialize displayed hour range from inputs if present
+      const _hsInit = document.getElementById("filter-hour-start");
+      const _heInit = document.getElementById("filter-hour-end");
+      if (_hsInit) startHour = Number(_hsInit.value) || startHour;
+      if (_heInit) endHour = Number(_heInit.value) || endHour;
       initTableHeader();
       document.querySelectorAll("[data-sort-trigger]").forEach((button) => {
         button.addEventListener("click", () => {
@@ -740,11 +748,19 @@
       const he = document.getElementById("filter-hour-end");
       if (hs)
         hs.addEventListener("change", () => {
+          const v = Number(hs.value);
+          startHour = Math.max(0, Math.min(23, isNaN(v) ? startHour : v));
+          if (startHour > endHour) endHour = startHour;
+          initTableHeader();
           currentPage = 1;
           loadDashboardData();
         });
       if (he)
         he.addEventListener("change", () => {
+          const v = Number(he.value);
+          endHour = Math.max(0, Math.min(23, isNaN(v) ? endHour : v));
+          if (endHour < startHour) startHour = endHour;
+          initTableHeader();
           currentPage = 1;
           loadDashboardData();
         });

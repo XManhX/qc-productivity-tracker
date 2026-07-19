@@ -149,7 +149,9 @@ export default async function handler(req, res) {
     }
 
     if (Object.keys(updatePayload).length === 0) {
-      return res.status(400).json({ message: "No valid update fields provided" });
+      return res
+        .status(400)
+        .json({ message: "No valid update fields provided" });
     }
 
     const { data, error } = await supabase

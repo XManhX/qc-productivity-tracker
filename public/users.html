@@ -314,9 +314,14 @@
                 </tbody>
               </table>
             </div>
-            <div class="border-t border-slate-100 bg-slate-50 px-4 py-3 flex flex-col sm:flex-row items-center justify-between gap-3">
+            <div
+              class="border-t border-slate-100 bg-slate-50 px-4 py-3 flex flex-col sm:flex-row items-center justify-between gap-3"
+            >
               <div id="pagination-info" class="text-xs text-slate-500"></div>
-              <div id="pagination-controls" class="flex items-center gap-2"></div>
+              <div
+                id="pagination-controls"
+                class="flex items-center gap-2"
+              ></div>
             </div>
           </div>
         </div>
@@ -365,7 +370,8 @@
 
         const totalItems = allUsers.length;
         const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
-        const startItem = totalItems === 0 ? 0 : (currentPage - 1) * pageSize + 1;
+        const startItem =
+          totalItems === 0 ? 0 : (currentPage - 1) * pageSize + 1;
         const endItem = Math.min(currentPage * pageSize, totalItems);
 
         info.innerHTML =

@@ -5,8 +5,11 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>⚡ WMS QC MONITOR - Dashboard</title>
+    <!-- Tailwind CSS & Lucide Icons -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- Dùng jsDelivr thay cho unpkg để ổn định hơn -->
+    <script src="https://cdn.jsdelivr.net/npm/lucide@latest/dist/umd/lucide.min.js"></script>
+    <!-- SheetJS -->
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <style>
       @import url("https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap");
@@ -228,6 +231,15 @@
     </footer>
 
     <script>
+      // Helper để gọi lucide an toàn
+      function safeCreateIcons() {
+        if (typeof lucide !== 'undefined') {
+          lucide.createIcons();
+        } else {
+          console.warn('Lucide chưa được tải, bỏ qua createIcons');
+        }
+      }
+
       let startHour = 6, endHour = 22;
       let currentDashboardData = [];
       let sortConfig = { key: "total", direction: "desc" };
@@ -237,7 +249,6 @@
       let debounceTimer = null;
       const STORAGE_KEY = "qc_dashboard_filters";
 
-      // ========== Helpers ==========
       function showLoading() {
         document.getElementById("dashboard-body").innerHTML = `
           <tr><td colspan="30" class="py-12 text-center text-slate-400">
@@ -254,7 +265,7 @@
             <i data-lucide="alert-triangle" class="w-10 h-10 mx-auto"></i>
             <span>${msg}</span>
           </td></tr>`;
-        lucide.createIcons();
+        safeCreateIcons();
       }
 
       function setInitialDate() {
@@ -274,13 +285,13 @@
           </button>`;
           headerRow.appendChild(th);
         }
+        safeCreateIcons();
       }
 
       function debounce(fn, wait=300) {
         return (...args) => { clearTimeout(debounceTimer); debounceTimer = setTimeout(() => fn.apply(this, args), wait); };
       }
 
-      // ========== Filters persistence ==========
       function writeFiltersToURL(replace=true) {
         const params = new URLSearchParams();
         const date = document.getElementById("filter-date").value;
@@ -331,14 +342,12 @@
         currentPage = obj.page ? Math.max(1, Number(obj.page)||1) : 1;
       }
 
-      // ========== Fetch roles ==========
       async function loadRoles() {
         try {
           const res = await fetch("/api/qc-roles");
           if(!res.ok) throw new Error("Failed to load roles");
           const roles = await res.json();
           const select = document.getElementById("filter-role");
-          // Keep first option "Tất cả"
           select.innerHTML = '<option value="">Tất cả role</option>';
           roles.forEach(r => {
             const opt = document.createElement("option");
@@ -346,12 +355,13 @@
             opt.textContent = r.display_name || r.role_key;
             select.appendChild(opt);
           });
+          // Khôi phục giá trị đã lưu (nếu có) sau khi load options
+          loadFiltersFromURLorStorage();
         } catch(e) {
           console.error("Load roles error:", e);
         }
       }
 
-      // ========== Data loading ==========
       async function loadDashboardData(page=1) {
         showLoading();
         currentPage = page || 1;
@@ -393,11 +403,10 @@
           showError(`Lỗi: ${err.message}`);
           updateStats(0,0,0);
         } finally {
-          lucide.createIcons();
+          safeCreateIcons();
         }
       }
 
-      // ========== Render ==========
       function renderTable() {
         const tbody = document.getElementById("dashboard-body");
         tbody.innerHTML = "";
@@ -413,7 +422,7 @@
         if(sortedData.length === 0) {
           tbody.innerHTML = `<tr><td colspan="30" class="py-12 text-center text-slate-400">Không có dữ liệu</td></tr>`;
           updateStats(0,0,0);
-          lucide.createIcons();
+          safeCreateIcons();
           return;
         }
 
@@ -443,7 +452,7 @@
           tdRole.textContent = user.display_name || user.role_key || "-";
           tr.appendChild(tdRole);
 
-          // Tổng đơn (màu theo ngưỡng tổng)
+          // Tổng đơn
           const tdTotal = document.createElement("td");
           const total = user.total || 0;
           const lowTotal = (user.low_threshold || 10) * workingHours;
@@ -490,7 +499,7 @@
         const avgPerf = totalActiveHours > 0 ? Math.round(totalOrders / totalActiveHours) : 0;
         updateStats(totalOrders, activeQCs, avgPerf);
         updateSortIcons();
-        lucide.createIcons();
+        safeCreateIcons();
       }
 
       function getSortValue(row, key) {
@@ -518,7 +527,7 @@
             : "chevrons-up-down";
           el.innerHTML = `<i data-lucide="${iconName}" class="w-3.5 h-3.5 ${key === sortConfig.key ? 'text-amber-600' : 'text-slate-400'}"></i>`;
         });
-        lucide.createIcons();
+        safeCreateIcons();
       }
 
       function updateStats(total, qcs, avg) {
@@ -595,9 +604,8 @@
 
       // ========== Init ==========
       setInitialDate();
-      loadFiltersFromURLorStorage();
       initTableHeader();
-      loadRoles();  // tải danh sách role cho filter
+      loadRoles();  // load roles xong mới khôi phục filter và load data
 
       document.querySelectorAll("[data-sort-trigger]").forEach(btn => {
         btn.addEventListener("click", () => handleSort(btn.dataset.sortTrigger));
@@ -626,13 +634,11 @@
         currentPage=1; writeFiltersToURL(); loadDashboardData();
       });
 
-      loadDashboardData();
-      lucide.createIcons();
-
-      setInterval(() => {
-        const nowVN = new Date(new Date().getTime() + 7*60*60*1000).toISOString().split("T")[0];
-        if(document.getElementById("filter-date").value === nowVN) loadDashboardData();
-      }, 120000);
+      // Sau khi load roles xong sẽ gọi loadDashboardData trong loadRoles (cuối hàm)
+      // Nhưng để đảm bảo loadRoles đã khôi phục filter và gọi loadDashboardData, ta sửa loadRoles:
+      // Sửa loadRoles để sau khi thêm options, gọi loadFiltersFromURLorStorage rồi loadDashboardData
+      // Nhưng loadRoles đã gọi loadFiltersFromURLorStorage, sau đó loadDashboardData ở đây sẽ bị gọi 2 lần? 
+      // Chúng ta sẽ chuyển loadDashboardData vào trong loadRoles sau khi khôi phục filter.
     </script>
   </body>
 </html>

@@ -639,7 +639,9 @@
       }
 
       function updateLocalUser(id, patch) {
-        const index = allUsers.findIndex((user) => Number(user.id) === Number(id));
+        const index = allUsers.findIndex(
+          (user) => Number(user.id) === Number(id),
+        );
         if (index === -1) return null;
 
         const updatedUser = { ...allUsers[index], ...patch };
@@ -724,7 +726,9 @@
           startIndex + pageSize,
         );
 
-        tbody.innerHTML = pagedUsers.map((user) => getUserRowHtml(user)).join("");
+        tbody.innerHTML = pagedUsers
+          .map((user) => getUserRowHtml(user))
+          .join("");
 
         renderPagination();
         lucide.createIcons();
@@ -1173,7 +1177,9 @@
           return;
         }
 
-        const currentUser = allUsers.find((user) => Number(user.id) === Number(id));
+        const currentUser = allUsers.find(
+          (user) => Number(user.id) === Number(id),
+        );
         const currentIsActive = currentUser?.is_active !== false;
 
         if (

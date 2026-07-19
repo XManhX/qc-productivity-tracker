@@ -918,7 +918,9 @@
       // Lưu thay đổi trực tiếp trên hàng
       async function saveInlineUser(id) {
         const name = document.getElementById(`inline-name-${id}`).value.trim();
-        const email = document.getElementById(`inline-email-${id}`).value.trim();
+        const email = document
+          .getElementById(`inline-email-${id}`)
+          .value.trim();
         const statusButton = document.getElementById(`inline-status-${id}`);
         const isActive = statusButton?.dataset.active === "true";
 

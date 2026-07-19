@@ -47,7 +47,7 @@
         <div class="loader"></div>
       </div>
       <!-- Hai thẻ này sẽ được SDK sử dụng -->
-      <div id="seatalk_login_app_info" style="display:none;"></div>
+      <div id="seatalk_login_app_info"></div>
       <div id="seatalk_login_button" style="display:none;"></div>
     </div>
 
@@ -80,7 +80,6 @@
       function showLoading(show) {
         loadingEl.style.display = show ? 'flex' : 'none';
         buttonEl.style.display = show ? 'none' : 'inline-flex';
-        appInfoEl.style.display = show ? 'none' : 'block';
       }
 
       // 1. Kiểm tra token có sẵn

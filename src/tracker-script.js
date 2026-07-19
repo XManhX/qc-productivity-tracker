@@ -1,4 +1,3 @@
-// ==/UserScript==
 (function () {
   "use strict";
 
@@ -15,14 +14,19 @@
 
   const PAGE_CONFIG = {};
 
+  // ==================== BIẾN TOÀN CỤC ====================
   let fieldTimestamps = {};
   let pageStartTime = null;
+  let lastScanValue = null;        // để phát hiện scan_value thay đổi
+  let lastUrl = location.href;
+  let observer = null;             // MutationObserver toàn cục
 
   const log = (...args) => CONFIG.DEBUG && console.log("[QC Tracker]", ...args);
   const normalize = (s) => (s || "").replace(/\s+/g, " ").trim();
   const nowISO = () => new Date().toISOString();
   const todayKey = () => new Date().toISOString().split("T")[0];
 
+  // ==================== HÀM TIỆN ÍCH ====================
   const getPageType = (href) => {
     const entry = Object.entries(PAGE_CONFIG).find(([, cfg]) =>
       href.includes(cfg.pathIncludes),
@@ -144,10 +148,12 @@
     return "";
   };
 
+  // Reset pageStartTime khi phát hiện scan_value mới
   const setPageStartTimeIfNeeded = (scanValue) => {
-    if (!pageStartTime && scanValue) {
+    if (scanValue && scanValue !== lastScanValue) {
+      lastScanValue = scanValue;
       pageStartTime = nowISO();
-      log("Page start time set (ID detected):", pageStartTime);
+      log("Page start time reset for new scan_value:", pageStartTime);
     }
   };
 
@@ -159,6 +165,7 @@
       result[field] = getInputByKeywords(keywords);
     });
 
+    // Nếu không lấy được từ input, thử lấy từ URL
     if (!result.scan_value) {
       const idFromUrl = getIdFromUrl(pageType);
       if (idFromUrl) {
@@ -267,111 +274,17 @@
     }
   };
 
-  // ==================== HANDLE JUDGEMENT ====================
-  const handleJudgementAction = (pageType, userEmail) => {
-    const record = makeRecord(pageType, userEmail);
+  // ==================== XỬ LÝ HOÀN THÀNH (click nút) ====================
+  const handleActionComplete = async (pageType, userEmail) => {
+    const page_end_time = nowISO(); // lấy thời điểm click
+    const record = makeRecord(pageType, userEmail, page_end_time);
+
     if (shouldSkip(record, pageType)) {
       log("Skipped due to missing required fields");
       return;
     }
 
-    const fingerprint = [
-      record.page,
-      record.action,
-      record.operator,
-      record.device_id,
-      record.scan_value,
-    ].join("|");
-    const lastFinger = getStore("qc_last_fingerprint", "");
-    const lastTime = getStore("qc_last_fingerprint_time", 0);
-    if (
-      fingerprint === lastFinger &&
-      Date.now() - lastTime < CONFIG.DUPLICATE_WINDOW_MS
-    ) {
-      log("Duplicate within window, skipped");
-      return;
-    }
-
-    const doSend = () => {
-      if (window._qc_sent) return;
-      window._qc_sent = true;
-      setStore("qc_last_fingerprint", fingerprint);
-      setStore("qc_last_fingerprint_time", Date.now());
-
-      sendRecord(record).then((ok) => {
-        if (ok) {
-          fieldTimestamps = {};
-          const stats = getStore(`stats_${todayKey()}`, {
-            qc: 0,
-            judgement: 0,
-            rimassreceive: 0,
-          });
-          if (stats.hasOwnProperty(pageType)) {
-            stats[pageType] += 1;
-            setStore(`stats_${todayKey()}`, stats);
-            updateWidget();
-          }
-        }
-      });
-    };
-
-    let confirmBtn = document.querySelector(
-      ".ssc-message-box-footer-primary .ssc-btn-type-primary",
-    );
-    if (
-      confirmBtn &&
-      normalize(confirmBtn.innerText).toLowerCase() === "confirm"
-    ) {
-      confirmBtn.addEventListener("click", doSend, { once: true });
-      log("Popup Confirm found, waiting for click...");
-      setTimeout(() => {
-        if (!window._qc_sent) {
-          log("Popup Confirm not clicked after timeout, sending anyway.");
-          doSend();
-        }
-      }, 5000);
-      return;
-    }
-
-    log("Waiting for popup Confirm...");
-    const observer = new MutationObserver(() => {
-      confirmBtn = document.querySelector(
-        ".ssc-message-box-footer-primary .ssc-btn-type-primary",
-      );
-      if (
-        confirmBtn &&
-        normalize(confirmBtn.innerText).toLowerCase() === "confirm"
-      ) {
-        confirmBtn.addEventListener("click", doSend, { once: true });
-        observer.disconnect();
-        log("Popup Confirm detected and listener attached.");
-        setTimeout(() => {
-          if (!window._qc_sent) {
-            log("Popup Confirm not clicked after timeout, sending anyway.");
-            doSend();
-          }
-        }, 5000);
-      }
-    });
-    observer.observe(document.body, { childList: true, subtree: true });
-
-    setTimeout(() => {
-      observer.disconnect();
-      if (!window._qc_sent) {
-        log("Popup Confirm not appeared, sending anyway.");
-        doSend();
-      }
-    }, 10000);
-  };
-
-  // ==================== HANDLE DIRECT ACTION ====================
-  const handleDirectAction = async (pageType, userEmail) => {
-    const record = makeRecord(pageType, userEmail);
-    if (shouldSkip(record, pageType)) {
-      log("Skipped due to missing required fields");
-      return;
-    }
-
+    // Chống trùng lặp
     const fingerprint = [
       record.page,
       record.action,
@@ -394,6 +307,7 @@
     const ok = await sendRecord(record);
     if (ok) {
       fieldTimestamps = {};
+      // Cập nhật thống kê trong ngày
       const stats = getStore(`stats_${todayKey()}`, {
         qc: 0,
         judgement: 0,
@@ -437,9 +351,20 @@
     });
   };
 
-  // ==================== INIT ====================
+  // ==================== INIT (chính) ====================
   const init = async () => {
     log("Initializing...");
+
+    // Dọn dẹp observer cũ nếu có
+    if (observer) {
+      observer.disconnect();
+      observer = null;
+    }
+
+    // Reset các biến liên quan đến phiên làm việc hiện tại
+    pageStartTime = null;
+    lastScanValue = null;
+    fieldTimestamps = {};
 
     const pageType = getPageType(location.href);
     if (pageType === "unknown") {
@@ -447,6 +372,7 @@
       return;
     }
 
+    // Lấy scan_value từ URL (nếu có) để set page start time sớm
     const initialId = getIdFromUrl(pageType);
     if (initialId) {
       setPageStartTimeIfNeeded(initialId);
@@ -468,29 +394,19 @@
 
     await flushPending();
 
+    // Hàm bind sự kiện cho nút actionText
     const bindButton = () => {
       const btn = findActionButton(PAGE_CONFIG[pageType]?.actionText);
       if (btn && !btn.dataset.qcTrackerBound) {
         btn.dataset.qcTrackerBound = "1";
-        if (pageType === "judgement") {
-          btn.addEventListener(
-            "click",
-            () => {
-              log("Confirm Judged clicked, waiting for popup...");
-              handleJudgementAction(pageType, email);
-            },
-            true,
-          );
-        } else {
-          btn.addEventListener(
-            "click",
-            () => {
-              log("Action button clicked, sending directly...");
-              handleDirectAction(pageType, email);
-            },
-            true,
-          );
-        }
+        btn.addEventListener(
+          "click",
+          () => {
+            log("Action button clicked, recording completion...");
+            handleActionComplete(pageType, email);
+          },
+          true
+        );
         log("Button bound for", pageType);
       }
       setupFieldListeners(pageType);
@@ -498,7 +414,8 @@
 
     bindButton();
 
-    const observer = new MutationObserver(() => {
+    // Theo dõi DOM để bắt nút xuất hiện muộn (SPA)
+    observer = new MutationObserver(() => {
       const btn = findActionButton(PAGE_CONFIG[pageType]?.actionText);
       if (btn && !btn.dataset.qcTrackerBound) {
         bindButton();
@@ -506,7 +423,7 @@
     });
     observer.observe(document.body, { childList: true, subtree: true });
 
-    // ===== ĐỒNG BỘ DỮ LIỆU GIỮA CÁC TAB =====
+    // Đồng bộ dữ liệu giữa các tab
     if (typeof GM_addValueChangeListener !== "undefined") {
       GM_addValueChangeListener((key, oldValue, newValue) => {
         if (key && key.startsWith("stats_")) {
@@ -516,9 +433,36 @@
       });
     }
 
-    log("Init complete");
+    log("Init complete for pageType:", pageType);
   };
 
+  // ==================== PHÁT HIỆN CHUYỂN TRANG SPA (KHÔNG POLLING) ====================
+  (function patchHistoryAPI() {
+    const originalPushState = history.pushState;
+    const originalReplaceState = history.replaceState;
+
+    function triggerUrlChange() {
+      if (location.href !== lastUrl) {
+        lastUrl = location.href;
+        log("SPA navigation detected (History API), re-initializing...");
+        init();
+      }
+    }
+
+    history.pushState = function (...args) {
+      originalPushState.apply(this, args);
+      triggerUrlChange();
+    };
+
+    history.replaceState = function (...args) {
+      originalReplaceState.apply(this, args);
+      triggerUrlChange();
+    };
+
+    window.addEventListener("popstate", triggerUrlChange);
+  })();
+
+  // ==================== KHỞI ĐỘNG ====================
   if (
     typeof GM_xmlhttpRequest === "undefined" ||
     typeof GM_setValue === "undefined"
@@ -527,5 +471,9 @@
     return;
   }
 
-  init().catch((e) => console.error("[QC Tracker] Fatal:", e));
+  init()
+    .then(() => {
+      log("SPA monitoring activated (instant detection via History API)");
+    })
+    .catch((e) => console.error("[QC Tracker] Fatal:", e));
 })();

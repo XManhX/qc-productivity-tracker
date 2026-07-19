@@ -24,3 +24,64 @@ export async function fetchMe() {
   if (!res.ok) throw new Error("Không lấy được thông tin user");
   return res.json();
 }
+
+// ========== Users API ==========
+export async function fetchUsers() {
+  const res = await fetch("/api/qc-productivity/users");
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+export async function createUser({ name, email, role_key }) {
+  const res = await fetch("/api/qc-productivity/users", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name, email, role_key }),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.message || `HTTP ${res.status}`);
+  }
+  return res.json();
+}
+
+export async function updateUser({
+  id,
+  name,
+  email,
+  role_key,
+  is_active,
+  widget_visible,
+}) {
+  const res = await fetch("/api/qc-productivity/users", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      id,
+      name,
+      email,
+      role_key,
+      is_active,
+      widget_visible,
+    }),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.message || `HTTP ${res.status}`);
+  }
+  return res.json();
+}
+
+export async function bulkCreateUsers(payload) {
+  // payload = { import: [...] } hoặc gửi thẳng array tùy API
+  const res = await fetch("/api/qc-productivity/users", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.message || `HTTP ${res.status}`);
+  }
+  return res.json();
+}

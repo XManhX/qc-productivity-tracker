@@ -1,7 +1,7 @@
 import { userStore } from "../store/UserStore.js";
 import { escapeHtml } from "../utils/escapeHtml.js";
 import { showToast } from "../utils/toast.js";
-import { Pagination } from "./Pagination.js";
+import { Pagination } from "./Pagination.js"; // dùng chung
 
 export class UserList {
   constructor(container) {
@@ -9,7 +9,7 @@ export class UserList {
     this._render();
     this._bindEvents();
 
-    // Khởi tạo Pagination chung (không có pageSize dropdown)
+    // Khởi tạo Pagination chung (không có dropdown page size)
     this.pagination = new Pagination(
       this.container.querySelector("#pagination-wrapper"),
       {
@@ -17,14 +17,13 @@ export class UserList {
         totalPages: userStore.totalPages,
         totalItems: userStore.totalFiltered,
         onPageChange: (newPage) => userStore.setPage(newPage),
-        // Không truyền onPageSizeChange -> không có dropdown
-        windowSize: null, // hiển thị tất cả các trang (vì thường ít trang)
+        windowSize: 5,
       },
     );
 
     userStore.on("update", () => {
       this._updateView();
-      // Cập nhật pagination
+      // Cập nhật pagination mỗi khi store thay đổi
       this.pagination.refresh({
         page: userStore.state.currentPage,
         totalPages: userStore.totalPages,
@@ -115,6 +114,7 @@ export class UserList {
     this.container.querySelector("#summary-active").textContent = active;
     this.container.querySelector("#summary-inactive").textContent =
       total - active;
+
     const badge = this.container.querySelector("#user-count-badge");
     const filtered = userStore.filteredUsers;
     if (badge) {
@@ -129,8 +129,12 @@ export class UserList {
 
   _renderTable() {
     const tbody = this.container.querySelector("#user-list-body");
-    const { loading, error, users, filteredUsers, pagedUsers, roles } =
-      userStore.state;
+    if (!tbody) return;
+
+    const { loading, error, users, roles } = userStore.state;
+    // Lấy qua getter
+    const filteredUsers = userStore.filteredUsers;
+    const pagedUsers = userStore.pagedUsers;
 
     if (loading) {
       tbody.innerHTML = `<tr><td colspan="5" class="py-12 text-center text-slate-400"><div class="loading-spinner w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full mx-auto"></div><span>Đang tải...</span></td></tr>`;

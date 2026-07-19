@@ -455,41 +455,53 @@
           .map((user) => {
             const userName = user.name || "";
             const userEmail = user.email;
-            const escapedUserName = userName.replace(/'/g, "\\'");
             const isActive = user.is_active !== false;
 
             return `
-              <tr id="user-row-${user.id}" class="hover:bg-slate-50/50 transition duration-150">
+              <tr id="user-row-${user.id}" class="hover:bg-slate-50/50 transition duration-150 align-top">
+                <td class="px-6 py-4">
+                  <input
+                    id="inline-name-${user.id}"
+                    type="text"
+                    value="${escapeHtml(userName || "")}" 
+                    class="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700 outline-none transition focus:border-indigo-500 focus:bg-white"
+                  />
+                </td>
+                <td class="px-6 py-4">
+                  <input
+                    id="inline-email-${user.id}"
+                    type="email"
+                    value="${escapeHtml(userEmail || "")}"
+                    class="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700 outline-none transition focus:border-indigo-500 focus:bg-white"
+                  />
+                </td>
                 <td class="px-6 py-4">
                   <div class="flex items-center gap-3">
-                    <div class="w-9 h-9 rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold text-xs uppercase border border-indigo-100">
-                      ${(userName || "QC").substring(0, 2)}
-                    </div>
-                    <div>
-                      <div class="font-semibold text-slate-900">${escapeHtml(userName || "Không tên")}</div>
-                      <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-600 mt-0.5">${escapeHtml(userEmail)}</span>
-                    </div>
+                    <button
+                      id="inline-status-${user.id}"
+                      type="button"
+                      data-active="${isActive ? "true" : "false"}"
+                      onclick="toggleUserStatus(${user.id}, ${isActive})"
+                      class="relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                        isActive ? "bg-emerald-500" : "bg-slate-300"
+                      }"
+                    >
+                      <span class="inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform ${
+                        isActive ? "translate-x-5" : "translate-x-0.5"
+                      }"></span>
+                    </button>
+                    <span class="text-xs font-semibold ${
+                      isActive ? "text-emerald-700" : "text-slate-500"
+                    }">
+                      ${isActive ? "Active" : "Inactive"}
+                    </span>
                   </div>
-                </td>
-                <td class="px-6 py-4 text-slate-600 font-mono text-xs">${escapeHtml(userEmail)}</td>
-                <td class="px-6 py-4">
-                  <button
-                    onclick="toggleUserStatus(${user.id}, ${isActive})"
-                    class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1.5 text-xs font-semibold transition ${
-                      isActive
-                        ? "bg-emerald-100 text-emerald-700 hover:bg-emerald-200"
-                        : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                    }"
-                  >
-                    <i data-lucide="${isActive ? "check-circle" : "circle"}" class="w-3.5 h-3.5"></i>
-                    ${isActive ? "Active" : "Inactive"}
-                  </button>
                 </td>
                 <td class="px-6 py-4 text-right">
                   <div class="flex flex-wrap justify-end gap-2">
-                    <button onclick="editUser(${user.id}, '${escapedUserName}', '${userEmail}', ${isActive})" class="inline-flex items-center gap-1.5 px-3 py-1.5 border border-slate-200 hover:bg-slate-100 text-slate-600 rounded-xl text-xs font-semibold transition">
-                      <i data-lucide="edit" class="w-3.5 h-3.5"></i>
-                      Sửa
+                    <button onclick="saveInlineUser(${user.id})" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-xs font-semibold transition">
+                      <i data-lucide="check" class="w-3.5 h-3.5"></i>
+                      Lưu
                     </button>
                     <button onclick="deleteUser(${user.id})" class="inline-flex items-center gap-1.5 px-3 py-1.5 border border-rose-200 hover:bg-rose-50 text-rose-600 rounded-xl text-xs font-semibold transition">
                       <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
@@ -879,42 +891,6 @@
         }
       }
 
-      // Chuyển sang chế độ edit
-      function editUser(id, name, email, isActive = true) {
-        const row = document.getElementById(`user-row-${id}`);
-        if (!row) return;
-
-        const escapedName = name.replace(/'/g, "&apos;");
-
-        row.innerHTML = `
-        <td class="px-6 py-4">
-          <input type="text" id="edit-name-${id}" value="${escapedName}" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-sm focus:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition" placeholder="Họ và tên">
-        </td>
-        <td class="px-6 py-4">
-          <input type="email" id="edit-email-${id}" value="${email}" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-sm focus:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition" placeholder="Email">
-        </td>
-        <td class="px-6 py-4">
-          <select id="edit-status-${id}" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm focus:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition">
-            <option value="true" ${isActive ? "selected" : ""}>Active</option>
-            <option value="false" ${isActive ? "" : "selected"}>Inactive</option>
-          </select>
-        </td>
-        <td class="px-6 py-4 text-right">
-          <div class="flex flex-wrap justify-end gap-2">
-            <button onclick="saveUser(${id})" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-xs font-semibold transition">
-              <i data-lucide="check" class="w-3.5 h-3.5"></i>
-              Lưu
-            </button>
-            <button onclick="fetchUsers()" class="inline-flex items-center gap-1.5 px-3 py-1.5 border border-slate-200 hover:bg-slate-100 text-slate-600 rounded-xl text-xs font-semibold transition">
-              <i data-lucide="x" class="w-3.5 h-3.5"></i>
-              Hủy
-            </button>
-          </div>
-        </td>
-      `;
-        lucide.createIcons();
-      }
-
       // Bật / tắt trạng thái Active
       async function toggleUserStatus(id, isActive) {
         try {
@@ -939,12 +915,12 @@
         }
       }
 
-      // Lưu user sau khi edit
-      async function saveUser(id) {
-        const name = document.getElementById(`edit-name-${id}`).value.trim();
-        const email = document.getElementById(`edit-email-${id}`).value.trim();
-        const isActive =
-          document.getElementById(`edit-status-${id}`).value === "true";
+      // Lưu thay đổi trực tiếp trên hàng
+      async function saveInlineUser(id) {
+        const name = document.getElementById(`inline-name-${id}`).value.trim();
+        const email = document.getElementById(`inline-email-${id}`).value.trim();
+        const statusButton = document.getElementById(`inline-status-${id}`);
+        const isActive = statusButton?.dataset.active === "true";
 
         if (!email) {
           alert("Email không được để trống!");
@@ -963,10 +939,10 @@
             throw new Error(data.message || `HTTP ${res.status}`);
           }
 
+          showMessage("single-user-message", "✅ Đã lưu thay đổi thành công");
           fetchUsers();
         } catch (err) {
           alert(`Lỗi khi lưu: ${err.message}`);
-          fetchUsers();
         }
       }
 

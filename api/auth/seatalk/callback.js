@@ -10,23 +10,42 @@ export default async function handler(req, res) {
     return res.redirect('/login.html?error=missing_code');
   }
 
-  // 2. Lấy các biến môi trường cần thiết
+  // 2. Lấy tất cả biến môi trường cần thiết
   const SEATALK_APP_ID = process.env.SEATALK_APP_ID;
   const SEATALK_APP_SECRET = process.env.SEATALK_APP_SECRET;
-  const REDIRECT_URI = process.env.SEATALK_REDIRECT_URI; // có thể dùng để log nếu cần
+  const REDIRECT_URI = process.env.SEATALK_REDIRECT_URI;
   const SUPABASE_URL = process.env.SUPABASE_URL;
   const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY;
   const AUTH_SECRET = process.env.AUTH_SECRET;
 
-  if (!SEATALK_APP_ID || !SEATALK_APP_SECRET || !REDIRECT_URI || !SUPABASE_URL || !SUPABASE_ANON_KEY || !AUTH_SECRET) {
-    console.error('[Callback] Thiếu biến môi trường bắt buộc');
+  // URL API SeaTalk – đưa vào biến môi trường để linh hoạt
+  const SEATALK_APP_TOKEN_URL = process.env.SEATALK_APP_TOKEN_URL;
+  const SEATALK_SSO_VERIFY_URL = process.env.SEATALK_SSO_VERIFY_URL;
+
+  const requiredVars = {
+    SEATALK_APP_ID,
+    SEATALK_APP_SECRET,
+    REDIRECT_URI,
+    SUPABASE_URL,
+    SUPABASE_ANON_KEY,
+    AUTH_SECRET,
+    SEATALK_APP_TOKEN_URL,
+    SEATALK_SSO_VERIFY_URL,
+  };
+
+  const missing = Object.entries(requiredVars)
+    .filter(([_, val]) => !val)
+    .map(([key]) => key);
+
+  if (missing.length > 0) {
+    console.error(`[Callback] Thiếu biến môi trường bắt buộc: ${missing.join(', ')}`);
     return res.redirect('/login.html?error=internal_error');
   }
 
   try {
     // 3. Lấy App Access Token
     console.log('[Callback] Đang lấy App Access Token...');
-    const tokenRes = await fetch('https://openapi.seatalk.io/auth/app_access_token', {
+    const tokenRes = await fetch(SEATALK_APP_TOKEN_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ app_id: SEATALK_APP_ID, app_secret: SEATALK_APP_SECRET }),
@@ -43,7 +62,7 @@ export default async function handler(req, res) {
 
     // 4. Xác minh SSO token để lấy thông tin người dùng
     console.log('[Callback] Đang xác minh SSO token...');
-    const profileRes = await fetch('https://openapi.seatalk.io/sso/v2/verify', {
+    const profileRes = await fetch(SEATALK_SSO_VERIFY_URL, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${appAccessToken}`,

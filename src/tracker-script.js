@@ -16,38 +16,7 @@
 
   // PAGE_CONFIG sẽ được thay thế từ file cấu hình khi build.
   // Cấu trúc mẫu bên dưới để script hoạt động ngay (có thể ghi đè bằng __PAGE_CONFIG__).
-  const PAGE_CONFIG = __PAGE_CONFIG__ || {
-    qc: {
-      pathIncludes: "/qc",
-      urlParam: "id",
-      actionText: "Submit QC",
-      requiredFields: ["scan_value"],
-      fields: {
-        device_id: ["#deviceId", "data-for=deviceId"],
-        scan_value: ["#scanValue", "data-for=scanValue"],
-      },
-    },
-    judgement: {
-      pathIncludes: "/judgement",
-      urlParam: "caseId",
-      actionText: "Confirm Judged",
-      requiredFields: ["scan_value"],
-      fields: {
-        device_id: ["#deviceId"],
-        scan_value: ["#caseNumber", "data-for=caseNumber"],
-      },
-    },
-    rimassreceive: {
-      pathIncludes: "/rimassreceive",
-      urlParam: "receiveId",
-      actionText: "Receive",
-      requiredFields: ["scan_value"],
-      fields: {
-        device_id: ["#deviceId"],
-        scan_value: ["#receiveScan", "data-for=receiveScan"],
-      },
-    },
-  };
+  const PAGE_CONFIG = __PAGE_CONFIG__;
 
   let pageStartTime = null; // Không cần fieldTimestamps nữa
 
@@ -113,26 +82,7 @@
 
   // ==================== WIDGET ====================
   // __WIDGET_CODE__ sẽ được thay thế khi build, dưới đây là widget mẫu
-  const widgetCode =
-    __WIDGET_CODE__ ||
-    function () {
-      const container = document.createElement("div");
-      container.id = "qc-tracker-widget";
-      container.style.cssText =
-        "position:fixed;bottom:20px;right:20px;background:#fff;border:1px solid #ccc;padding:10px;z-index:9999;font-size:14px;box-shadow:0 0 10px rgba(0,0,0,0.1)";
-      document.body.appendChild(container);
-      const updateWidget = () => {
-        const stats = getStore(`stats_${todayKey()}`, {
-          qc: 0,
-          judgement: 0,
-          rimassreceive: 0,
-        });
-        container.innerHTML = `<b>QC Tracker</b><br>QC: ${stats.qc}<br>Judgement: ${stats.judgement}<br>RIMASS: ${stats.rimassreceive}`;
-      };
-      updateWidget();
-      window.updateWidget = updateWidget; // để gọi từ bên ngoài
-      return container;
-    };
+  const widgetCode = __WIDGET_CODE__;
   if (!window.updateWidget) widgetCode(); // chỉ tạo widget nếu chưa có
 
   // ==================== GET EMAIL ====================

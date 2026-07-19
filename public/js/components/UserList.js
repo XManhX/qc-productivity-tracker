@@ -83,9 +83,7 @@ export class UserList {
           <tbody id="user-list-body" class="divide-y divide-slate-100 text-sm"></tbody>
         </table>
       </div>
-      <div class="border-t border-slate-100 bg-slate-50 px-4 py-3 flex flex-col sm:flex-row items-center justify-between gap-3">
-        <div id="pagination-wrapper"></div>
-      </div>
+      <div id="pagination-wrapper"></div>
     `;
     this._populateRoleFilter();
     lucide.createIcons();

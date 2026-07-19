@@ -159,10 +159,10 @@ class DashboardStore {
       role: "",
       q: "",
       minTotal: "",
-      hourStart: "6",
-      hourEnd: "22",
+      hourStart: 6,
+      hourEnd: 22,
       activeOnly: false,
-      pageSize: "25",
+      pageSize: 25,
       page: 1,
     };
     this.state.sort = { key: "total", direction: "desc" };

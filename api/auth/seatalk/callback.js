@@ -59,7 +59,7 @@ export default async function handler(req, res) {
     if (profileData.code !== 0 || !profileData.profile?.email) {
       const seaTalkError = profileData.code || 'unknown';
       console.error('[Callback] Lỗi xác minh SSO token:', seaTalkError);
-      return res.redirect(`/login.html?error=code2employee_failed&se_error=${seaTalkError}`);
+      return res.redirect(`/login.html?error=sso_failed&se_error=${seaTalkError}`);
     }
 
     // Lấy email từ profile (định dạng mới)

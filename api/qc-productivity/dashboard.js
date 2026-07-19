@@ -11,7 +11,6 @@ export default async function handler(req, res) {
     return res.status(405).json({ message: "Method not allowed" });
 
   try {
-    // Query params for pagination and filters
     const {
       date,
       page = "1",
@@ -23,6 +22,7 @@ export default async function handler(req, res) {
       hourStart,
       hourEnd,
       isActive,
+      role,          // mới: lọc theo role_key
     } = req.query;
 
     let targetDateStr = date;
@@ -31,195 +31,155 @@ export default async function handler(req, res) {
       targetDateStr = nowVN.toISOString().split("T")[0];
     }
 
-    const startOfDay = new Date(
-      `${targetDateStr}T00:00:00+07:00`,
-    ).toISOString();
+    const startOfDay = new Date(`${targetDateStr}T00:00:00+07:00`).toISOString();
     const endOfDay = new Date(`${targetDateStr}T23:59:59+07:00`).toISOString();
 
-    // parse pagination params
     const pageNum = Math.max(1, Number(page) || 1);
     const pageSize = Math.min(500, Math.max(1, Number(limit) || 25));
 
-    // Try calling the DB-side aggregate function via RPC first
-    try {
-      const rpcParams = {
-        p_date: targetDateStr,
-        p_limit: pageSize,
-        p_offset: (pageNum - 1) * pageSize,
-        p_q: q || null,
-        p_min_total: minTotal ? Number(minTotal) : null,
-        p_hour_start: hourStart ? Number(hourStart) : null,
-        p_hour_end: hourEnd ? Number(hourEnd) : null,
-        p_is_active:
-          typeof isActive !== "undefined"
-            ? String(isActive) === "true" || String(isActive) === "1"
-            : null,
-        p_sort_by: sortBy,
-        p_sort_dir: sortDir,
-      };
+    // ----- Lấy danh sách users kèm role và target -----
+    let userQuery = supabase
+      .from("qc_users")
+      .select(`
+        email, name, is_active,
+        qc_roles ( role_key, display_name ),
+        qc_productivity_targets ( low_threshold, medium_threshold )
+      `)
+      .eq("qc_roles.is_active", true)  // chỉ lấy role đang active
+      .order("email");
 
-      const { data: rpcRows, error: rpcError } = await supabase.rpc(
-        "qc_hourly_aggregate",
-        rpcParams,
-      );
-      if (!rpcError && Array.isArray(rpcRows)) {
-        const totalCount =
-          rpcRows.length > 0 ? Number(rpcRows[0].total_count || 0) : 0;
-        const items = rpcRows.map((r) => {
-          const hourly = [];
-          for (let i = 0; i < 24; i++) hourly.push(Number(r[`hour${i}`] || 0));
-          return {
-            email: r.email,
-            name: r.name,
-            is_active: typeof r.is_active === "boolean" ? r.is_active : null,
-            total: Number(r.total || 0),
-            hourly,
-          };
-        });
-
-        return res
-          .status(200)
-          .json({
-            success: true,
-            date: targetDateStr,
-            items,
-            total: totalCount,
-          });
-      }
-      // if rpcError, fall through to in-memory fallback
-    } catch (rpcCatchErr) {
-      // log and continue to fallback
-      console.error(
-        "RPC qc_hourly_aggregate failed:",
-        rpcCatchErr?.message || rpcCatchErr,
-      );
+    // Nếu filter theo role (role_key)
+    if (role) {
+      userQuery = userQuery.eq("qc_roles.role_key", role);
     }
 
-    // Fallback: in-memory aggregation (legacy)
-    const { data: users, error: usersError } = await supabase
-      .from("qc_users")
-      .select("email, name, is_active");
-
+    const { data: users, error: usersError } = await userQuery;
     if (usersError) throw usersError;
 
-    const userMap = users.reduce((acc, user) => {
-      if (user.email)
-        acc[user.email.toLowerCase()] = {
-          name: user.name || "",
-          is_active: user.is_active,
+    // Tạo map email -> user info (bao gồm role_key, ngưỡng)
+    const userMap = {};
+    users.forEach((u) => {
+      if (u.email) {
+        userMap[u.email.toLowerCase()] = {
+          name: u.name || "",
+          is_active: u.is_active,
+          role_key: u.qc_roles?.role_key || "",
+          display_name: u.qc_roles?.display_name || "",
+          low_threshold: u.qc_productivity_targets?.low_threshold || 10,
+          medium_threshold: u.qc_productivity_targets?.medium_threshold || 16,
         };
-      return acc;
-    }, {});
+      }
+    });
 
-    // 2. Fetch logs for the day (page = 'qc')
-    const { data: logs, error } = await supabase
+    // Áp dụng filter is_active (sau khi đã có user map)
+    let filteredEmails = Object.keys(userMap);
+    if (isActive !== undefined) {
+      const truthy = String(isActive) === "true" || String(isActive) === "1";
+      filteredEmails = filteredEmails.filter(email => {
+        const u = userMap[email];
+        if (u.is_active === null) return truthy ? false : true;
+        return truthy ? !!u.is_active : true;
+      });
+    }
+
+    // Nếu có filter search q, giới hạn emails
+    if (q && q.trim()) {
+      const qlower = q.trim().toLowerCase();
+      filteredEmails = filteredEmails.filter(email => {
+        const u = userMap[email];
+        const name = (u.name || "").toLowerCase();
+        return name.includes(qlower) || email.includes(qlower);
+      });
+    }
+
+    // Lấy logs trong ngày cho các operator còn lại
+    const { data: logs, error: logsError } = await supabase
       .from("qc_logs")
       .select("operator, created_at")
       .eq("page", "qc")
       .gte("created_at", startOfDay)
-      .lte("created_at", endOfDay);
+      .lte("created_at", endOfDay)
+      .in("operator", filteredEmails);
 
-    if (error) throw error;
+    if (logsError) throw logsError;
 
-    // 3. Aggregate in memory (still safe for moderate volumes); result per operator
+    // Aggregate in-memory
     const report = {};
     logs.forEach((log) => {
-      if (!log.operator) return;
-      const email = log.operator.toLowerCase();
-      const dateVN = new Date(
-        new Date(log.created_at).getTime() + 7 * 60 * 60 * 1000,
-      );
+      const email = log.operator?.toLowerCase();
+      if (!email || !userMap[email]) return;  // chỉ giữ lại user có trong danh sách đã lọc
+
+      const dateVN = new Date(new Date(log.created_at).getTime() + 7 * 60 * 60 * 1000);
       const hour = dateVN.getUTCHours();
 
       if (!report[email]) {
         report[email] = {
           email,
-          name: userMap[email]?.name || "",
-          is_active: userMap[email]?.is_active ?? null,
+          name: userMap[email].name,
+          is_active: userMap[email].is_active,
+          role_key: userMap[email].role_key,
+          display_name: userMap[email].display_name,
+          low_threshold: userMap[email].low_threshold,
+          medium_threshold: userMap[email].medium_threshold,
           total: 0,
           hourly: Array(24).fill(0),
         };
       }
-
       report[email].total += 1;
       report[email].hourly[hour] += 1;
     });
 
-    // 4. Convert to array and apply filters
+    // Có thể bổ sung thêm user không có log (total=0) nếu muốn hiển thị
+    // Hiện tại chỉ hiển thị user có ít nhất 1 log; nếu muốn hiển thị tất cả user thoả filter, cần duyệt qua filteredEmails và thêm những email chưa có trong report.
+
     let results = Object.values(report);
 
-    // text search q (name or email)
-    if (q && q.trim()) {
-      const qlower = q.trim().toLowerCase();
-      results = results.filter((r) => {
-        const name = (r.name || "").toLowerCase();
-        const email = (r.email || "").toLowerCase();
-        return name.includes(qlower) || email.includes(qlower);
-      });
-    }
-
-    // isActive filter
-    if (typeof isActive !== "undefined") {
-      const truthy = String(isActive) === "true" || String(isActive) === "1";
-      results = results.filter((r) => {
-        if (r.is_active === null) return truthy ? false : true; // unknown treated as inactive
-        return truthy ? !!r.is_active : true;
-      });
-    }
-
-    // minTotal filter
+    // Lọc theo minTotal
     if (minTotal) {
       const min = Number(minTotal) || 0;
-      results = results.filter((r) => Number(r.total) >= min);
+      results = results.filter(r => r.total >= min);
     }
 
-    // hour range filter: keep users having any count in hourStart..hourEnd
+    // Lọc theo khoảng giờ (chỉ giữ user có ít nhất 1 scan trong khoảng)
     if (hourStart || hourEnd) {
       const hs = Math.max(0, Math.min(23, Number(hourStart) || 0));
       const he = Math.max(0, Math.min(23, Number(hourEnd) || 23));
-      results = results.filter((r) => {
+      results = results.filter(r => {
         const sum = r.hourly.slice(hs, he + 1).reduce((a, b) => a + b, 0);
         return sum > 0;
       });
     }
 
-    // 5. Sorting
+    // Sắp xếp
     const sortKey = String(sortBy || "total");
-    const direction =
-      String(sortDir || "desc").toLowerCase() === "asc" ? 1 : -1;
+    const direction = String(sortDir || "desc").toLowerCase() === "asc" ? 1 : -1;
 
     results.sort((a, b) => {
-      let av, bv;
       if (sortKey === "name") {
-        av = (a.name || a.email || "").toLowerCase();
-        bv = (b.name || b.email || "").toLowerCase();
+        const av = (a.name || a.email || "").toLowerCase();
+        const bv = (b.name || b.email || "").toLowerCase();
         if (av < bv) return -1 * direction;
         if (av > bv) return 1 * direction;
         return 0;
       }
-
-      if (sortKey === "total") {
-        av = Number(a.total) || 0;
-        bv = Number(b.total) || 0;
-        return (av - bv) * direction;
+      if (sortKey === "role") {
+        const av = (a.role_key || "").toLowerCase();
+        const bv = (b.role_key || "").toLowerCase();
+        return av.localeCompare(bv) * direction;
       }
-
+      if (sortKey === "total") {
+        return (Number(a.total) - Number(b.total)) * direction;
+      }
       if (sortKey.startsWith("hour-")) {
         const hr = Number(sortKey.split("-")[1]) || 0;
-        av = Number(a.hourly?.[hr] || 0);
-        bv = Number(b.hourly?.[hr] || 0);
-        return (av - bv) * direction;
+        return (Number(a.hourly[hr] || 0) - Number(b.hourly[hr] || 0)) * direction;
       }
-
       return 0;
     });
 
     const totalCount = results.length;
-
-    // 6. Paginate
-    const start = (pageNum - 1) * pageSize;
-    const end = start + pageSize;
-    const items = results.slice(start, end);
+    const startIdx = (pageNum - 1) * pageSize;
+    const items = results.slice(startIdx, startIdx + pageSize);
 
     return res.status(200).json({
       success: true,
@@ -228,6 +188,7 @@ export default async function handler(req, res) {
       total: totalCount,
     });
   } catch (error) {
+    console.error(error);
     return res.status(500).json({ success: false, error: error.message });
   }
 }

@@ -67,7 +67,7 @@ export default async (req, res) => {
     // Insert bao gồm scan_value và page_start_time
     const insertData = {
       version: logData.version || null,
-      timestamp: logData.timestamp || new Date().toISOString(),
+      created_at: logData.timestamp || new Date().toISOString(),
       page: logData.page || null,
       action: logData.action || null,
       operator: logData.operator || null,

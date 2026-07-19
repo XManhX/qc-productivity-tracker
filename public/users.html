@@ -354,36 +354,68 @@
               <div
                 class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between"
               >
-                <label class="relative flex-1">
-                  <i
-                    data-lucide="search"
-                    class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"
-                  ></i>
+                <!-- Ô tìm kiếm -->
+                <label class="relative flex-1 h-11 flex items-center">
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="24"
+                    height="24"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    class="lucide lucide-search pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"
+                  >
+                    <path d="m21 21-4.34-4.34"></path>
+                    <circle cx="11" cy="11" r="8"></circle>
+                  </svg>
                   <input
                     id="allowed-search"
                     type="text"
                     placeholder="Tìm theo tên hoặc email..."
-                    class="w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-9 pr-3 text-sm text-slate-700 outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
+                    class="w-full h-full rounded-xl border border-slate-200 bg-white pl-9 pr-3 text-sm text-slate-700 outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 leading-none"
                   />
                 </label>
+
+                <!-- Bộ lọc trạng thái + nút xóa -->
                 <div class="flex flex-wrap items-center gap-2">
+                  <!-- Dropdown lọc trạng thái -->
                   <label
-                    class="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600"
+                    class="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 h-11 text-sm text-slate-600"
                   >
-                    <i data-lucide="filter" class="w-4 h-4 text-slate-400"></i>
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      width="24"
+                      height="24"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      class="lucide lucide-filter w-4 h-4 text-slate-400"
+                    >
+                      <path
+                        d="M10 20a1 1 0 0 0 .553.895l2 1A1 1 0 0 0 14 21v-7a2 2 0 0 1 .517-1.341L21.74 4.67A1 1 0 0 0 21 3H3a1 1 0 0 0-.742 1.67l7.225 7.989A2 2 0 0 1 10 14z"
+                      ></path>
+                    </svg>
                     <select
                       id="allowed-status-filter"
-                      class="bg-transparent text-sm font-medium outline-none"
+                      class="bg-transparent text-sm font-medium outline-none h-full"
                     >
                       <option value="all">Tất cả</option>
                       <option value="active">Đang hoạt động</option>
                       <option value="inactive">Tạm khóa</option>
                     </select>
                   </label>
+
+                  <!-- Nút xóa bộ lọc -->
                   <button
                     id="clear-filters-btn"
                     type="button"
-                    class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-600 transition hover:bg-slate-100"
+                    class="rounded-xl border border-slate-200 bg-white px-3 h-11 text-sm font-medium text-slate-600 transition hover:bg-slate-100 flex items-center"
                   >
                     Xóa bộ lọc
                   </button>

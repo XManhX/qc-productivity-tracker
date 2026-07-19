@@ -17,6 +17,7 @@ async function init() {
   await userStore.loadRoles();
   await userStore.loadUsers();
 
+  new NavBar(document.getElementById("nav-container"), "users");
   new UserForm(document.getElementById("single-user-container"));
   new ImportSection(document.getElementById("import-section-container"));
   new UserList(document.getElementById("user-list-container"));

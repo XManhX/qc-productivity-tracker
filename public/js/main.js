@@ -3,6 +3,7 @@ import { FilterBar } from "./components/FilterBar.js";
 import { StatsOverview } from "./components/StatsOverview.js";
 import { HeatmapTable } from "./components/HeatmapTable.js";
 import { Pagination } from "./components/Pagination.js";
+import { NavBar } from "./components/NavBar.js";
 // import { checkAuth, handleAuthToken, isAdmin } from './services/auth.js'; // Bật nếu cần auth
 
 async function init() {
@@ -22,6 +23,7 @@ async function init() {
   await store.loadRoles();
 
   // 3. Khởi tạo các component (chúng tự subscribe store)
+  new NavBar(document.getElementById("nav-container"));
   new FilterBar(document.getElementById("filter-bar-container"));
   new StatsOverview(document.getElementById("stats-overview"));
   new HeatmapTable(document.getElementById("heatmap-table"));

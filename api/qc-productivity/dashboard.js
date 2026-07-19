@@ -1,4 +1,3 @@
-// api/qc-productivity/dashboard.js
 import { createClient } from "@supabase/supabase-js";
 
 const supabase = createClient(
@@ -22,7 +21,7 @@ export default async function handler(req, res) {
       hourStart,
       hourEnd,
       isActive,
-      role,          // mới: lọc theo role_key
+      role,
     } = req.query;
 
     let targetDateStr = date;
@@ -37,18 +36,25 @@ export default async function handler(req, res) {
     const pageNum = Math.max(1, Number(page) || 1);
     const pageSize = Math.min(500, Math.max(1, Number(limit) || 25));
 
-    // ----- Lấy danh sách users kèm role và target -----
+    // --- Lấy users kèm role và target (qua qc_roles -> qc_productivity_targets) ---
     let userQuery = supabase
       .from("qc_users")
       .select(`
-        email, name, is_active,
-        qc_roles ( role_key, display_name ),
-        qc_productivity_targets ( low_threshold, medium_threshold )
+        email,
+        name,
+        is_active,
+        qc_roles (
+          role_key,
+          display_name,
+          qc_productivity_targets (
+            low_threshold,
+            medium_threshold
+          )
+        )
       `)
-      .eq("qc_roles.is_active", true)  // chỉ lấy role đang active
       .order("email");
 
-    // Nếu filter theo role (role_key)
+    // Lọc theo role_key (nếu có)
     if (role) {
       userQuery = userQuery.eq("qc_roles.role_key", role);
     }
@@ -56,43 +62,47 @@ export default async function handler(req, res) {
     const { data: users, error: usersError } = await userQuery;
     if (usersError) throw usersError;
 
-    // Tạo map email -> user info (bao gồm role_key, ngưỡng)
+    // Map email -> user info
     const userMap = {};
     users.forEach((u) => {
-      if (u.email) {
-        userMap[u.email.toLowerCase()] = {
-          name: u.name || "",
-          is_active: u.is_active,
-          role_key: u.qc_roles?.role_key || "",
-          display_name: u.qc_roles?.display_name || "",
-          low_threshold: u.qc_productivity_targets?.low_threshold || 10,
-          medium_threshold: u.qc_productivity_targets?.medium_threshold || 16,
-        };
-      }
+      if (!u.email) return;
+      const roleData = u.qc_roles;
+      // qc_productivity_targets là mảng, lấy phần tử đầu (giả sử 1 role có 1 target)
+      const targets = roleData?.qc_productivity_targets || [];
+      const target = targets.length > 0 ? targets[0] : {};
+
+      userMap[u.email.toLowerCase()] = {
+        name: u.name || "",
+        is_active: u.is_active,
+        role_key: roleData?.role_key || "",
+        display_name: roleData?.display_name || "",
+        low_threshold: target.low_threshold || 10,
+        medium_threshold: target.medium_threshold || 16,
+      };
     });
 
-    // Áp dụng filter is_active (sau khi đã có user map)
+    // Lọc lại theo isActive nếu cần (sau khi đã có map)
     let filteredEmails = Object.keys(userMap);
     if (isActive !== undefined) {
       const truthy = String(isActive) === "true" || String(isActive) === "1";
-      filteredEmails = filteredEmails.filter(email => {
+      filteredEmails = filteredEmails.filter((email) => {
         const u = userMap[email];
         if (u.is_active === null) return truthy ? false : true;
         return truthy ? !!u.is_active : true;
       });
     }
 
-    // Nếu có filter search q, giới hạn emails
+    // Lọc theo text search (nếu có q)
     if (q && q.trim()) {
       const qlower = q.trim().toLowerCase();
-      filteredEmails = filteredEmails.filter(email => {
+      filteredEmails = filteredEmails.filter((email) => {
         const u = userMap[email];
         const name = (u.name || "").toLowerCase();
         return name.includes(qlower) || email.includes(qlower);
       });
     }
 
-    // Lấy logs trong ngày cho các operator còn lại
+    // --- Lấy logs cho các operator đã lọc ---
     const { data: logs, error: logsError } = await supabase
       .from("qc_logs")
       .select("operator, created_at")
@@ -107,7 +117,7 @@ export default async function handler(req, res) {
     const report = {};
     logs.forEach((log) => {
       const email = log.operator?.toLowerCase();
-      if (!email || !userMap[email]) return;  // chỉ giữ lại user có trong danh sách đã lọc
+      if (!email || !userMap[email]) return;
 
       const dateVN = new Date(new Date(log.created_at).getTime() + 7 * 60 * 60 * 1000);
       const hour = dateVN.getUTCHours();
@@ -129,22 +139,22 @@ export default async function handler(req, res) {
       report[email].hourly[hour] += 1;
     });
 
-    // Có thể bổ sung thêm user không có log (total=0) nếu muốn hiển thị
-    // Hiện tại chỉ hiển thị user có ít nhất 1 log; nếu muốn hiển thị tất cả user thoả filter, cần duyệt qua filteredEmails và thêm những email chưa có trong report.
+    // Có thể bổ sung user không có log (total=0) nếu muốn hiển thị đầy đủ
+    // (hiện tại bỏ qua, chỉ hiện user có ít nhất 1 log)
 
     let results = Object.values(report);
 
-    // Lọc theo minTotal
+    // Lọc minTotal
     if (minTotal) {
       const min = Number(minTotal) || 0;
-      results = results.filter(r => r.total >= min);
+      results = results.filter((r) => r.total >= min);
     }
 
-    // Lọc theo khoảng giờ (chỉ giữ user có ít nhất 1 scan trong khoảng)
+    // Lọc khoảng giờ (chỉ giữ user có ít nhất 1 scan trong khoảng)
     if (hourStart || hourEnd) {
       const hs = Math.max(0, Math.min(23, Number(hourStart) || 0));
       const he = Math.max(0, Math.min(23, Number(hourEnd) || 23));
-      results = results.filter(r => {
+      results = results.filter((r) => {
         const sum = r.hourly.slice(hs, he + 1).reduce((a, b) => a + b, 0);
         return sum > 0;
       });
@@ -158,9 +168,7 @@ export default async function handler(req, res) {
       if (sortKey === "name") {
         const av = (a.name || a.email || "").toLowerCase();
         const bv = (b.name || b.email || "").toLowerCase();
-        if (av < bv) return -1 * direction;
-        if (av > bv) return 1 * direction;
-        return 0;
+        return av.localeCompare(bv) * direction;
       }
       if (sortKey === "role") {
         const av = (a.role_key || "").toLowerCase();

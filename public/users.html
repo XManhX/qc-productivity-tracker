@@ -485,15 +485,17 @@
                     ${isActive ? "Active" : "Inactive"}
                   </button>
                 </td>
-                <td class="px-6 py-4 text-right space-x-2">
-                  <button onclick="editUser(${user.id}, '${escapedUserName}', '${userEmail}')" class="inline-flex items-center gap-1.5 px-3 py-1.5 border border-slate-200 hover:bg-slate-100 text-slate-600 rounded-xl text-xs font-semibold transition">
-                    <i data-lucide="edit" class="w-3.5 h-3.5"></i>
-                    Sửa
-                  </button>
-                  <button onclick="deleteUser(${user.id})" class="inline-flex items-center gap-1.5 px-3 py-1.5 border border-rose-200 hover:bg-rose-50 text-rose-600 rounded-xl text-xs font-semibold transition">
-                    <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
-                    Thu hồi
-                  </button>
+                <td class="px-6 py-4 text-right">
+                  <div class="flex flex-wrap justify-end gap-2">
+                    <button onclick="editUser(${user.id}, '${escapedUserName}', '${userEmail}', ${isActive})" class="inline-flex items-center gap-1.5 px-3 py-1.5 border border-slate-200 hover:bg-slate-100 text-slate-600 rounded-xl text-xs font-semibold transition">
+                      <i data-lucide="edit" class="w-3.5 h-3.5"></i>
+                      Sửa
+                    </button>
+                    <button onclick="deleteUser(${user.id})" class="inline-flex items-center gap-1.5 px-3 py-1.5 border border-rose-200 hover:bg-rose-50 text-rose-600 rounded-xl text-xs font-semibold transition">
+                      <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+                      Thu hồi
+                    </button>
+                  </div>
                 </td>
               </tr>
             `;
@@ -878,28 +880,36 @@
       }
 
       // Chuyển sang chế độ edit
-      function editUser(id, name, email) {
+      function editUser(id, name, email, isActive = true) {
         const row = document.getElementById(`user-row-${id}`);
         if (!row) return;
 
         const escapedName = name.replace(/'/g, "&apos;");
 
         row.innerHTML = `
-        <td class="px-6 py-4" colspan="3">
-          <div class="flex items-center gap-4">
-            <input type="text" id="edit-name-${id}" value="${escapedName}" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-sm focus:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition" placeholder="Họ và tên">
-            <input type="email" id="edit-email-${id}" value="${email}" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-sm focus:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition" placeholder="Email">
-          </div>
+        <td class="px-6 py-4">
+          <input type="text" id="edit-name-${id}" value="${escapedName}" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-sm focus:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition" placeholder="Họ và tên">
         </td>
-        <td class="px-6 py-4 text-right space-x-2">
-          <button onclick="saveUser(${id})" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-xs font-semibold transition">
-            <i data-lucide="check" class="w-3.5 h-3.5"></i>
-            Lưu
-          </button>
-          <button onclick="fetchUsers()" class="inline-flex items-center gap-1.5 px-3 py-1.5 border border-slate-200 hover:bg-slate-100 text-slate-600 rounded-xl text-xs font-semibold transition">
-            <i data-lucide="x" class="w-3.5 h-3.5"></i>
-            Hủy
-          </button>
+        <td class="px-6 py-4">
+          <input type="email" id="edit-email-${id}" value="${email}" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-sm focus:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition" placeholder="Email">
+        </td>
+        <td class="px-6 py-4">
+          <select id="edit-status-${id}" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm focus:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition">
+            <option value="true" ${isActive ? "selected" : ""}>Active</option>
+            <option value="false" ${isActive ? "" : "selected"}>Inactive</option>
+          </select>
+        </td>
+        <td class="px-6 py-4 text-right">
+          <div class="flex flex-wrap justify-end gap-2">
+            <button onclick="saveUser(${id})" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-xs font-semibold transition">
+              <i data-lucide="check" class="w-3.5 h-3.5"></i>
+              Lưu
+            </button>
+            <button onclick="fetchUsers()" class="inline-flex items-center gap-1.5 px-3 py-1.5 border border-slate-200 hover:bg-slate-100 text-slate-600 rounded-xl text-xs font-semibold transition">
+              <i data-lucide="x" class="w-3.5 h-3.5"></i>
+              Hủy
+            </button>
+          </div>
         </td>
       `;
         lucide.createIcons();
@@ -933,6 +943,8 @@
       async function saveUser(id) {
         const name = document.getElementById(`edit-name-${id}`).value.trim();
         const email = document.getElementById(`edit-email-${id}`).value.trim();
+        const isActive =
+          document.getElementById(`edit-status-${id}`).value === "true";
 
         if (!email) {
           alert("Email không được để trống!");
@@ -943,7 +955,7 @@
           const res = await fetch("/api/qc-productivity/users", {
             method: "PUT",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ id, name, email }),
+            body: JSON.stringify({ id, name, email, is_active: isActive }),
           });
 
           const data = await res.json();

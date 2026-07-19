@@ -1,32 +1,59 @@
 (function () {
   "use strict";
 
+  // ==================== CONFIGURATION ====================
   const CONFIG = {
     VERSION: "__VERSION__",
     API_BASE_URL: "__API_BASE_URL__",
     AUTH_ENDPOINT: "/api/qc-productivity/authz",
     LOG_ENDPOINT: "/api/qc-productivity/log",
-    DEBUG: true,
+    DEBUG: false, // Set to false in production
     AUTH_CACHE_MS: 5 * 60 * 1000,
+    AUTH_RETRY_MAX: 2,
+    AUTH_RETRY_DELAY_MS: 1000,
     DUPLICATE_WINDOW_MS: 3000,
     EMAIL_CACHE_MS: 5 * 60 * 1000,
+    FLUSH_INTERVAL_MS: 60 * 1000, // Flush pending logs every minute
+    INIT_DEBOUNCE_MS: 500,
+    REQUEST_TIMEOUT_MS: 10000,
   };
 
-  const PAGE_CONFIG = {};
+  // __PAGE_CONFIG__ will be replaced at build time
+  const PAGE_CONFIG = __PAGE_CONFIG__ || {};
 
-  // ==================== BIẾN TOÀN CỤC ====================
-  let fieldTimestamps = {};
-  let pageStartTime = null;
-  let lastScanValue = null;        // để phát hiện scan_value thay đổi
-  let lastUrl = location.href;
-  let observer = null;             // MutationObserver toàn cục
+  // ==================== STATE MANAGEMENT ====================
+  const state = {
+    pageStartTime: null,
+    lastScanValue: null,
+    lastUrl: location.href,
+    observer: null,
+    initPromise: null,
+    flushIntervalId: null,
+    isDestroyed: false,
+  };
 
+  // ==================== UTILITY FUNCTIONS ====================
   const log = (...args) => CONFIG.DEBUG && console.log("[QC Tracker]", ...args);
+  const warn = (...args) => console.warn("[QC Tracker]", ...args);
+  const error = (...args) => console.error("[QC Tracker]", ...args);
+
   const normalize = (s) => (s || "").replace(/\s+/g, " ").trim();
   const nowISO = () => new Date().toISOString();
   const todayKey = () => new Date().toISOString().split("T")[0];
 
-  // ==================== HÀM TIỆN ÍCH ====================
+  const isValidEmail = (email) => {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+  };
+
+  const debounce = (fn, delay) => {
+    let timeoutId;
+    return (...args) => {
+      clearTimeout(timeoutId);
+      timeoutId = setTimeout(() => fn(...args), delay);
+    };
+  };
+
+  // ==================== PAGE DETECTION ====================
   const getPageType = (href) => {
     const entry = Object.entries(PAGE_CONFIG).find(([, cfg]) =>
       href.includes(cfg.pathIncludes),
@@ -36,11 +63,12 @@
 
   const getIdFromUrl = (pageType) => {
     const cfg = PAGE_CONFIG[pageType];
-    if (!cfg || !cfg.urlParam) return "";
+    if (!cfg?.urlParam) return "";
     const params = new URLSearchParams(window.location.search);
     return params.get(cfg.urlParam) || "";
   };
 
+  // ==================== STORAGE HELPERS ====================
   const getStore = (key, fallback = null) => {
     try {
       const v = GM_getValue(key);
@@ -49,12 +77,16 @@
       return fallback;
     }
   };
+
   const setStore = (key, val) => {
     try {
       GM_setValue(key, val);
-    } catch {}
+    } catch (e) {
+      warn("Failed to set store:", key, e);
+    }
   };
 
+  // ==================== HTTP REQUEST ====================
   const gmRequest = (method, url, data = null, headers = {}) =>
     new Promise((resolve, reject) => {
       GM_xmlhttpRequest({
@@ -62,29 +94,46 @@
         url,
         headers: { "Content-Type": "application/json", ...headers },
         data: data ? JSON.stringify(data) : undefined,
+        timeout: CONFIG.REQUEST_TIMEOUT_MS,
         onload: (resp) => {
-          if (resp.status < 200 || resp.status >= 300)
-            return reject(new Error(`HTTP ${resp.status}`));
+          if (resp.status < 200 || resp.status >= 300) {
+            return reject(new Error(`HTTP ${resp.status}: ${resp.statusText}`));
+          }
           try {
-            resolve({
-              status: resp.status,
-              data: JSON.parse(resp.responseText || "{}"),
-            });
-          } catch {
-            reject(new Error("Invalid JSON"));
+            const parsed = JSON.parse(resp.responseText || "{}");
+            resolve({ status: resp.status, data: parsed });
+          } catch (parseError) {
+            warn("Failed to parse response:", resp.responseText);
+            reject(new Error("Invalid JSON response"));
           }
         },
-        onerror: reject,
-        ontimeout: () => reject(new Error("Timeout")),
-        timeout: 10000,
+        onerror: (err) => reject(new Error(`Network error: ${err}`)),
+        ontimeout: () => reject(new Error("Request timeout")),
       });
     });
+
+  const retryRequest = async (fn, maxRetries, delayMs) => {
+    let lastError;
+    for (let i = 0; i <= maxRetries; i++) {
+      try {
+        return await fn();
+      } catch (e) {
+        lastError = e;
+        if (i < maxRetries) {
+          log(`Retry ${i + 1}/${maxRetries} after ${delayMs}ms`);
+          await new Promise((r) => setTimeout(r, delayMs));
+        }
+      }
+    }
+    throw lastError;
+  };
 
   // ==================== WIDGET ====================
   // __WIDGET_CODE__
 
-  // ==================== GET EMAIL ====================
+  // ==================== EMAIL EXTRACTION ====================
   const getEmail = () => {
+    // Try to get from storage first (fresh data)
     try {
       const keys = [
         "user_email",
@@ -97,123 +146,188 @@
       ];
       for (const key of keys) {
         let val = localStorage.getItem(key) || sessionStorage.getItem(key);
-        if (val) {
-          try {
-            const obj = JSON.parse(val);
-            if (obj.email) val = obj.email;
-            else if (obj.user && obj.user.email) val = obj.user.email;
-          } catch {}
-          const email = normalize(val).toLowerCase();
-          if (email) {
-            log("Email from storage (key:", key, "):", email);
-            setStore("user_email", email);
-            setStore("user_email_timestamp", Date.now());
-            return email;
+        if (!val) continue;
+
+        try {
+          const obj = JSON.parse(val);
+          if (typeof obj === "object" && obj !== null) {
+            val = obj.email || obj.user?.email || obj.userEmail || "";
           }
+        } catch {
+          // Keep original string value
+        }
+
+        const email = normalize(String(val)).toLowerCase();
+        if (email && isValidEmail(email)) {
+          log("Email found in storage (key:", key, "):", email);
+          setStore("user_email", email);
+          setStore("user_email_timestamp", Date.now());
+          return email;
         }
       }
-    } catch {}
-
-    let email = getStore("user_email", "");
-    const ts = getStore("user_email_timestamp", 0);
-    if (email && Date.now() - ts < CONFIG.EMAIL_CACHE_MS) {
-      log("Email from GM cache:", email);
-      return email;
+    } catch (e) {
+      warn("Error reading storage:", e);
     }
 
-    log("No email found in storage");
+    // Fallback to cached value with expiry check
+    const cachedEmail = getStore("user_email", "");
+    const cacheTimestamp = getStore("user_email_timestamp", 0);
+
+    if (
+      cachedEmail &&
+      isValidEmail(cachedEmail) &&
+      Date.now() - cacheTimestamp < CONFIG.EMAIL_CACHE_MS
+    ) {
+      log("Email from cache:", cachedEmail);
+      return cachedEmail;
+    }
+
+    warn("No valid email found");
     return "";
   };
 
   // ==================== FIELD EXTRACTION ====================
   const getInputByKeywords = (keywords = []) => {
     for (const kw of keywords) {
+      let input = null;
+
       if (kw.startsWith("#")) {
         const target = document.querySelector(kw);
         if (target) {
-          const input =
+          input =
             target.tagName === "INPUT" || target.tagName === "TEXTAREA"
               ? target
               : target.querySelector("input, textarea");
-          if (input) return normalize(input.value);
         }
       } else {
         const parent = document.querySelector(`[data-for="${kw}"]`);
         if (parent) {
-          const input = parent.querySelector("input, textarea");
-          if (input) return normalize(input.value);
+          input = parent.querySelector("input, textarea");
         }
+      }
+
+      if (input) {
+        const value = normalize(input.value);
+        if (value) return value; // Return first non-empty value
       }
     }
     return "";
   };
 
-  // Reset pageStartTime khi phát hiện scan_value mới
   const setPageStartTimeIfNeeded = (scanValue) => {
-    if (scanValue && scanValue !== lastScanValue) {
-      lastScanValue = scanValue;
-      pageStartTime = nowISO();
-      log("Page start time reset for new scan_value:", pageStartTime);
+    if (scanValue && scanValue !== state.lastScanValue) {
+      state.lastScanValue = scanValue;
+      state.pageStartTime = nowISO();
+      log("Page start time set/reset:", state.pageStartTime, "for scan:", scanValue);
     }
   };
 
   const collectFields = (pageType) => {
     const cfg = PAGE_CONFIG[pageType];
     if (!cfg) return { device_id: "", scan_value: "" };
+
     const result = {};
     Object.entries(cfg.fields).forEach(([field, keywords]) => {
       result[field] = getInputByKeywords(keywords);
     });
 
-    // Nếu không lấy được từ input, thử lấy từ URL
+    // If scan_value not found in inputs, try URL as fallback
     if (!result.scan_value) {
       const idFromUrl = getIdFromUrl(pageType);
       if (idFromUrl) {
         result.scan_value = idFromUrl;
-        log(
-          `${pageType}: scan_value taken from URL (${cfg.urlParam}):`,
-          idFromUrl,
-        );
+        log(`${pageType}: scan_value taken from URL (${cfg.urlParam}):`, idFromUrl);
         setPageStartTimeIfNeeded(idFromUrl);
       }
-    }
-
-    if (result.scan_value) {
+    } else {
       setPageStartTimeIfNeeded(result.scan_value);
     }
 
     return result;
   };
 
-  // ==================== ACTION BUTTON ====================
+  // ==================== ACTION BUTTON DETECTION ====================
   const findActionButton = (text) => {
+    if (!text) return null;
+    const normalizedText = normalize(text).toLowerCase();
     const btns = Array.from(document.querySelectorAll("button"));
     return (
       btns.find(
-        (b) => normalize(b.innerText).toLowerCase() === text.toLowerCase(),
+        (b) => normalize(b.innerText).toLowerCase() === normalizedText,
       ) || null
     );
   };
 
-  // ==================== RECORD ====================
+  // ==================== RECORD MANAGEMENT ====================
   const makeRecord = (pageType, userEmail, page_end_time) => {
     const fields = collectFields(pageType);
+    const cfg = PAGE_CONFIG[pageType] || {};
+
     return {
       version: CONFIG.VERSION,
       page: pageType,
-      action: PAGE_CONFIG[pageType]?.actionText || "",
+      action: normalize(cfg.actionText || ""),
       operator: userEmail,
       url: location.href,
       device_id: fields.device_id || "",
       scan_value: fields.scan_value || "",
-      page_start_time: pageStartTime,
+      page_start_time: state.pageStartTime,
       page_end_time: page_end_time,
     };
   };
 
   const shouldSkip = (record, pageType) => {
+    // Must have scan_value
+    if (!record.scan_value) {
+      log("Skipping: missing scan_value");
+      return true;
+    }
+
+    // Must have page_start_time
+    if (!record.page_start_time) {
+      log("Skipping: missing page_start_time");
+      return true;
+    }
+
+    // Check other required fields
     const required = PAGE_CONFIG[pageType]?.requiredFields || [];
-    return required.some((f) => !record[f]);
+    if (required.some((f) => !record[f])) {
+      log("Skipping: missing required fields");
+      return true;
+    }
+
+    return false;
+  };
+
+  const createFingerprint = (record) => {
+    return [
+      record.page,
+      record.action,
+      record.operator,
+      record.device_id,
+      record.scan_value,
+    ]
+      .map((s) => normalize(String(s)).toLowerCase())
+      .join("|");
+  };
+
+  const isDuplicate = (fingerprint) => {
+    const lastFinger = getStore("qc_last_fingerprint", "");
+    const lastTime = getStore("qc_last_fingerprint_time", 0);
+
+    if (
+      fingerprint === lastFinger &&
+      Date.now() - lastTime < CONFIG.DUPLICATE_WINDOW_MS
+    ) {
+      log("Duplicate detected within window, skipped");
+      return true;
+    }
+    return false;
+  };
+
+  const markFingerprint = (fingerprint) => {
+    setStore("qc_last_fingerprint", fingerprint);
+    setStore("qc_last_fingerprint_time", Date.now());
   };
 
   const sendRecord = async (record) => {
@@ -223,12 +337,17 @@
         CONFIG.API_BASE_URL + CONFIG.LOG_ENDPOINT,
         record,
       );
-      log("Log sent, status:", resp.status);
+      log("Log sent successfully, status:", resp.status);
       return true;
     } catch (e) {
-      log("Send failed, queued:", e);
+      warn("Failed to send log, queuing:", e.message);
       const pending = getStore("qc_pending_logs", []);
       pending.push(record);
+      // Limit queue size to prevent memory issues
+      if (pending.length > 100) {
+        warn("Pending logs queue exceeded 100, removing oldest");
+        pending.shift();
+      }
       setStore("qc_pending_logs", pending);
       return false;
     }
@@ -237,113 +356,170 @@
   const flushPending = async () => {
     const pending = getStore("qc_pending_logs", []);
     if (!pending.length) return;
+
     log(`Flushing ${pending.length} pending logs`);
-    const remain = [];
+    const remaining = [];
     for (const record of pending) {
-      const ok = await sendRecord(record);
-      if (!ok) remain.push(record);
+      try {
+        await gmRequest(
+          "POST",
+          CONFIG.API_BASE_URL + CONFIG.LOG_ENDPOINT,
+          record,
+        );
+        log("Pending log sent successfully");
+      } catch {
+        remaining.push(record);
+      }
     }
-    setStore("qc_pending_logs", remain);
+    setStore("qc_pending_logs", remaining);
+
+    if (remaining.length) {
+      warn(`${remaining.length} logs still pending after flush`);
+    }
   };
 
-  // ==================== AUTHZ ====================
-  const checkAuth = async (email) => {
-    if (!email) return { allowed: false, reason: "missing_email" };
-    const cacheKey = "qc_authz_" + email;
-    const cached = getStore(cacheKey, null);
-    if (cached && cached.expireAt && Date.now() < cached.expireAt) {
-      return cached.value;
-    }
+  const updateDailyStats = (pageType) => {
     try {
-      const resp = await gmRequest(
-        "POST",
-        CONFIG.API_BASE_URL + CONFIG.AUTH_ENDPOINT,
-        { email, page: location.pathname },
-      );
-      const value = {
-        allowed: !!resp?.data?.allowed,
-        reason: resp?.data?.reason || "",
-      };
-      setStore(cacheKey, {
-        expireAt: Date.now() + CONFIG.AUTH_CACHE_MS,
-        value,
-      });
-      return value;
-    } catch {
-      return { allowed: false, reason: "authz_error" };
-    }
-  };
-
-  // ==================== XỬ LÝ HOÀN THÀNH (click nút) ====================
-  const handleActionComplete = async (pageType, userEmail) => {
-    const page_end_time = nowISO(); // lấy thời điểm click
-    const record = makeRecord(pageType, userEmail, page_end_time);
-
-    if (shouldSkip(record, pageType)) {
-      log("Skipped due to missing required fields");
-      return;
-    }
-
-    // Chống trùng lặp
-    const fingerprint = [
-      record.page,
-      record.action,
-      record.operator,
-      record.device_id,
-      record.scan_value,
-    ].join("|");
-    const lastFinger = getStore("qc_last_fingerprint", "");
-    const lastTime = getStore("qc_last_fingerprint_time", 0);
-    if (
-      fingerprint === lastFinger &&
-      Date.now() - lastTime < CONFIG.DUPLICATE_WINDOW_MS
-    ) {
-      log("Duplicate within window, skipped");
-      return;
-    }
-    setStore("qc_last_fingerprint", fingerprint);
-    setStore("qc_last_fingerprint_time", Date.now());
-
-    const ok = await sendRecord(record);
-    if (ok) {
-      fieldTimestamps = {};
-      // Cập nhật thống kê trong ngày
-      const stats = getStore(`stats_${todayKey()}`, {
+      const statsKey = `stats_${todayKey()}`;
+      const stats = getStore(statsKey, {
         qc: 0,
         judgement: 0,
         rimassreceive: 0,
       });
-      if (stats.hasOwnProperty(pageType)) {
+
+      if (Object.prototype.hasOwnProperty.call(stats, pageType)) {
         stats[pageType] += 1;
-        setStore(`stats_${todayKey()}`, stats);
-        updateWidget();
+        setStore(statsKey, stats);
+        if (typeof updateWidget === "function") {
+          updateWidget();
+        }
       }
+    } catch (e) {
+      warn("Failed to update daily stats:", e);
     }
   };
 
-  // ==================== FIELD LISTENERS ====================
+  // ==================== ACTION HANDLER ====================
+  const handleActionComplete = async (pageType, userEmail) => {
+    const page_end_time = nowISO();
+    const record = makeRecord(pageType, userEmail, page_end_time);
+
+    if (shouldSkip(record, pageType)) {
+      log("Record skipped due to validation");
+      return;
+    }
+
+    const fingerprint = createFingerprint(record);
+    if (isDuplicate(fingerprint)) {
+      return;
+    }
+
+    markFingerprint(fingerprint);
+
+    const ok = await sendRecord(record);
+    if (ok) {
+      log("Action completed and recorded successfully");
+      updateDailyStats(pageType);
+    }
+  };
+
+  // ==================== AUTHORIZATION ====================
+  const checkAuth = async (email) => {
+    if (!email || !isValidEmail(email)) {
+      return { allowed: false, reason: "invalid_email" };
+    }
+
+    const cacheKey = `qc_authz_${email}`;
+    const cached = getStore(cacheKey, null);
+
+    // Return cached value if still valid
+    if (cached?.expireAt && Date.now() < cached.expireAt && cached.value) {
+      log("Auth from cache:", cached.value);
+      return cached.value;
+    }
+
+    try {
+      const resp = await retryRequest(
+        () =>
+          gmRequest("POST", CONFIG.API_BASE_URL + CONFIG.AUTH_ENDPOINT, {
+            email,
+            page: location.pathname,
+          }),
+        CONFIG.AUTH_RETRY_MAX,
+        CONFIG.AUTH_RETRY_DELAY_MS,
+      );
+
+      const value = {
+        allowed: Boolean(resp?.data?.allowed),
+        reason: resp?.data?.reason || "",
+      };
+
+      setStore(cacheKey, {
+        expireAt: Date.now() + CONFIG.AUTH_CACHE_MS,
+        value,
+      });
+
+      return value;
+    } catch (e) {
+      warn("Authorization failed after retries:", e.message);
+      // Fallback to cached value even if expired
+      if (cached?.value) {
+        log("Using expired auth cache as fallback");
+        return cached.value;
+      }
+      return { allowed: false, reason: "authz_error" };
+    }
+  };
+
+  // ==================== EVENT LISTENERS SETUP ====================
+  const setupButtonListener = (pageType, email) => {
+    const cfg = PAGE_CONFIG[pageType];
+    if (!cfg?.actionText) return;
+
+    const btn = findActionButton(cfg.actionText);
+    if (!btn || btn.dataset.qcTrackerBound) return;
+
+    btn.dataset.qcTrackerBound = "1";
+    btn.addEventListener(
+      "click",
+      () => {
+        log("Action button clicked:", cfg.actionText);
+        handleActionComplete(pageType, email);
+      },
+      true,
+    );
+    log("Button bound for page:", pageType, "text:", cfg.actionText);
+  };
+
   const setupFieldListeners = (pageType) => {
     const cfg = PAGE_CONFIG[pageType];
-    if (!cfg) return;
+    if (!cfg?.fields) return;
+
     Object.entries(cfg.fields).forEach(([field, keywords]) => {
       for (const kw of keywords) {
         let input = null;
+
         if (kw.startsWith("#")) {
           const target = document.querySelector(kw);
-          if (target)
+          if (target) {
             input =
               target.tagName === "INPUT" || target.tagName === "TEXTAREA"
                 ? target
                 : target.querySelector("input, textarea");
+          }
         } else {
           const parent = document.querySelector(`[data-for="${kw}"]`);
-          if (parent) input = parent.querySelector("input, textarea");
+          if (parent) {
+            input = parent.querySelector("input, textarea");
+          }
         }
-        if (input && !input.dataset.qcTimeBound) {
-          input.dataset.qcTimeBound = "1";
-          input.addEventListener("focus", () => {
-            if (!fieldTimestamps[field]) {
-              fieldTimestamps[field] = nowISO();
+
+        if (input && !input.dataset.qcFieldBound) {
+          input.dataset.qcFieldBound = "1";
+          input.addEventListener("input", () => {
+            const value = normalize(input.value);
+            if (value && field === "scan_value") {
+              setPageStartTimeIfNeeded(value);
             }
           });
         }
@@ -351,129 +527,193 @@
     });
   };
 
-  // ==================== INIT (chính) ====================
-  const init = async () => {
-    log("Initializing...");
-
-    // Dọn dẹp observer cũ nếu có
-    if (observer) {
-      observer.disconnect();
-      observer = null;
-    }
-
-    // Reset các biến liên quan đến phiên làm việc hiện tại
-    pageStartTime = null;
-    lastScanValue = null;
-    fieldTimestamps = {};
-
-    const pageType = getPageType(location.href);
-    if (pageType === "unknown") {
-      log("Unsupported page");
-      return;
-    }
-
-    // Lấy scan_value từ URL (nếu có) để set page start time sớm
-    const initialId = getIdFromUrl(pageType);
-    if (initialId) {
-      setPageStartTimeIfNeeded(initialId);
-    }
-
-    updateWidget();
-
-    const email = getEmail();
-    if (!email) {
-      console.warn("[QC Tracker] No email found in localStorage or cache");
-      return;
-    }
-
-    const auth = await checkAuth(email);
-    if (!auth.allowed) {
-      console.warn("[QC Tracker] Not authorized:", auth.reason);
-      return;
-    }
-
-    await flushPending();
-
-    // Hàm bind sự kiện cho nút actionText
-    const bindButton = () => {
-      const btn = findActionButton(PAGE_CONFIG[pageType]?.actionText);
-      if (btn && !btn.dataset.qcTrackerBound) {
-        btn.dataset.qcTrackerBound = "1";
-        btn.addEventListener(
-          "click",
-          () => {
-            log("Action button clicked, recording completion...");
-            handleActionComplete(pageType, email);
-          },
-          true
-        );
-        log("Button bound for", pageType);
+  // ==================== SPA NAVIGATION DETECTION ====================
+  const setupSPAMonitoring = () => {
+    const debouncedInit = debounce(() => {
+      if (!state.isDestroyed) {
+        init();
       }
-      setupFieldListeners(pageType);
+    }, CONFIG.INIT_DEBOUNCE_MS);
+
+    const handleUrlChange = () => {
+      if (location.href !== state.lastUrl) {
+        state.lastUrl = location.href;
+        log("SPA navigation detected, re-initializing...");
+        debouncedInit();
+      }
     };
 
-    bindButton();
-
-    // Theo dõi DOM để bắt nút xuất hiện muộn (SPA)
-    observer = new MutationObserver(() => {
-      const btn = findActionButton(PAGE_CONFIG[pageType]?.actionText);
-      if (btn && !btn.dataset.qcTrackerBound) {
-        bindButton();
-      }
-    });
-    observer.observe(document.body, { childList: true, subtree: true });
-
-    // Đồng bộ dữ liệu giữa các tab
-    if (typeof GM_addValueChangeListener !== "undefined") {
-      GM_addValueChangeListener((key, oldValue, newValue) => {
-        if (key && key.startsWith("stats_")) {
-          log("Storage changed, updating widget...");
-          updateWidget();
-        }
-      });
-    }
-
-    log("Init complete for pageType:", pageType);
-  };
-
-  // ==================== PHÁT HIỆN CHUYỂN TRANG SPA (KHÔNG POLLING) ====================
-  (function patchHistoryAPI() {
+    // Patch History API
     const originalPushState = history.pushState;
     const originalReplaceState = history.replaceState;
 
-    function triggerUrlChange() {
-      if (location.href !== lastUrl) {
-        lastUrl = location.href;
-        log("SPA navigation detected (History API), re-initializing...");
-        init();
-      }
-    }
-
     history.pushState = function (...args) {
       originalPushState.apply(this, args);
-      triggerUrlChange();
+      handleUrlChange();
     };
 
     history.replaceState = function (...args) {
       originalReplaceState.apply(this, args);
-      triggerUrlChange();
+      handleUrlChange();
     };
 
-    window.addEventListener("popstate", triggerUrlChange);
-  })();
+    window.addEventListener("popstate", handleUrlChange);
+  };
 
-  // ==================== KHỞI ĐỘNG ====================
+  // ==================== STORAGE CHANGE LISTENER ====================
+  const setupStorageListener = () => {
+    if (typeof GM_addValueChangeListener !== "function") {
+      warn("GM_addValueChangeListener not available");
+      return;
+    }
+
+    // Listen for stats changes for today only
+    const statsKey = `stats_${todayKey()}`;
+    try {
+      GM_addValueChangeListener(statsKey, (name, oldValue, newValue) => {
+        log("Storage changed:", name, "updating widget...");
+        if (typeof updateWidget === "function") {
+          updateWidget();
+        }
+      });
+    } catch (e) {
+      warn("Failed to setup storage listener:", e);
+    }
+  };
+
+  // ==================== CLEANUP ====================
+  const cleanup = () => {
+    if (state.observer) {
+      state.observer.disconnect();
+      state.observer = null;
+    }
+
+    if (state.flushIntervalId) {
+      clearInterval(state.flushIntervalId);
+      state.flushIntervalId = null;
+    }
+
+    state.isDestroyed = true;
+  };
+
+  // ==================== INITIALIZATION ====================
+  const init = async () => {
+    // Prevent concurrent initializations
+    if (state.initPromise) {
+      log("Initialization already in progress, waiting...");
+      return state.initPromise;
+    }
+
+    state.initPromise = (async () => {
+      try {
+        log("Starting initialization...");
+
+        // Cleanup previous observers
+        cleanup();
+        state.isDestroyed = false;
+
+        // Reset page-specific state
+        state.pageStartTime = null;
+        state.lastScanValue = null;
+
+        // Detect page type
+        const pageType = getPageType(location.href);
+        if (pageType === "unknown") {
+          log("Unsupported page, initialization skipped");
+          return;
+        }
+
+        log("Page type detected:", pageType);
+
+        // Set initial scan_value from URL if available
+        const initialId = getIdFromUrl(pageType);
+        if (initialId) {
+          setPageStartTimeIfNeeded(initialId);
+        }
+
+        // Update widget if available
+        if (typeof updateWidget === "function") {
+          updateWidget();
+        }
+
+        // Get user email
+        const email = getEmail();
+        if (!email) {
+          warn("No email found, initialization aborted");
+          return;
+        }
+
+        // Check authorization
+        const auth = await checkAuth(email);
+        if (!auth.allowed) {
+          warn("User not authorized:", auth.reason);
+          return;
+        }
+
+        log("Authorization successful");
+
+        // Flush any pending logs from previous sessions
+        await flushPending();
+
+        // Start periodic flush
+        state.flushIntervalId = setInterval(() => {
+          if (!state.isDestroyed) {
+            flushPending().catch((e) => warn("Periodic flush failed:", e));
+          }
+        }, CONFIG.FLUSH_INTERVAL_MS);
+
+        // Setup button and field listeners
+        setupButtonListener(pageType, email);
+        setupFieldListeners(pageType);
+
+        // Setup MutationObserver for dynamic content
+        state.observer = new MutationObserver(
+          debounce(() => {
+            setupButtonListener(pageType, email);
+            setupFieldListeners(pageType);
+          }, 300),
+        );
+
+        state.observer.observe(document.body, {
+          childList: true,
+          subtree: true,
+        });
+
+        // Cleanup on page unload
+        window.addEventListener("beforeunload", cleanup, { once: true });
+
+        log("Initialization complete for page:", pageType);
+      } catch (e) {
+        error("Fatal initialization error:", e);
+      } finally {
+        state.initPromise = null;
+      }
+    })();
+
+    return state.initPromise;
+  };
+
+  // ==================== MAIN ENTRY POINT ====================
   if (
     typeof GM_xmlhttpRequest === "undefined" ||
     typeof GM_setValue === "undefined"
   ) {
-    console.warn("[QC Tracker] Tampermonkey APIs missing");
+    warn("Required Tampermonkey APIs not available");
     return;
   }
 
+  // Setup SPA navigation monitoring
+  setupSPAMonitoring();
+
+  // Setup storage change listener
+  setupStorageListener();
+
+  // Start initialization
   init()
     .then(() => {
-      log("SPA monitoring activated (instant detection via History API)");
+      log("Tracker started successfully");
     })
-    .catch((e) => console.error("[QC Tracker] Fatal:", e));
+    .catch((e) => {
+      error("Failed to start tracker:", e);
+    });
 })();

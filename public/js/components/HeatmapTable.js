@@ -1,10 +1,14 @@
 import { store } from "../store/DashboardStore.js";
 import { refreshIcons } from "../utils/icons.js";
+import { Pagination } from "./Pagination.js";
 
 export class HeatmapTable {
   constructor(container) {
     this.container = container;
     this._renderStructure();
+    this.pagination = new Pagination(
+      this.container.querySelector("#pagination-wrapper"),
+    );
     store.on("update", () => this._renderTable());
   }
 
@@ -33,6 +37,8 @@ export class HeatmapTable {
           <tbody id="dashboard-body" class="divide-y divide-slate-100 text-sm"></tbody>
         </table>
       </div>
+      <!-- Vùng chứa pagination sẽ được Pagination component tự render -->
+      <div id="pagination-wrapper"></div>
     `;
     refreshIcons();
   }

@@ -25,7 +25,6 @@ async function init() {
   new FilterBar(document.getElementById("filter-bar-container"));
   new StatsOverview(document.getElementById("stats-overview"));
   new HeatmapTable(document.getElementById("heatmap-table"));
-  new Pagination(document.getElementById("pagination-container"));
 
   // 4. Load dữ liệu lần đầu
   await store.loadData();

@@ -1,71 +1,184 @@
-// This file contains all the logic for creating, updating, and managing the floating widget.
-// It is injected into the main tracker script at build time.
+// ==================== WIDGET MODULE ====================
+// Injected into main tracker script. Assumes these are available in scope:
+//   getStore(key, fallback)
+//   setStore(key, value)
+//   todayKey()
+//   log, warn (optional)
 
+(function () {
+  // Safety checks – if the host script hasn't provided them, create fallbacks.
+  if (typeof getStore !== "function") {
+    window.getStore = (k, fb) => {
+      try {
+        const v = GM_getValue(k);
+        return v === undefined ? fb : v;
+      } catch {
+        return fb;
+      }
+    };
+  }
+  if (typeof setStore !== "function") {
+    window.setStore = (k, v) => {
+      try {
+        GM_setValue(k, v);
+      } catch {}
+    };
+  }
+  if (typeof todayKey !== "function") {
+    window.todayKey = () => new Date().toISOString().split("T")[0];
+  }
+})();
+
+// ==================== WIDGET CORE ====================
+const widgetState = {
+  isDragging: false,
+  resizeDebounceTimer: null,
+  lastSavedPosition: null,
+  dragStartPos: { top: 0, left: 0 },
+  dragStartMouse: { x: 0, y: 0 },
+  widget: null,
+};
+
+/**
+ * Ensures the widget stays within the viewport.
+ * @param {HTMLElement} el
+ */
 const enforceBounds = (el) => {
   if (!el) return;
   const rect = el.getBoundingClientRect();
-  const vw = window.innerWidth,
-    vh = window.innerHeight;
-  let top = parseFloat(el.style.top) || 0,
-    left = parseFloat(el.style.left) || 0;
-  if (el.style.right !== "auto") {
-    left = vw - rect.width - parseFloat(el.style.right);
-    el.style.left = left + "px";
-    el.style.right = "auto";
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+
+  let top = parseFloat(el.style.top) || 0;
+  let left = parseFloat(el.style.left) || 0;
+
+  // Convert right/bottom positioning to left/top if needed, ignoring 'auto' or invalid
+  if (el.style.right && el.style.right !== "auto") {
+    const rightVal = parseFloat(el.style.right);
+    if (!isNaN(rightVal)) {
+      left = vw - rect.width - rightVal;
+      el.style.left = left + "px";
+      el.style.right = "auto";
+    }
   }
-  if (el.style.bottom !== "auto") {
-    top = vh - rect.height - parseFloat(el.style.bottom);
-    el.style.top = top + "px";
-    el.style.bottom = "auto";
+  if (el.style.bottom && el.style.bottom !== "auto") {
+    const bottomVal = parseFloat(el.style.bottom);
+    if (!isNaN(bottomVal)) {
+      top = vh - rect.height - bottomVal;
+      el.style.top = top + "px";
+      el.style.bottom = "auto";
+    }
   }
+
+  // Clamp values
   top = Math.max(0, Math.min(top, vh - rect.height));
   left = Math.max(0, Math.min(left, vw - rect.width));
+
   el.style.top = top + "px";
   el.style.left = left + "px";
-  setStore("widget_position", { top: top + "px", left: left + "px" });
+
+  // Save only if position actually changed
+  const posKey = `${top},${left}`;
+  if (widgetState.lastSavedPosition !== posKey && !widgetState.isDragging) {
+    widgetState.lastSavedPosition = posKey;
+    setStore("widget_position", { top: top + "px", left: left + "px" });
+  }
 };
 
+/**
+ * Makes the widget draggable via mouse or touch.
+ * @param {HTMLElement} elm - The entire widget container
+ * @param {HTMLElement} header - The drag handle
+ */
 const makeDraggable = (elm, header) => {
-  let p1 = 0,
-    p2 = 0,
-    p3 = 0,
-    p4 = 0;
-  const dragStart = (e) => {
-    e = e || window.event;
+  if (!elm || !header) return;
+
+  // Remove previous listeners if any (to avoid duplicates)
+  if (header._dragHandlers) {
+    header.removeEventListener("mousedown", header._dragHandlers.mouse);
+    header.removeEventListener("touchstart", header._dragHandlers.touch);
+  }
+
+  let start = (e) => {
+    // Prevent dragging when interacting with buttons/inputs inside header
+    if (e.target.tagName === "BUTTON" || e.target.tagName === "INPUT") return;
+
     e.preventDefault();
-    p3 = e.clientX;
-    p4 = e.clientY;
-    document.onmouseup = dragEnd;
-    document.onmousemove = dragMove;
+    widgetState.isDragging = true;
+
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+
+    // Save current widget position and mouse/touch position
+    widgetState.dragStartPos = {
+      top: parseFloat(elm.style.top) || 0,
+      left: parseFloat(elm.style.left) || 0,
+    };
+    widgetState.dragStartMouse = { x: clientX, y: clientY };
+
+    // Attach move/end listeners to document
+    document.addEventListener("mousemove", move);
+    document.addEventListener("mouseup", end);
+    document.addEventListener("touchmove", move, { passive: false });
+    document.addEventListener("touchend", end);
+    document.addEventListener("touchcancel", end);
   };
-  const dragMove = (e) => {
-    e = e || window.event;
+
+  let move = (e) => {
+    if (!widgetState.isDragging) return;
     e.preventDefault();
-    p1 = p3 - e.clientX;
-    p2 = p4 - e.clientY;
-    p3 = e.clientX;
-    p4 = e.clientY;
-    let top = elm.offsetTop - p2,
-      left = elm.offsetLeft - p1;
+
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+
+    const dx = clientX - widgetState.dragStartMouse.x;
+    const dy = clientY - widgetState.dragStartMouse.y;
+
+    let newTop = widgetState.dragStartPos.top + dy;
+    let newLeft = widgetState.dragStartPos.left + dx;
+
+    // Get current dimensions for clamping
     const rect = elm.getBoundingClientRect();
-    const vw = window.innerWidth,
-      vh = window.innerHeight;
-    top = Math.max(0, Math.min(top, vh - rect.height));
-    left = Math.max(0, Math.min(left, vw - rect.width));
-    elm.style.top = top + "px";
-    elm.style.left = left + "px";
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+
+    newTop = Math.max(0, Math.min(newTop, vh - rect.height));
+    newLeft = Math.max(0, Math.min(newLeft, vw - rect.width));
+
+    elm.style.top = newTop + "px";
+    elm.style.left = newLeft + "px";
     elm.style.right = "auto";
     elm.style.bottom = "auto";
   };
-  const dragEnd = () => {
-    document.onmouseup = null;
-    document.onmousemove = null;
-    setStore("widget_position", { top: elm.style.top, left: elm.style.left });
+
+  let end = () => {
+    if (!widgetState.isDragging) return;
+    widgetState.isDragging = false;
+
+    // Save final position
+    const top = elm.style.top;
+    const left = elm.style.left;
+    setStore("widget_position", { top, left });
+    widgetState.lastSavedPosition = `${parseFloat(top) || 0},${parseFloat(left) || 0}`;
+
+    // Remove document listeners
+    document.removeEventListener("mousemove", move);
+    document.removeEventListener("mouseup", end);
+    document.removeEventListener("touchmove", move);
+    document.removeEventListener("touchend", end);
+    document.removeEventListener("touchcancel", end);
   };
-  header.onmousedown = dragStart;
+
+  // Store handlers for potential cleanup
+  header._dragHandlers = { mouse: start, touch: start };
+
+  header.addEventListener("mousedown", start);
+  header.addEventListener("touchstart", start, { passive: false });
 };
 
-// Helper function to create a single statistic line in the widget
+/**
+ * Creates a single statistic line.
+ */
 const createStatLine = (content, label, id, color) => {
   const line = document.createElement("div");
   line.style.cssText =
@@ -83,18 +196,29 @@ const createStatLine = (content, label, id, color) => {
   content.appendChild(line);
 };
 
+/**
+ * Main update function – called by the host script.
+ */
 const updateWidget = () => {
   const stats = getStore(`stats_${todayKey()}`, {
     qc: 0,
     judgement: 0,
     rimassreceive: 0,
   });
+
+  // Sanitise values to numbers
+  const qc = Number(stats.qc) || 0;
+  const judgement = Number(stats.judgement) || 0;
+  const rimassreceive = Number(stats.rimassreceive) || 0;
+
   const defaultPos = { top: "80px", left: "20px" };
   let pos = getStore("widget_position", defaultPos);
   if (!pos || !pos.top || !pos.left) pos = { ...defaultPos };
 
   let widget = document.getElementById("qc-tracker-floating-widget");
+
   if (!widget) {
+    // Create widget
     widget = document.createElement("div");
     widget.id = "qc-tracker-floating-widget";
     widget.style.cssText = `
@@ -108,6 +232,7 @@ const updateWidget = () => {
       font-family: Arial, sans-serif; font-size: 13px;
       user-select: none; border: 1px solid #ff5722;
     `;
+
     const header = document.createElement("div");
     header.id = "qc-tracker-widget-header";
     header.innerText = "📊 NĂNG SUẤT HÔM NAY";
@@ -118,7 +243,6 @@ const updateWidget = () => {
     const content = document.createElement("div");
     content.id = "qc-tracker-widget-content";
 
-    // Use the helper to build the widget content safely
     createStatLine(content, "1. Đã QC:", "qc-tracker-value-qc", "#00e676");
     createStatLine(
       content,
@@ -132,29 +256,51 @@ const updateWidget = () => {
       "qc-tracker-value-rimassreceive",
       "#ffca28",
     );
-    if (content.lastChild) {
-      content.lastChild.style.marginBottom = "0";
-    }
+    // Remove bottom margin of last line
+    if (content.lastChild) content.lastChild.style.marginBottom = "0";
 
     widget.appendChild(content);
     document.body.appendChild(widget);
+
     makeDraggable(widget, header);
     enforceBounds(widget);
+
+    // Attach resize listener
+    const handleResize = () => {
+      if (widgetState.isDragging) return; // don't interfere
+      enforceBounds(widget);
+    };
+    window.addEventListener("resize", handleResize);
+
+    // Clean up when widget is removed (e.g., SPA navigation)
+    const observer = new MutationObserver(() => {
+      if (!document.body.contains(widget)) {
+        window.removeEventListener("resize", handleResize);
+        observer.disconnect();
+      }
+    });
+    observer.observe(document.body, { childList: true });
+
+    // Store reference to widget for later updates
+    widgetState.widget = widget;
   } else {
-    enforceBounds(widget);
+    // Widget already exists, just enforce bounds (non-dragging)
+    if (!widgetState.isDragging) enforceBounds(widget);
   }
 
-  // On every update, just change the textContent of the value elements
-  const qcValueEl = document.getElementById("qc-tracker-value-qc");
-  if (qcValueEl) qcValueEl.textContent = stats.qc;
+  // Update displayed values
+  const qcEl = document.getElementById("qc-tracker-value-qc");
+  if (qcEl) qcEl.textContent = qc;
 
-  const judgementValueEl = document.getElementById(
-    "qc-tracker-value-judgement",
-  );
-  if (judgementValueEl) judgementValueEl.textContent = stats.judgement;
+  const judgeEl = document.getElementById("qc-tracker-value-judgement");
+  if (judgeEl) judgeEl.textContent = judgement;
 
-  const receiveValueEl = document.getElementById(
-    "qc-tracker-value-rimassreceive",
-  );
-  if (receiveValueEl) receiveValueEl.textContent = stats.rimassreceive;
+  const receiveEl = document.getElementById("qc-tracker-value-rimassreceive");
+  if (receiveEl) receiveEl.textContent = rimassreceive;
 };
+
+// Expose updateWidget to the global scope (already in the same IIFE if injected,
+// but ensure it's accessible if needed outside)
+if (typeof window !== "undefined") {
+  window.updateWidget = updateWidget;
+}

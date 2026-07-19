@@ -9,7 +9,7 @@ function generateSessionToken(email) {
   const payload = JSON.stringify({ email, expiresAt });
   const signature = crypto.createHmac('sha256', AUTH_SECRET).update(payload).digest('hex');
   const token = Buffer.from(`${payload}.${signature}`).toString('base64');
-  console.log('[Auth] Generated token for', email, 'using secret (first 4 chars):', AUTH_SECRET.substring(0,4));
+  console.log('[Auth] Generated token for', email, 'using secret (first 4 chars):', AUTH_SECRET.substring(0, 4));
   return token;
 }
 
@@ -35,9 +35,10 @@ export default async (req, res) => {
       return res.status(500).json({ error: "Database configuration missing on server" });
     }
 
-    // Gọi Supabase REST API
+    // Gọi Supabase REST API – chỉ cần biết user có tồn tại và đang active hay không
+    // Dùng select=id để giảm dữ liệu trả về, không cần cột role
     const dbResponse = await fetch(
-      `${SUPABASE_URL}/rest/v1/qc_users?email=eq.${encodeURIComponent(normalizedEmail)}&is_active=eq.true&select=role`,
+      `${SUPABASE_URL}/rest/v1/qc_users?email=eq.${encodeURIComponent(normalizedEmail)}&is_active=eq.true&select=id`,
       {
         method: 'GET',
         headers: {

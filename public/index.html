@@ -107,8 +107,75 @@
                 type="date"
                 id="filter-date"
                 class="bg-transparent border-0 text-slate-700 text-sm font-semibold focus:ring-0 focus:outline-none"
-                onchange="loadDashboardData()"
+                onchange="
+                  currentPage = 1;
+                  loadDashboardData();
+                "
               />
+            </div>
+            <div
+              class="flex items-center bg-white border border-slate-200 rounded-xl px-3 py-2"
+            >
+              <i data-lucide="search" class="w-4 h-4 text-slate-400 mr-2"></i>
+              <input
+                id="filter-q"
+                placeholder="Tìm theo tên hoặc email"
+                class="text-sm focus:outline-none"
+              />
+            </div>
+            <div
+              class="flex items-center bg-white border border-slate-200 rounded-xl px-3 py-2"
+            >
+              <label class="text-sm text-slate-500 mr-2">Min Tổng</label>
+              <input
+                id="filter-min-total"
+                type="number"
+                min="0"
+                placeholder="0"
+                class="w-20 text-sm focus:outline-none"
+              />
+            </div>
+            <div
+              class="flex items-center bg-white border border-slate-200 rounded-xl px-3 py-2"
+            >
+              <label class="text-sm text-slate-500 mr-2">Giờ</label>
+              <input
+                id="filter-hour-start"
+                type="number"
+                min="0"
+                max="23"
+                value="6"
+                class="w-14 text-sm focus:outline-none mr-2"
+              />
+              <span class="text-sm text-slate-400">→</span>
+              <input
+                id="filter-hour-end"
+                type="number"
+                min="0"
+                max="23"
+                value="22"
+                class="w-14 text-sm focus:outline-none ml-2"
+              />
+            </div>
+            <div
+              class="flex items-center bg-white border border-slate-200 rounded-xl px-3 py-2"
+            >
+              <label
+                class="inline-flex items-center gap-2 text-sm text-slate-600"
+                ><input id="filter-active-only" type="checkbox" />
+                <span>Chỉ hiển thị đang active</span></label
+              >
+            </div>
+            <div
+              class="flex items-center bg-white border border-slate-200 rounded-xl px-3 py-2"
+            >
+              <label class="text-sm text-slate-500 mr-2">Hiển thị</label>
+              <select id="filter-page-size" class="text-sm focus:outline-none">
+                <option value="10">10</option>
+                <option value="25" selected>25</option>
+                <option value="50">50</option>
+                <option value="100">100</option>
+              </select>
             </div>
             <button
               id="btn-export"
@@ -270,6 +337,14 @@
             </tbody>
           </table>
         </div>
+        <div
+          class="px-6 py-4 border-t border-slate-100 bg-slate-50 flex items-center justify-between"
+        >
+          <div class="text-sm text-slate-600">
+            Hiển thị <span id="page-info"></span>
+          </div>
+          <div id="pagination-controls" class="flex items-center gap-2"></div>
+        </div>
       </div>
     </main>
 
@@ -289,6 +364,10 @@
         endHour = 22;
       let currentDashboardData = [];
       let sortConfig = { key: "total", direction: "desc" };
+      let currentPage = 1;
+      let pageSize = 25;
+      let totalItems = 0;
+      let debounceTimer = null;
 
       // Hiển thị loading state
       function showLoading() {
@@ -349,6 +428,13 @@
         }
       }
 
+      function debounce(fn, wait = 300) {
+        return (...args) => {
+          clearTimeout(debounceTimer);
+          debounceTimer = setTimeout(() => fn.apply(this, args), wait);
+        };
+      }
+
       function getSortValue(row, key) {
         if (key === "name") {
           return (row.name || row.email || "").toLowerCase();
@@ -366,13 +452,39 @@
         return row[key] ?? "";
       }
 
-      async function loadDashboardData() {
+      async function loadDashboardData(page = 1) {
         const selectedDate = document.getElementById("filter-date").value;
         showLoading();
+        currentPage = page || 1;
 
         try {
+          const q = document.getElementById("filter-q").value || "";
+          const minTotal =
+            document.getElementById("filter-min-total").value || "";
+          const hourStartVal =
+            document.getElementById("filter-hour-start").value || startHour;
+          const hourEndVal =
+            document.getElementById("filter-hour-end").value || endHour;
+          const activeOnly =
+            document.getElementById("filter-active-only").checked;
+          pageSize =
+            Number(document.getElementById("filter-page-size").value) ||
+            pageSize;
+
+          const params = new URLSearchParams();
+          params.append("date", selectedDate);
+          params.append("page", String(currentPage));
+          params.append("limit", String(pageSize));
+          params.append("sortBy", sortConfig.key);
+          params.append("sortDir", sortConfig.direction);
+          if (q) params.append("q", q);
+          if (minTotal) params.append("minTotal", String(minTotal));
+          if (hourStartVal) params.append("hourStart", String(hourStartVal));
+          if (hourEndVal) params.append("hourEnd", String(hourEndVal));
+          if (activeOnly) params.append("isActive", "true");
+
           const res = await fetch(
-            `/api/qc-productivity/dashboard?date=${selectedDate}`,
+            `/api/qc-productivity/dashboard?${params.toString()}`,
           );
 
           if (!res.ok) {
@@ -386,8 +498,10 @@
             throw new Error(data.error || "Dữ liệu không hợp lệ");
           }
 
-          currentDashboardData = data.results;
+          currentDashboardData = data.items || [];
+          totalItems = data.total || 0;
           renderTable();
+          renderPagination();
         } catch (err) {
           showError(`Lỗi kết nối: ${err.message}`);
           updateStats(0, 0, 0);
@@ -400,7 +514,7 @@
         const tbody = document.getElementById("dashboard-body");
         tbody.innerHTML = "";
 
-        // Sort data
+        // Data is already sorted server-side; but keep client-side fallback sorting
         const sortedData = [...currentDashboardData].sort((a, b) => {
           const aValue = getSortValue(a, sortConfig.key);
           const bValue = getSortValue(b, sortConfig.key);
@@ -431,7 +545,7 @@
         let totalActiveHours = 0;
 
         sortedData.forEach((user) => {
-          totalOrders += user.total;
+          totalOrders += Number(user.total || 0);
           let tr = document.createElement("tr");
           tr.className = "hover:bg-slate-50/80 transition duration-150";
 
@@ -451,7 +565,7 @@
           `;
 
           for (let h = startHour; h <= endHour; h++) {
-            const count = user.hourly[h] || 0;
+            const count = Number(user.hourly?.[h] || 0);
             if (count > 0) totalActiveHours++;
             const td = document.createElement("td");
             td.className =
@@ -486,9 +600,10 @@
             sortConfig.direction === "asc" ? "desc" : "asc";
         } else {
           sortConfig.key = key;
-          sortConfig.direction = "desc"; // Default to descending for new column
+          sortConfig.direction = "desc";
         }
-        renderTable();
+        // Request server-side sort
+        loadDashboardData(1);
       }
 
       function updateSortIcons() {
@@ -505,6 +620,50 @@
           }
         });
         lucide.createIcons();
+      }
+
+      function renderPagination() {
+        const controls = document.getElementById("pagination-controls");
+        controls.innerHTML = "";
+        const pageInfo = document.getElementById("page-info");
+        const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
+        pageInfo.innerText = `${Math.min((currentPage - 1) * pageSize + 1, totalItems)} - ${Math.min(currentPage * pageSize, totalItems)} / ${totalItems}`;
+
+        const makeBtn = (label, disabled, onClick) => {
+          const btn = document.createElement("button");
+          btn.className = `px-3 py-1 rounded-md text-sm ${disabled ? "bg-slate-100 text-slate-400" : "bg-white text-slate-700 hover:bg-slate-50 border border-slate-200"}`;
+          btn.innerText = label;
+          if (!disabled) btn.addEventListener("click", onClick);
+          return btn;
+        };
+
+        controls.appendChild(
+          makeBtn("Prev", currentPage <= 1, () =>
+            loadDashboardData(currentPage - 1),
+          ),
+        );
+
+        // simple page range (max 5 pages displayed)
+        const windowSize = 5;
+        let startPage = Math.max(1, currentPage - Math.floor(windowSize / 2));
+        let endPage = Math.min(totalPages, startPage + windowSize - 1);
+        if (endPage - startPage < windowSize - 1)
+          startPage = Math.max(1, endPage - windowSize + 1);
+
+        for (let p = startPage; p <= endPage; p++) {
+          const btn = document.createElement("button");
+          btn.className = `px-3 py-1 rounded-md text-sm ${p === currentPage ? "bg-emerald-600 text-white" : "bg-white text-slate-700 hover:bg-slate-50 border border-slate-200"}`;
+          btn.innerText = String(p);
+          if (p !== currentPage)
+            btn.addEventListener("click", () => loadDashboardData(p));
+          controls.appendChild(btn);
+        }
+
+        controls.appendChild(
+          makeBtn("Next", currentPage >= totalPages, () =>
+            loadDashboardData(currentPage + 1),
+          ),
+        );
       }
 
       function updateStats(total, qcs, avg) {
@@ -557,6 +716,48 @@
         });
       });
       updateSortIcons();
+
+      // Filters
+      const qEl = document.getElementById("filter-q");
+      if (qEl)
+        qEl.addEventListener(
+          "input",
+          debounce(() => {
+            currentPage = 1;
+            loadDashboardData();
+          }, 350),
+        );
+      const minEl = document.getElementById("filter-min-total");
+      if (minEl)
+        minEl.addEventListener("change", () => {
+          currentPage = 1;
+          loadDashboardData();
+        });
+      const hs = document.getElementById("filter-hour-start");
+      const he = document.getElementById("filter-hour-end");
+      if (hs)
+        hs.addEventListener("change", () => {
+          currentPage = 1;
+          loadDashboardData();
+        });
+      if (he)
+        he.addEventListener("change", () => {
+          currentPage = 1;
+          loadDashboardData();
+        });
+      const activeEl = document.getElementById("filter-active-only");
+      if (activeEl)
+        activeEl.addEventListener("change", () => {
+          currentPage = 1;
+          loadDashboardData();
+        });
+      const pgSize = document.getElementById("filter-page-size");
+      if (pgSize)
+        pgSize.addEventListener("change", () => {
+          currentPage = 1;
+          loadDashboardData();
+        });
+
       loadDashboardData();
       lucide.createIcons();
 

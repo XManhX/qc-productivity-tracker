@@ -2,9 +2,10 @@
 (function () {
   "use strict";
 
+  // ==================== CONFIGURATION ====================
   const CONFIG = {
-    VERSION: "__VERSION__",
-    API_BASE_URL: "__API_BASE_URL__",
+    VERSION: "__VERSION__" || "1.0.0",
+    API_BASE_URL: "__API_BASE_URL__" || "http://localhost:3000",
     AUTH_ENDPOINT: "/api/qc-productivity/authz",
     LOG_ENDPOINT: "/api/qc-productivity/log",
     DEBUG: true,
@@ -13,16 +14,49 @@
     EMAIL_CACHE_MS: 5 * 60 * 1000,
   };
 
-  const PAGE_CONFIG = {};
+  // PAGE_CONFIG sẽ được thay thế từ file cấu hình khi build.
+  // Cấu trúc mẫu bên dưới để script hoạt động ngay (có thể ghi đè bằng __PAGE_CONFIG__).
+  const PAGE_CONFIG = __PAGE_CONFIG__ || {
+    qc: {
+      pathIncludes: "/qc",
+      urlParam: "id",
+      actionText: "Submit QC",
+      requiredFields: ["scan_value"],
+      fields: {
+        device_id: ["#deviceId", "data-for=deviceId"],
+        scan_value: ["#scanValue", "data-for=scanValue"],
+      },
+    },
+    judgement: {
+      pathIncludes: "/judgement",
+      urlParam: "caseId",
+      actionText: "Confirm Judged",
+      requiredFields: ["scan_value"],
+      fields: {
+        device_id: ["#deviceId"],
+        scan_value: ["#caseNumber", "data-for=caseNumber"],
+      },
+    },
+    rimassreceive: {
+      pathIncludes: "/rimassreceive",
+      urlParam: "receiveId",
+      actionText: "Receive",
+      requiredFields: ["scan_value"],
+      fields: {
+        device_id: ["#deviceId"],
+        scan_value: ["#receiveScan", "data-for=receiveScan"],
+      },
+    },
+  };
 
-  let fieldTimestamps = {};
-  let pageStartTime = null;
+  let pageStartTime = null; // Không cần fieldTimestamps nữa
 
   const log = (...args) => CONFIG.DEBUG && console.log("[QC Tracker]", ...args);
   const normalize = (s) => (s || "").replace(/\s+/g, " ").trim();
   const nowISO = () => new Date().toISOString();
   const todayKey = () => new Date().toISOString().split("T")[0];
 
+  // ==================== PAGE DETECTION ====================
   const getPageType = (href) => {
     const entry = Object.entries(PAGE_CONFIG).find(([, cfg]) =>
       href.includes(cfg.pathIncludes),
@@ -37,6 +71,7 @@
     return params.get(cfg.urlParam) || "";
   };
 
+  // ==================== GM STORAGE HELPERS ====================
   const getStore = (key, fallback = null) => {
     try {
       const v = GM_getValue(key);
@@ -77,7 +112,28 @@
     });
 
   // ==================== WIDGET ====================
-  // __WIDGET_CODE__
+  // __WIDGET_CODE__ sẽ được thay thế khi build, dưới đây là widget mẫu
+  const widgetCode =
+    __WIDGET_CODE__ ||
+    function () {
+      const container = document.createElement("div");
+      container.id = "qc-tracker-widget";
+      container.style.cssText =
+        "position:fixed;bottom:20px;right:20px;background:#fff;border:1px solid #ccc;padding:10px;z-index:9999;font-size:14px;box-shadow:0 0 10px rgba(0,0,0,0.1)";
+      document.body.appendChild(container);
+      const updateWidget = () => {
+        const stats = getStore(`stats_${todayKey()}`, {
+          qc: 0,
+          judgement: 0,
+          rimassreceive: 0,
+        });
+        container.innerHTML = `<b>QC Tracker</b><br>QC: ${stats.qc}<br>Judgement: ${stats.judgement}<br>RIMASS: ${stats.rimassreceive}`;
+      };
+      updateWidget();
+      window.updateWidget = updateWidget; // để gọi từ bên ngoài
+      return container;
+    };
+  if (!window.updateWidget) widgetCode(); // chỉ tạo widget nếu chưa có
 
   // ==================== GET EMAIL ====================
   const getEmail = () => {
@@ -121,27 +177,31 @@
     return "";
   };
 
-  // ==================== FIELD EXTRACTION ====================
+  // ==================== FIELD EXTRACTION (FIXED) ====================
   const getInputByKeywords = (keywords = []) => {
+    // Duyệt toàn bộ keywords, tìm selector, lấy giá trị không rỗng
     for (const kw of keywords) {
+      let target = null;
       if (kw.startsWith("#")) {
-        const target = document.querySelector(kw);
-        if (target) {
-          const input =
-            target.tagName === "INPUT" || target.tagName === "TEXTAREA"
-              ? target
-              : target.querySelector("input, textarea");
-          if (input) return normalize(input.value);
-        }
+        target = document.querySelector(kw);
       } else {
-        const parent = document.querySelector(`[data-for="${kw}"]`);
-        if (parent) {
-          const input = parent.querySelector("input, textarea");
-          if (input) return normalize(input.value);
+        target = document.querySelector(`[data-for="${kw}"]`);
+      }
+      if (!target) continue;
+
+      const input =
+        target.tagName === "INPUT" || target.tagName === "TEXTAREA"
+          ? target
+          : target.querySelector("input, textarea");
+      if (input) {
+        const val = normalize(input.value);
+        if (val) {
+          log(`Found value for keyword "${kw}":`, val);
+          return val;
         }
       }
     }
-    return "";
+    return ""; // không tìm thấy giá trị nào
   };
 
   const setPageStartTimeIfNeeded = (scanValue) => {
@@ -267,14 +327,15 @@
     }
   };
 
-  // ==================== HANDLE JUDGEMENT ====================
+  // ==================== HANDLE JUDGEMENT (FIXED) ====================
   const handleJudgementAction = (pageType, userEmail) => {
-    const record = makeRecord(pageType, userEmail);
+    const record = makeRecord(pageType, userEmail, nowISO()); // end time = now
     if (shouldSkip(record, pageType)) {
       log("Skipped due to missing required fields");
       return;
     }
 
+    // Chống duplicate bằng fingerprint + thời gian, KHÔNG dùng window._qc_sent
     const fingerprint = [
       record.page,
       record.action,
@@ -292,15 +353,13 @@
       return;
     }
 
+    // Hàm thực hiện gửi, không có cờ toàn cục
     const doSend = () => {
-      if (window._qc_sent) return;
-      window._qc_sent = true;
       setStore("qc_last_fingerprint", fingerprint);
       setStore("qc_last_fingerprint_time", Date.now());
 
       sendRecord(record).then((ok) => {
         if (ok) {
-          fieldTimestamps = {};
           const stats = getStore(`stats_${todayKey()}`, {
             qc: 0,
             judgement: 0,
@@ -309,12 +368,13 @@
           if (stats.hasOwnProperty(pageType)) {
             stats[pageType] += 1;
             setStore(`stats_${todayKey()}`, stats);
-            updateWidget();
+            if (typeof updateWidget === "function") updateWidget();
           }
         }
       });
     };
 
+    // Xử lý popup xác nhận
     let confirmBtn = document.querySelector(
       ".ssc-message-box-footer-primary .ssc-btn-type-primary",
     );
@@ -324,8 +384,12 @@
     ) {
       confirmBtn.addEventListener("click", doSend, { once: true });
       log("Popup Confirm found, waiting for click...");
+      // Nếu không click sau 5s vẫn gửi (như yêu cầu cũ), có thể giữ lại
       setTimeout(() => {
-        if (!window._qc_sent) {
+        // Kiểm tra xem đã gửi chưa? Có thể kiểm tra qua timestamp thay đổi?
+        const lastSent = getStore("qc_last_fingerprint_time", 0);
+        if (lastSent < Date.now() - 100) {
+          // chưa gửi trong 0.1s -> tự gửi
           log("Popup Confirm not clicked after timeout, sending anyway.");
           doSend();
         }
@@ -333,6 +397,7 @@
       return;
     }
 
+    // Nếu chưa thấy popup, dùng observer đợi
     log("Waiting for popup Confirm...");
     const observer = new MutationObserver(() => {
       confirmBtn = document.querySelector(
@@ -346,7 +411,9 @@
         observer.disconnect();
         log("Popup Confirm detected and listener attached.");
         setTimeout(() => {
-          if (!window._qc_sent) {
+          // tương tự, nếu không click sau 5s
+          const lastSent = getStore("qc_last_fingerprint_time", 0);
+          if (lastSent < Date.now() - 100) {
             log("Popup Confirm not clicked after timeout, sending anyway.");
             doSend();
           }
@@ -355,9 +422,11 @@
     });
     observer.observe(document.body, { childList: true, subtree: true });
 
+    // Fallback sau 10s nếu không tìm thấy popup
     setTimeout(() => {
       observer.disconnect();
-      if (!window._qc_sent) {
+      const lastSent = getStore("qc_last_fingerprint_time", 0);
+      if (lastSent < Date.now() - 100) {
         log("Popup Confirm not appeared, sending anyway.");
         doSend();
       }
@@ -366,7 +435,7 @@
 
   // ==================== HANDLE DIRECT ACTION ====================
   const handleDirectAction = async (pageType, userEmail) => {
-    const record = makeRecord(pageType, userEmail);
+    const record = makeRecord(pageType, userEmail, nowISO());
     if (shouldSkip(record, pageType)) {
       log("Skipped due to missing required fields");
       return;
@@ -393,7 +462,6 @@
 
     const ok = await sendRecord(record);
     if (ok) {
-      fieldTimestamps = {};
       const stats = getStore(`stats_${todayKey()}`, {
         qc: 0,
         judgement: 0,
@@ -402,39 +470,9 @@
       if (stats.hasOwnProperty(pageType)) {
         stats[pageType] += 1;
         setStore(`stats_${todayKey()}`, stats);
-        updateWidget();
+        if (typeof updateWidget === "function") updateWidget();
       }
     }
-  };
-
-  // ==================== FIELD LISTENERS ====================
-  const setupFieldListeners = (pageType) => {
-    const cfg = PAGE_CONFIG[pageType];
-    if (!cfg) return;
-    Object.entries(cfg.fields).forEach(([field, keywords]) => {
-      for (const kw of keywords) {
-        let input = null;
-        if (kw.startsWith("#")) {
-          const target = document.querySelector(kw);
-          if (target)
-            input =
-              target.tagName === "INPUT" || target.tagName === "TEXTAREA"
-                ? target
-                : target.querySelector("input, textarea");
-        } else {
-          const parent = document.querySelector(`[data-for="${kw}"]`);
-          if (parent) input = parent.querySelector("input, textarea");
-        }
-        if (input && !input.dataset.qcTimeBound) {
-          input.dataset.qcTimeBound = "1";
-          input.addEventListener("focus", () => {
-            if (!fieldTimestamps[field]) {
-              fieldTimestamps[field] = nowISO();
-            }
-          });
-        }
-      }
-    });
   };
 
   // ==================== INIT ====================
@@ -443,7 +481,7 @@
 
     const pageType = getPageType(location.href);
     if (pageType === "unknown") {
-      log("Unsupported page");
+      log("Unsupported page, PAGE_CONFIG:", PAGE_CONFIG);
       return;
     }
 
@@ -452,7 +490,8 @@
       setPageStartTimeIfNeeded(initialId);
     }
 
-    updateWidget();
+    // Widget đã được tạo ở trên (nếu chưa có)
+    if (typeof updateWidget === "function") updateWidget();
 
     const email = getEmail();
     if (!email) {
@@ -493,7 +532,7 @@
         }
         log("Button bound for", pageType);
       }
-      setupFieldListeners(pageType);
+      // Không cần setupFieldListeners nữa
     };
 
     bindButton();
@@ -506,12 +545,12 @@
     });
     observer.observe(document.body, { childList: true, subtree: true });
 
-    // ===== ĐỒNG BỘ DỮ LIỆU GIỮA CÁC TAB =====
+    // Đồng bộ dữ liệu giữa các tab
     if (typeof GM_addValueChangeListener !== "undefined") {
       GM_addValueChangeListener((key, oldValue, newValue) => {
         if (key && key.startsWith("stats_")) {
           log("Storage changed, updating widget...");
-          updateWidget();
+          if (typeof updateWidget === "function") updateWidget();
         }
       });
     }

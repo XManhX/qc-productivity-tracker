@@ -30,54 +30,63 @@ export default async function handler(req, res) {
   }
 
   try {
-    // 1. Đổi code lấy access token
-    console.log('[Callback] Đang đổi code lấy token...');
-    const tokenRes = await fetch('https://api.seatalk.io/open/auth/token', {
+    // 1. Lấy App Access Token (theo tài liệu mới)
+    console.log('[Callback] Đang lấy app access token...');
+    const tokenRes = await fetch('https://openapi.seatalk.io/auth/app_access_token', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         app_id: SEATALK_APP_ID,
         app_secret: SEATALK_APP_SECRET,
-        code,
       }),
     });
 
     if (!tokenRes.ok) {
       const errText = await tokenRes.text();
-      console.error('[Callback] Lỗi đổi token:', tokenRes.status, errText);
+      console.error('[Callback] Lỗi lấy app access token:', tokenRes.status, errText);
       return res.redirect('/login.html?error=token_exchange_failed');
     }
 
     const tokenData = await tokenRes.json();
-    console.log('[Callback] Token response:', JSON.stringify(tokenData).substring(0, 200));
+    console.log('[Callback] App token response:', JSON.stringify(tokenData).substring(0, 200));
 
-    if (!tokenData.access_token) {
-      console.error('[Callback] Không có access_token trong response');
+    // Kiểm tra response thành công (code == 0)
+    if (tokenData.code !== 0 || !tokenData.app_access_token) {
+      console.error('[Callback] App access token không hợp lệ:', tokenData);
       return res.redirect('/login.html?error=token_exchange_failed');
     }
 
-    // 2. Lấy thông tin user
-    console.log('[Callback] Đang lấy profile...');
-    const profileRes = await fetch('https://api.seatalk.io/open/auth/user/profile', {
-      headers: { 'Authorization': `Bearer ${tokenData.access_token}` },
-    });
+    const appAccessToken = tokenData.app_access_token;
+
+    // 2. Đổi code lấy thông tin employee (code2employee)
+    console.log('[Callback] Đang lấy thông tin employee...');
+    const profileRes = await fetch(
+      `https://openapi.seatalk.io/open_login/code2employee?code=${encodeURIComponent(code)}`,
+      {
+        headers: {
+          'Authorization': `Bearer ${appAccessToken}`,
+        },
+      }
+    );
 
     if (!profileRes.ok) {
       const errText = await profileRes.text();
-      console.error('[Callback] Lỗi lấy profile:', profileRes.status, errText);
+      console.error('[Callback] Lỗi code2employee:', profileRes.status, errText);
       return res.redirect('/login.html?error=profile_fetch_failed');
     }
 
-    const profile = await profileRes.json();
-    console.log('[Callback] Profile:', JSON.stringify(profile).substring(0, 200));
+    const profileData = await profileRes.json();
+    console.log('[Callback] Employee info:', JSON.stringify(profileData).substring(0, 200));
 
-    const email = (profile.email || '').toLowerCase().trim();
-    if (!email) {
-      console.error('[Callback] Profile không có email');
+    // Kiểm tra code == 0 và có email
+    if (profileData.code !== 0 || !profileData.employee?.email) {
+      console.error('[Callback] Thiếu email hoặc lỗi code2employee:', profileData);
       return res.redirect('/login.html?error=profile_fetch_failed');
     }
 
-    // 3. Kiểm tra user trong database
+    const email = profileData.employee.email.toLowerCase().trim();
+
+    // 3. Kiểm tra user trong database (giữ nguyên)
     console.log('[Callback] Kiểm tra user trong DB:', email);
     const dbRes = await fetch(
       `${SUPABASE_URL}/rest/v1/qc_users?email=eq.${encodeURIComponent(email)}&is_active=eq.true&select=id`,
@@ -101,7 +110,7 @@ export default async function handler(req, res) {
       return res.redirect('/login.html?error=unauthorized');
     }
 
-    // 4. Tạo session token
+    // 4. Tạo session token (giữ nguyên)
     const payload = JSON.stringify({ email, exp: Date.now() + 24 * 60 * 60 * 1000 });
     const signature = crypto.createHmac('sha256', AUTH_SECRET).update(payload).digest('hex');
     const token = Buffer.from(`${payload}.${signature}`).toString('base64url');

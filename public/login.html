@@ -14,8 +14,7 @@
     /* Đảm bảo font cho button do SDK tạo */
     #seatalk_login_button,
     #seatalk_login_button * {
-      font-family: 'Inter', sans-serif !important;
-      font-weight: 500 !important;
+      font-family: 'Inter', sans-serif;
     }
     .loader {
       border: 3px solid #f3f3f3;
@@ -80,7 +79,7 @@
 
       function showLoading(show) {
         loadingEl.style.display = show ? 'flex' : 'none';
-        buttonEl.style.display = show ? 'none' : 'block';
+        buttonEl.style.display = show ? 'none' : 'inline-flex';
         appInfoEl.style.display = show ? 'none' : 'block';
       }
 

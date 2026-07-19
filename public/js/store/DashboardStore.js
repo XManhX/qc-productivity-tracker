@@ -32,6 +32,22 @@ class DashboardStore {
     this.listeners.forEach((cb) => cb());
   }
 
+  // ========== Computed (đồng bộ với UserStore) ==========
+  get items() {
+    return this.state.data;
+  }
+
+  get totalItems() {
+    return this.state.total;
+  }
+
+  get totalPages() {
+    return Math.max(
+      1,
+      Math.ceil(this.state.total / Number(this.state.filters.pageSize)),
+    );
+  }
+
   getTodayVN() {
     const now = new Date(new Date().getTime() + 7 * 60 * 60 * 1000);
     return now.toISOString().split("T")[0];
@@ -127,7 +143,6 @@ class DashboardStore {
 
   setFilters(partial) {
     Object.assign(this.state.filters, partial);
-    // Reset page về 1 trừ khi page được set rõ ràng
     if (!("page" in partial)) this.state.filters.page = 1;
     this.updateURL();
     this.loadData();

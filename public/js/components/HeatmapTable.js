@@ -8,19 +8,11 @@ export class HeatmapTable {
     this._renderStructure();
     this.pagination = new Pagination(
       this.container.querySelector("#pagination-wrapper"),
+      store,
       {
-        page: store.state.filters.page,
-        totalPages: Math.max(
-          1,
-          Math.ceil(store.state.total / Number(store.state.filters.pageSize)),
-        ),
-        totalItems: store.state.total,
-        pageSize: Number(store.state.filters.pageSize),
+        showPageSizeDropdown: true,
         pageSizeOptions: [10, 25, 50, 100],
-        onPageChange: (newPage) => store.setPage(newPage),
-        onPageSizeChange: (newSize) =>
-          store.setFilters({ pageSize: String(newSize), page: 1 }),
-        windowSize: 5, // phân trang dạng cửa sổ
+        windowSize: 5,
       },
     );
 

@@ -9,15 +9,15 @@ import {
 class UserStore {
   constructor() {
     this.state = {
-      users: [],
+      users: [], // dữ liệu gốc từ API
       roles: [],
       filters: {
         searchQuery: "",
         statusFilter: "all", // 'all' | 'active' | 'inactive'
         roleFilter: "",
+        page: 1,
+        pageSize: 8,
       },
-      currentPage: 1,
-      pageSize: 25,
       loading: false,
       error: null,
     };
@@ -32,33 +32,25 @@ class UserStore {
     this.listeners.forEach((cb) => cb());
   }
 
-  async loadRoles() {
-    try {
-      const roles = await fetchRoles();
-      this.state.roles = roles;
-      this.notify();
-    } catch (e) {
-      console.error("Load roles error:", e);
-    }
+  // ========== Computed (giờ đây có getter giống Dashboard) ==========
+  get items() {
+    // Dữ liệu đã được phân trang để hiển thị
+    return this.pagedUsers;
   }
 
-  async loadUsers() {
-    this.state.loading = true;
-    this.state.error = null;
-    this.notify();
-    try {
-      const users = await fetchUsers();
-      this.state.users = users;
-      this.state.currentPage = 1;
-    } catch (err) {
-      this.state.error = err.message;
-    } finally {
-      this.state.loading = false;
-      this.notify();
-    }
+  get totalItems() {
+    // Tổng số bản ghi sau khi lọc
+    return this.filteredUsers.length;
   }
 
-  // ====== Computed ======
+  get totalPages() {
+    return Math.max(
+      1,
+      Math.ceil(this.totalItems / this.state.filters.pageSize),
+    );
+  }
+
+  // Giữ nguyên các getter cũ (dùng nội bộ)
   get filteredUsers() {
     const { users, filters } = this.state;
     const q = filters.searchQuery.toLowerCase().trim();
@@ -79,26 +71,46 @@ class UserStore {
   }
 
   get pagedUsers() {
-    const start = (this.state.currentPage - 1) * this.state.pageSize;
-    return this.filteredUsers.slice(start, start + this.state.pageSize);
+    const start = (this.state.filters.page - 1) * this.state.filters.pageSize;
+    return this.filteredUsers.slice(start, start + this.state.filters.pageSize);
   }
 
-  get totalFiltered() {
-    return this.filteredUsers.length;
-  }
-  get totalPages() {
-    return Math.max(1, Math.ceil(this.totalFiltered / this.state.pageSize));
+  // ========== Actions ==========
+  async loadRoles() {
+    try {
+      const roles = await fetchRoles();
+      this.state.roles = roles;
+      this.notify();
+    } catch (e) {
+      console.error("Load roles error:", e);
+    }
   }
 
-  // ====== Actions ======
+  async loadUsers() {
+    this.state.loading = true;
+    this.state.error = null;
+    this.notify();
+    try {
+      const users = await fetchUsers();
+      this.state.users = users;
+      this.state.filters.page = 1; // reset về trang 1
+    } catch (err) {
+      this.state.error = err.message;
+    } finally {
+      this.state.loading = false;
+      this.notify();
+    }
+  }
+
   setFilters(partial) {
     Object.assign(this.state.filters, partial);
-    this.state.currentPage = 1;
+    if (!("page" in partial)) this.state.filters.page = 1; // reset về trang 1 trừ khi set page rõ ràng
     this.notify();
   }
 
   setPage(page) {
-    this.state.currentPage = page;
+    if (page === this.state.filters.page) return;
+    this.state.filters.page = page;
     this.notify();
   }
 
@@ -115,7 +127,7 @@ class UserStore {
   async updateUser(id, updates) {
     try {
       await updateUser({ id, ...updates });
-      // Cập nhật cục bộ để không phải load lại toàn bộ
+      // Cập nhật cục bộ
       const idx = this.state.users.findIndex((u) => u.id == id);
       if (idx !== -1) {
         Object.assign(this.state.users[idx], updates);
@@ -167,8 +179,9 @@ class UserStore {
       searchQuery: "",
       statusFilter: "all",
       roleFilter: "",
+      page: 1,
+      pageSize: 8,
     };
-    this.state.currentPage = 1;
     this.notify();
   }
 }

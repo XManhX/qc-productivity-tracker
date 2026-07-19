@@ -1,7 +1,7 @@
 import { userStore } from "../store/UserStore.js";
 import { escapeHtml } from "../utils/escapeHtml.js";
 import { showToast } from "../utils/toast.js";
-import { Pagination } from "./Pagination.js"; // dùng chung
+import { Pagination } from "./Pagination.js";
 
 export class UserList {
   constructor(container) {
@@ -12,13 +12,8 @@ export class UserList {
     // Khởi tạo Pagination chung (không có dropdown page size)
     this.pagination = new Pagination(
       this.container.querySelector("#pagination-wrapper"),
-      {
-        page: userStore.state.currentPage,
-        totalPages: userStore.totalPages,
-        totalItems: userStore.totalFiltered,
-        onPageChange: (newPage) => userStore.setPage(newPage),
-        windowSize: 5,
-      },
+      userStore,
+      { showPageSizeDropdown: false, windowSize: 5 },
     );
 
     userStore.on("update", () => {

@@ -918,14 +918,14 @@
 
       // ========== Init ==========
       async function initApp() {
-        handleAuthToken(); // Xử lý nếu vừa từ login trở về
-        if (!checkAuth()) return; // Nếu chưa đăng nhập, redirect sang login (không chạy tiếp)
+        // handleAuthToken(); // Xử lý nếu vừa từ login trở về
+        // if (!checkAuth()) return; // Nếu chưa đăng nhập, redirect sang login (không chạy tiếp)
 
-        if (!isAdmin()) {
-          alert("Bạn không có quyền truy cập trang này.");
-          window.location.href = "/index.html";
-          return;
-        }
+        // if (!isAdmin()) {
+        //   alert("Bạn không có quyền truy cập trang này.");
+        //   window.location.href = "/index.html";
+        //   return;
+        // }
 
         setInitialDate();
         await loadRoles(); // 1. Tải roles

@@ -218,7 +218,12 @@
     if (scanValue && scanValue !== state.lastScanValue) {
       state.lastScanValue = scanValue;
       state.pageStartTime = nowISO();
-      log("Page start time set/reset:", state.pageStartTime, "for scan:", scanValue);
+      log(
+        "Page start time set/reset:",
+        state.pageStartTime,
+        "for scan:",
+        scanValue,
+      );
     }
   };
 
@@ -236,7 +241,10 @@
       const idFromUrl = getIdFromUrl(pageType);
       if (idFromUrl) {
         result.scan_value = idFromUrl;
-        log(`${pageType}: scan_value taken from URL (${cfg.urlParam}):`, idFromUrl);
+        log(
+          `${pageType}: scan_value taken from URL (${cfg.urlParam}):`,
+          idFromUrl,
+        );
         setPageStartTimeIfNeeded(idFromUrl);
       }
     } else {
@@ -452,6 +460,7 @@
       const value = {
         allowed: Boolean(resp?.data?.allowed),
         reason: resp?.data?.reason || "",
+        widget_visible: resp?.data?.widget_visible !== false,
       };
 
       setStore(cacheKey, {
@@ -640,11 +649,19 @@
         const email = getEmail();
         if (!email) {
           warn("No email found, initialization aborted");
+          localStorage.setItem("widget_visible", "false");
+          if (typeof updateWidget === "function") updateWidget();
           return;
         }
 
         // Check authorization
         const auth = await checkAuth(email);
+
+        localStorage.setItem(
+          "widget_visible",
+          auth.widget_visible ? "true" : "false",
+        );
+
         if (!auth.allowed) {
           warn("User not authorized:", auth.reason);
           return;

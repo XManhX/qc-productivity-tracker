@@ -200,14 +200,14 @@ const createStatLine = (content, label, id, color) => {
  * Main update function – called by the host script.
  */
 const updateWidget = () => {
-  const widgetVisible = localStorage.getItem('widget_visible');
-  if (widgetVisible === 'false') {
+  const widgetVisible = localStorage.getItem("widget_visible");
+  if (widgetVisible === "false") {
     // Xóa widget nếu đang tồn tại
-    const existing = document.getElementById('qc-tracker-floating-widget');
+    const existing = document.getElementById("qc-tracker-floating-widget");
     if (existing) existing.remove();
     return;
   }
-  
+
   const stats = getStore(`stats_${todayKey()}`, {
     qc: 0,
     judgement: 0,

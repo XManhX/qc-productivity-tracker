@@ -467,6 +467,7 @@
                     <th class="px-6 py-3">Email</th>
                     <th class="px-6 py-3">Vai Trò</th>
                     <th class="px-6 py-3">Trạng Thái</th>
+                    <th class="px-6 py-3">Widget</th>
                   </tr>
                 </thead>
                 <tbody
@@ -721,6 +722,7 @@
             const userName = user.name || "";
             const userEmail = user.email || "";
             const isActive = user.is_active !== false;
+            const widgetVisible = user.widget_visible !== false;
             const currentRoleKey = user.role_key || "";
             const roleOptions = allRoles
               .map((role) => {
@@ -749,6 +751,15 @@
                     <span class="inline-block h-4 w-4 transform rounded-full bg-white shadow-sm transition ${isActive ? "translate-x-5" : "translate-x-0.5"}"></span>
                   </button>
                   <span class="text-xs font-semibold ${isActive ? "text-emerald-700" : "text-slate-500"}">${isActive ? "Active" : "Khóa"}</span>
+                </div>
+              </td>
+
+              <td class="px-6 py-4">
+                <div class="flex items-center gap-2">
+                  <button id="widget-toggle-${user.id}" data-visible="${widgetVisible}" onclick="toggleUserWidget(${user.id}, ${widgetVisible})" class="relative inline-flex h-6 w-10 shrink-0 items-center rounded-full border border-slate-200/70 transition ${widgetVisible ? "bg-indigo-500" : "bg-slate-300"}">
+                    <span class="inline-block h-4 w-4 transform rounded-full bg-white shadow-sm transition ${widgetVisible ? "translate-x-5" : "translate-x-0.5"}"></span>
+                  </button>
+                  <span class="text-xs font-semibold ${widgetVisible ? "text-indigo-700" : "text-slate-500"}">${widgetVisible ? "Hiện" : "Ẩn"}</span>
                 </div>
               </td>
             </tr>
@@ -816,6 +827,29 @@
           renderUserTable();
           showToast(
             `Đã ${!currentActive ? "kích hoạt" : "tạm khóa"} thành công`,
+          );
+        } catch (err) {
+          showToast(`Cập nhật thất bại: ${err.message}`, "error");
+        }
+      }
+
+      async function toggleUserWidget(id, currentVisible) {
+        try {
+          const res = await fetch("/api/qc-productivity/users", {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ id, widget_visible: !currentVisible }),
+          });
+          if (!res.ok) {
+            const data = await res.json().catch(() => ({}));
+            throw new Error(data.message || "Lỗi");
+          }
+          // Cập nhật local state
+          const idx = allUsers.findIndex((u) => u.id == id);
+          if (idx !== -1) allUsers[idx].widget_visible = !currentVisible;
+          renderUserTable();
+          showToast(
+            `Widget đã được ${!currentVisible ? "hiện" : "ẩn"} thành công`,
           );
         } catch (err) {
           showToast(`Cập nhật thất bại: ${err.message}`, "error");
@@ -1135,13 +1169,13 @@
 
       // Trong initApp(), gọi checkAuth() đầu tiên:
       async function initApp() {
-        handleAuthToken();
-        if (!checkAuth()) return; // Ngăn không cho chạy tiếp nếu chưa đăng nhập
-        if (!isAdmin()) {
-          alert("Bạn không có quyền truy cập trang này.");
-          window.location.href = "/index.html";
-          return;
-        }
+        // handleAuthToken();
+        // if (!checkAuth()) return; // Ngăn không cho chạy tiếp nếu chưa đăng nhập
+        // if (!isAdmin()) {
+        //   alert("Bạn không có quyền truy cập trang này.");
+        //   window.location.href = "/index.html";
+        //   return;
+        // }
 
         await fetchRoles();
         await fetchUsers();

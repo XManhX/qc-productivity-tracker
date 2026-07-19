@@ -158,6 +158,3 @@ const updateWidget = () => {
   );
   if (receiveValueEl) receiveValueEl.textContent = stats.rimassreceive;
 };
-
-window.updateWidget = updateWidget;
-updateWidget();

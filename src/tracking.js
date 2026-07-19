@@ -11,15 +11,17 @@ export function createTrackerSource() {
   const widgetPath = path.join(__dirname, "widget.js");
 
   let source = fs.readFileSync(scriptPath, "utf8");
-  let widgetSource = fs.readFileSync(widgetPath, "utf8");
+  const widgetSource = fs.readFileSync(widgetPath, "utf8");
 
-  // Bọc widgetSource trong một hàm để gọi sau
-  const widgetFn = `function() {\n${widgetSource}\n}`;
-  source = source.replace(/__WIDGET_CODE__/g, widgetFn);
+  // Inject widget code
+  source = source.replace("// __WIDGET_CODE__", widgetSource);
 
-  // Chèn PAGE_CONFIG dưới dạng JSON
+  // Inject page config
   const configJson = JSON.stringify(PAGE_CONFIG, null, 2);
-  source = source.replace(/__PAGE_CONFIG__/g, configJson);
+  source = source.replace(
+    /const PAGE_CONFIG = \{\};/,
+    `const PAGE_CONFIG = ${configJson};`,
+  );
 
   return source;
 }

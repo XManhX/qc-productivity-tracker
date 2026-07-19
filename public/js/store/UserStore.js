@@ -17,7 +17,7 @@ class UserStore {
         roleFilter: "",
       },
       currentPage: 1,
-      pageSize: 20,
+      pageSize: 25,
       loading: false,
       error: null,
     };

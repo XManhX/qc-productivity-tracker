@@ -1,13 +1,37 @@
 import { userStore } from "../store/UserStore.js";
 import { escapeHtml } from "../utils/escapeHtml.js";
 import { showToast } from "../utils/toast.js";
+import { Pagination } from "./Pagination.js";
 
 export class UserList {
   constructor(container) {
     this.container = container;
     this._render();
     this._bindEvents();
-    userStore.on("update", () => this._updateView());
+
+    // Khởi tạo Pagination chung (không có pageSize dropdown)
+    this.pagination = new Pagination(
+      this.container.querySelector("#pagination-wrapper"),
+      {
+        page: userStore.state.currentPage,
+        totalPages: userStore.totalPages,
+        totalItems: userStore.totalFiltered,
+        onPageChange: (newPage) => userStore.setPage(newPage),
+        // Không truyền onPageSizeChange -> không có dropdown
+        windowSize: null, // hiển thị tất cả các trang (vì thường ít trang)
+      },
+    );
+
+    userStore.on("update", () => {
+      this._updateView();
+      // Cập nhật pagination
+      this.pagination.refresh({
+        page: userStore.state.currentPage,
+        totalPages: userStore.totalPages,
+        totalItems: userStore.totalFiltered,
+      });
+    });
+
     this._updateView();
   }
 
@@ -60,8 +84,7 @@ export class UserList {
         </table>
       </div>
       <div class="border-t border-slate-100 bg-slate-50 px-4 py-3 flex flex-col sm:flex-row items-center justify-between gap-3">
-        <div id="pagination-info" class="text-xs text-slate-500"></div>
-        <div id="pagination-controls" class="flex items-center gap-2"></div>
+        <div id="pagination-wrapper"></div>
       </div>
     `;
     this._populateRoleFilter();

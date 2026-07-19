@@ -21,116 +21,108 @@ export default async function handler(req, res) {
       hourStart,
       hourEnd,
       isActive,
-      role,
+      role, // role_key
     } = req.query;
 
-    let targetDateStr = date;
-    if (!targetDateStr) {
+    let targetDate = date;
+    if (!targetDate) {
       const nowVN = new Date(new Date().getTime() + 7 * 60 * 60 * 1000);
-      targetDateStr = nowVN.toISOString().split("T")[0];
+      targetDate = nowVN.toISOString().split("T")[0];
     }
-
-    const startOfDay = new Date(`${targetDateStr}T00:00:00+07:00`).toISOString();
-    const endOfDay = new Date(`${targetDateStr}T23:59:59+07:00`).toISOString();
 
     const pageNum = Math.max(1, Number(page) || 1);
     const pageSize = Math.min(500, Math.max(1, Number(limit) || 25));
 
-    // --- Lấy users kèm role và target (qua qc_roles -> qc_productivity_targets) ---
+    // Lấy danh sách user (có filter) cùng role, target
     let userQuery = supabase
       .from("qc_users")
       .select(`
         email,
         name,
         is_active,
-        qc_roles (
+        role_id,
+        qc_roles!inner (
           role_key,
-          display_name,
-          qc_productivity_targets (
-            low_threshold,
-            medium_threshold
-          )
+          display_name
         )
       `)
       .order("email");
 
-    // Lọc theo role_key (nếu có)
     if (role) {
       userQuery = userQuery.eq("qc_roles.role_key", role);
+    }
+    if (isActive !== undefined) {
+      const activeBool = isActive === "true" || isActive === "1";
+      userQuery = userQuery.eq("is_active", activeBool);
+    }
+    // text search
+    if (q && q.trim()) {
+      const searchTerm = `%${q.trim().toLowerCase()}%`;
+      userQuery = userQuery.or(`name.ilike.${searchTerm},email.ilike.${searchTerm}`);
     }
 
     const { data: users, error: usersError } = await userQuery;
     if (usersError) throw usersError;
 
-    // Map email -> user info
-    const userMap = {};
-    users.forEach((u) => {
-      if (!u.email) return;
-      const roleData = u.qc_roles;
-      // qc_productivity_targets là mảng, lấy phần tử đầu (giả sử 1 role có 1 target)
-      const targets = roleData?.qc_productivity_targets || [];
-      const target = targets.length > 0 ? targets[0] : {};
+    if (!users.length) {
+      return res.status(200).json({ success: true, date: targetDate, items: [], total: 0 });
+    }
 
-      userMap[u.email.toLowerCase()] = {
+    const emails = users.map(u => u.email);
+    const userMap = {};
+    for (const u of users) {
+      userMap[u.email] = {
+        email: u.email,
         name: u.name || "",
         is_active: u.is_active,
-        role_key: roleData?.role_key || "",
-        display_name: roleData?.display_name || "",
-        low_threshold: target.low_threshold || 10,
-        medium_threshold: target.medium_threshold || 16,
+        role_key: u.qc_roles.role_key,
+        display_name: u.qc_roles.display_name,
+      };
+    }
+
+    // Lấy target năng suất cho các role xuất hiện
+    const roleKeys = [...new Set(users.map(u => u.qc_roles.role_key))];
+    const { data: rolesData } = await supabase
+      .from("qc_roles")
+      .select("role_key, qc_productivity_targets(low_threshold, medium_threshold)")
+      .in("role_key", roleKeys);
+
+    const targetMap = {};
+    (rolesData || []).forEach(r => {
+      const t = r.qc_productivity_targets?.[0] || {};
+      targetMap[r.role_key] = {
+        low_threshold: t.low_threshold || 10,
+        medium_threshold: t.medium_threshold || 16,
       };
     });
 
-    // Lọc lại theo isActive nếu cần (sau khi đã có map)
-    let filteredEmails = Object.keys(userMap);
-    if (isActive !== undefined) {
-      const truthy = String(isActive) === "true" || String(isActive) === "1";
-      filteredEmails = filteredEmails.filter((email) => {
-        const u = userMap[email];
-        if (u.is_active === null) return truthy ? false : true;
-        return truthy ? !!u.is_active : true;
-      });
-    }
+    // Lấy logs trong ngày cho các operator này
+    const startOfDay = `${targetDate}T00:00:00+07:00`;
+    const endOfDay = `${targetDate}T23:59:59+07:00`;
 
-    // Lọc theo text search (nếu có q)
-    if (q && q.trim()) {
-      const qlower = q.trim().toLowerCase();
-      filteredEmails = filteredEmails.filter((email) => {
-        const u = userMap[email];
-        const name = (u.name || "").toLowerCase();
-        return name.includes(qlower) || email.includes(qlower);
-      });
-    }
-
-    // --- Lấy logs cho các operator đã lọc ---
     const { data: logs, error: logsError } = await supabase
       .from("qc_logs")
       .select("operator, created_at")
       .eq("page", "qc")
       .gte("created_at", startOfDay)
       .lte("created_at", endOfDay)
-      .in("operator", filteredEmails);
+      .in("operator", emails);
 
     if (logsError) throw logsError;
 
-    // Aggregate in-memory
+    // Aggregate hourly
     const report = {};
-    logs.forEach((log) => {
-      const email = log.operator?.toLowerCase();
-      if (!email || !userMap[email]) return;
-
-      const dateVN = new Date(new Date(log.created_at).getTime() + 7 * 60 * 60 * 1000);
-      const hour = dateVN.getUTCHours();
+    logs.forEach(log => {
+      const email = log.operator;
+      if (!userMap[email]) return;
+      const vnDate = new Date(new Date(log.created_at).getTime() + 7 * 60 * 60 * 1000);
+      const hour = vnDate.getUTCHours();
 
       if (!report[email]) {
         report[email] = {
-          email,
-          name: userMap[email].name,
-          is_active: userMap[email].is_active,
-          role_key: userMap[email].role_key,
-          display_name: userMap[email].display_name,
-          low_threshold: userMap[email].low_threshold,
-          medium_threshold: userMap[email].medium_threshold,
+          ...userMap[email],
+          low_threshold: targetMap[userMap[email].role_key]?.low_threshold || 10,
+          medium_threshold: targetMap[userMap[email].role_key]?.medium_threshold || 16,
           total: 0,
           hourly: Array(24).fill(0),
         };
@@ -139,48 +131,50 @@ export default async function handler(req, res) {
       report[email].hourly[hour] += 1;
     });
 
-    // Có thể bổ sung user không có log (total=0) nếu muốn hiển thị đầy đủ
-    // (hiện tại bỏ qua, chỉ hiện user có ít nhất 1 log)
+    // Thêm user không có log (nếu muốn hiển thị total=0)
+    emails.forEach(email => {
+      if (!report[email]) {
+        report[email] = {
+          ...userMap[email],
+          low_threshold: targetMap[userMap[email].role_key]?.low_threshold || 10,
+          medium_threshold: targetMap[userMap[email].role_key]?.medium_threshold || 16,
+          total: 0,
+          hourly: Array(24).fill(0),
+        };
+      }
+    });
 
     let results = Object.values(report);
 
-    // Lọc minTotal
+    // Filter minTotal, hour range
     if (minTotal) {
-      const min = Number(minTotal) || 0;
-      results = results.filter((r) => r.total >= min);
+      const min = Number(minTotal);
+      results = results.filter(r => r.total >= min);
     }
-
-    // Lọc khoảng giờ (chỉ giữ user có ít nhất 1 scan trong khoảng)
     if (hourStart || hourEnd) {
       const hs = Math.max(0, Math.min(23, Number(hourStart) || 0));
       const he = Math.max(0, Math.min(23, Number(hourEnd) || 23));
-      results = results.filter((r) => {
-        const sum = r.hourly.slice(hs, he + 1).reduce((a, b) => a + b, 0);
-        return sum > 0;
-      });
+      results = results.filter(r => r.hourly.slice(hs, he + 1).reduce((a, b) => a + b, 0) > 0);
     }
 
-    // Sắp xếp
-    const sortKey = String(sortBy || "total");
-    const direction = String(sortDir || "desc").toLowerCase() === "asc" ? 1 : -1;
-
+    // Sort
+    const sortKey = sortBy || "total";
+    const direction = sortDir === "asc" ? 1 : -1;
     results.sort((a, b) => {
       if (sortKey === "name") {
-        const av = (a.name || a.email || "").toLowerCase();
-        const bv = (b.name || b.email || "").toLowerCase();
+        const av = (a.name || a.email).toLowerCase();
+        const bv = (b.name || b.email).toLowerCase();
         return av.localeCompare(bv) * direction;
       }
       if (sortKey === "role") {
-        const av = (a.role_key || "").toLowerCase();
-        const bv = (b.role_key || "").toLowerCase();
-        return av.localeCompare(bv) * direction;
+        return (a.role_key || "").localeCompare(b.role_key || "") * direction;
       }
       if (sortKey === "total") {
-        return (Number(a.total) - Number(b.total)) * direction;
+        return (a.total - b.total) * direction;
       }
       if (sortKey.startsWith("hour-")) {
-        const hr = Number(sortKey.split("-")[1]) || 0;
-        return (Number(a.hourly[hr] || 0) - Number(b.hourly[hr] || 0)) * direction;
+        const hr = Number(sortKey.split("-")[1]);
+        return ((a.hourly[hr] || 0) - (b.hourly[hr] || 0)) * direction;
       }
       return 0;
     });
@@ -191,7 +185,7 @@ export default async function handler(req, res) {
 
     return res.status(200).json({
       success: true,
-      date: targetDateStr,
+      date: targetDate,
       items,
       total: totalCount,
     });

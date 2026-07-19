@@ -25,10 +25,34 @@
           transform: rotate(360deg);
         }
       }
+      /* Toast notification */
+      .toast {
+        position: fixed;
+        top: 1rem;
+        right: 1rem;
+        z-index: 1000;
+        min-width: 250px;
+        padding: 1rem;
+        border-radius: 0.75rem;
+        color: white;
+        font-size: 0.875rem;
+        font-weight: 500;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        transform: translateX(120%);
+        transition: transform 0.3s ease;
+      }
+      .toast.show {
+        transform: translateX(0);
+      }
+      .toast.success {
+        background-color: #059669;
+      }
+      .toast.error {
+        background-color: #dc2626;
+      }
     </style>
   </head>
   <body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col">
-    <!-- Navbar -->
     <nav class="bg-slate-900 border-b border-slate-800 sticky top-0 z-50 shadow-md">
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div class="flex items-center justify-between h-16">
@@ -54,7 +78,7 @@
 
     <main class="flex-grow max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
-        <!-- Left column: Add users -->
+        <!-- Left Column: Add User & Import -->
         <div class="lg:col-span-5 space-y-6">
           <div class="bg-white rounded-2xl border border-slate-100 shadow-sm p-6">
             <div class="flex items-center gap-2 mb-4">
@@ -79,23 +103,18 @@
               <div>
                 <label class="block text-xs font-semibold text-slate-600 mb-1">Vai trò (Role)</label>
                 <select id="user-role" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition">
-                  <!-- populated by fetchRoles -->
+                  <!-- Populated by fetchRoles() -->
                 </select>
               </div>
               <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-sm py-2.5 rounded-xl transition shadow-sm">
                 Cấp Quyền Truy Cập
               </button>
-              <div id="single-user-message" class="text-sm hidden"></div>
             </form>
 
-            <!-- Import / Bulk -->
+            <!-- Import / Bulk Add -->
             <div class="border-t border-slate-100 pt-6">
-              <div class="flex items-center justify-between mb-2">
-                <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider">Import từ Excel / CSV</h3>
-              </div>
-              <p class="text-slate-400 text-xs mb-3">
-                Tải file Excel hoặc CSV có cột Email và Họ tên. Hệ thống sẽ đọc và nhập hàng loạt một cách tự động.
-              </p>
+              <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Import từ Excel / CSV</h3>
+              <p class="text-slate-400 text-xs mb-3">Tải file Excel hoặc CSV có cột Email, Họ tên và Role (role_key).</p>
 
               <div id="import-dropzone" class="import-dropzone border-2 border-dashed border-slate-200 rounded-xl p-4 text-center bg-slate-50 transition">
                 <input type="file" id="excel-file" accept=".xlsx,.xls,.csv" class="hidden" />
@@ -119,8 +138,6 @@
                 <label class="text-xs font-semibold text-slate-600">Role mặc định cho import:</label>
                 <select id="import-role" class="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"></select>
               </div>
-
-              <div id="import-message" class="text-sm hidden mt-3"></div>
 
               <div id="import-preview" class="hidden mt-4 border border-slate-200 rounded-xl overflow-hidden">
                 <div class="flex items-center justify-between px-4 py-3 bg-slate-50 border-b border-slate-200">
@@ -148,12 +165,8 @@
               </div>
 
               <div class="mt-6 border-t border-slate-100 pt-6">
-                <div class="flex items-center justify-between mb-2">
-                  <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider">Thêm Hàng Loạt (Bulk Add)</h3>
-                </div>
-                <p class="text-slate-400 text-xs mb-3">
-                  Copy và dán danh sách Email vào bên dưới (Các email phân cách nhau bằng dấu phẩy, dấu cách hoặc xuống dòng).
-                </p>
+                <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Thêm Hàng Loạt (Bulk Add)</h3>
+                <p class="text-slate-400 text-xs mb-3">Copy và dán danh sách Email vào bên dưới (các email phân cách nhau bởi dấu phẩy, dấu cách hoặc xuống dòng).</p>
                 <textarea id="bulk-emails" rows="5" class="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs focus:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition" placeholder="user1@shopee.com, user2@shopee.com&#10;user3@shopee.com"></textarea>
                 <div class="mt-3">
                   <label class="text-xs font-semibold text-slate-600">Role mặc định:</label>
@@ -163,13 +176,12 @@
                   <i data-lucide="users-2" class="w-4 h-4"></i>
                   Kích Hoạt Danh Sách Hàng Loạt
                 </button>
-                <div id="bulk-message" class="text-sm hidden mt-2"></div>
               </div>
             </div>
           </div>
         </div>
 
-        <!-- Right column: User list -->
+        <!-- Right Column: User List -->
         <div class="lg:col-span-7">
           <div class="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
             <div class="p-6 border-b border-slate-100 bg-slate-50/70">
@@ -256,7 +268,7 @@
                   </tr>
                 </thead>
                 <tbody id="user-list-body" class="divide-y divide-slate-100 text-sm">
-                  <tr><td colspan="4" class="py-12 text-center text-slate-400"><div class="loading-spinner w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full mx-auto"></div><span class="block mt-2">Đang tải...</span></td></tr>
+                  <tr><td colspan="4" class="py-12 text-center text-slate-400"><div class="loading-spinner w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full mx-auto"></div><span class="block mt-2">Đang tải danh sách...</span></td></tr>
                 </tbody>
               </table>
             </div>
@@ -269,14 +281,22 @@
       </div>
     </main>
 
-    <footer class="bg-slate-900 border-t border-slate-800 py-6 mt-12 text-center text-sm text-slate-500">
-      <div class="container mx-auto px-4">© 2026 QC Productivity Tracker.</div>
-    </footer>
+    <div id="toast" class="toast"></div>
 
     <script>
+      // ===================== Safe Lucide =====================
       function safeCreateIcons() {
         if (typeof lucide !== 'undefined') lucide.createIcons();
-        else console.warn('Lucide chưa sẵn sàng');
+      }
+
+      // ===================== Toast notification =====================
+      function showToast(message, type = 'success') {
+        const toast = document.getElementById('toast');
+        toast.textContent = message;
+        toast.className = `toast ${type} show`;
+        setTimeout(() => {
+          toast.classList.remove('show');
+        }, 3000);
       }
 
       // ===================== State =====================
@@ -288,21 +308,17 @@
       let currentPage = 1;
       const pageSize = 8;
 
-      // ===================== Helper =====================
+      // ===================== Escape HTML =====================
       function escapeHtml(value) {
-        return String(value).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+        return String(value)
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;")
+          .replace(/'/g, "&#39;");
       }
 
-      function showMessage(elementId, message, isError = false) {
-        const el = document.getElementById(elementId);
-        if (!el) return;
-        el.textContent = message;
-        el.className = `text-sm ${isError ? "text-rose-600" : "text-emerald-600"} mt-2`;
-        el.classList.remove("hidden");
-        setTimeout(() => el.classList.add("hidden"), 5000);
-      }
-
-      // ===================== Fetch roles =====================
+      // ===================== Fetch Roles =====================
       async function fetchRoles() {
         try {
           const res = await fetch("/api/qc-roles");
@@ -311,6 +327,7 @@
           populateRoleDropdowns();
         } catch (e) {
           console.error("Fetch roles error:", e);
+          showToast("Không thể tải danh sách vai trò", "error");
         }
       }
 
@@ -341,15 +358,15 @@
             opt.textContent = role.display_name || role.role_key;
             filterSelect.appendChild(opt);
           });
-          filterSelect.value = roleFilter; // giữ giá trị filter hiện tại
+          filterSelect.value = roleFilter; // giữ giá trị hiện tại
         }
         safeCreateIcons();
       }
 
-      // ===================== Fetch users =====================
+      // ===================== Fetch Users =====================
       async function fetchUsers() {
         const tbody = document.getElementById("user-list-body");
-        tbody.innerHTML = `<tr><td colspan="4" class="py-12 text-center text-slate-400"><div class="loading-spinner w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full mx-auto"></div><span>Đang tải danh sách...</span></td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="4" class="py-12 text-center text-slate-400"><div class="loading-spinner w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full mx-auto"></div><span>Đang tải...</span></td></tr>`;
         try {
           const res = await fetch("/api/qc-productivity/users");
           if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -358,6 +375,7 @@
           renderUserTable();
         } catch (err) {
           tbody.innerHTML = `<tr><td colspan="4" class="py-12 text-rose-500 text-center">Lỗi tải danh sách: ${err.message}</td></tr>`;
+          showToast("Không thể tải danh sách nhân sự", "error");
         } finally {
           safeCreateIcons();
         }
@@ -395,14 +413,16 @@
       }
 
       // ===================== Rendering =====================
-      function renderPagination(totalItems, containerId, infoId) {
-        const controls = document.getElementById(containerId);
-        const info = document.getElementById(infoId);
+      function renderPagination() {
+        const controls = document.getElementById("pagination-controls");
+        const info = document.getElementById("pagination-info");
         if (!controls || !info) return;
+        const filtered = getFilteredUsers();
+        const totalItems = filtered.length;
         const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
         const startItem = totalItems === 0 ? 0 : (currentPage - 1) * pageSize + 1;
         const endItem = Math.min(currentPage * pageSize, totalItems);
-        info.innerHTML = totalItems === 0 ? "Không có kết quả" : `Hiển thị ${startItem}-${endItem} trên ${totalItems} mục`;
+        info.textContent = totalItems === 0 ? "Không có kết quả" : `Hiển thị ${startItem}-${endItem} trên ${totalItems} mục`;
 
         if (totalPages <= 1) {
           controls.innerHTML = "";
@@ -447,13 +467,13 @@
 
         if (allUsers.length === 0) {
           tbody.innerHTML = `<tr><td colspan="4" class="py-14 text-center text-slate-400"><i data-lucide="user-x" class="w-8 h-8 mx-auto"></i><p class="font-semibold mt-2">Chưa có nhân viên nào</p><p class="text-sm">Thêm nhân sự mới để bắt đầu.</p></td></tr>`;
-          renderPagination(0, "pagination-controls", "pagination-info");
+          renderPagination();
           safeCreateIcons();
           return;
         }
         if (totalItems === 0) {
           tbody.innerHTML = `<tr><td colspan="4" class="py-14 text-center text-slate-400"><i data-lucide="search-x" class="w-8 h-8 mx-auto"></i><p class="font-semibold mt-2">Không tìm thấy nhân sự</p><p class="text-sm">Thử lại với bộ lọc khác.</p></td></tr>`;
-          renderPagination(0, "pagination-controls", "pagination-info");
+          renderPagination();
           safeCreateIcons();
           return;
         }
@@ -493,11 +513,11 @@
           `;
         }).join("");
 
-        renderPagination(totalItems, "pagination-controls", "pagination-info");
+        renderPagination();
         safeCreateIcons();
       }
 
-      // ===================== CRUD operations =====================
+      // ===================== CRUD Operations =====================
       async function saveInlineUser(id) {
         const nameInput = document.getElementById(`inline-name-${id}`);
         const emailInput = document.getElementById(`inline-email-${id}`);
@@ -506,7 +526,10 @@
         const name = nameInput.value.trim();
         const email = emailInput.value.trim();
         const role_key = roleSelect.value;
-        if (!email) { alert("Email không được để trống!"); return; }
+        if (!email) {
+          showToast("Email không được để trống", "error");
+          return;
+        }
 
         try {
           const res = await fetch("/api/qc-productivity/users", {
@@ -514,8 +537,11 @@
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ id, name, email, role_key }),
           });
-          if (!res.ok) throw new Error((await res.json()).message || "Lỗi");
-          // Cập nhật local
+          if (!res.ok) {
+            const data = await res.json().catch(() => ({}));
+            throw new Error(data.message || `Lỗi ${res.status}`);
+          }
+          // Cập nhật local state
           const idx = allUsers.findIndex(u => u.id == id);
           if (idx !== -1) {
             allUsers[idx].name = name;
@@ -524,9 +550,9 @@
             allUsers[idx].display_name = allRoles.find(r => r.role_key === role_key)?.display_name || "";
           }
           renderUserTable();
-          showMessage("single-user-message", "✅ Đã lưu thay đổi");
+          showToast("✅ Đã lưu thay đổi");
         } catch (err) {
-          alert(`Lỗi: ${err.message}`);
+          showToast(`Lỗi: ${err.message}`, "error");
         }
       }
 
@@ -537,34 +563,44 @@
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ id, is_active: !currentActive }),
           });
-          if (!res.ok) throw new Error((await res.json()).message || "Lỗi");
+          if (!res.ok) {
+            const data = await res.json().catch(() => ({}));
+            throw new Error(data.message || "Lỗi");
+          }
           const idx = allUsers.findIndex(u => u.id == id);
           if (idx !== -1) allUsers[idx].is_active = !currentActive;
           renderUserTable();
+          showToast(`Đã ${!currentActive ? "kích hoạt" : "tạm khóa"} thành công`);
         } catch (err) {
-          alert(`Cập nhật thất bại: ${err.message}`);
+          showToast(`Cập nhật thất bại: ${err.message}`, "error");
         }
       }
 
-      // ===================== Form events =====================
+      // ===================== Form Events =====================
       document.getElementById("single-user-form").addEventListener("submit", async (e) => {
         e.preventDefault();
         const name = document.getElementById("user-name").value.trim();
         const email = document.getElementById("user-email").value.trim();
         const role_key = document.getElementById("user-role").value;
-        if (!email) { showMessage("single-user-message", "Thiếu email", true); return; }
+        if (!email) {
+          showToast("Vui lòng nhập email", "error");
+          return;
+        }
         try {
           const res = await fetch("/api/qc-productivity/users", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ name, email, role_key }),
           });
-          if (!res.ok) throw new Error((await res.json()).message || "Lỗi");
+          if (!res.ok) {
+            const data = await res.json().catch(() => ({}));
+            throw new Error(data.message || "Lỗi");
+          }
           document.getElementById("single-user-form").reset();
-          showMessage("single-user-message", "✅ Đã thêm thành công");
+          showToast("✅ Đã thêm thành công");
           fetchUsers();
         } catch (err) {
-          showMessage("single-user-message", `❌ ${err.message}`, true);
+          showToast(`❌ ${err.message}`, "error");
         }
       });
 
@@ -573,7 +609,10 @@
         const raw = document.getElementById("bulk-emails").value;
         const role_key = document.getElementById("bulk-role").value;
         const emails = raw.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g);
-        if (!emails?.length) { showMessage("bulk-message", "Không có email hợp lệ", true); return; }
+        if (!emails || emails.length === 0) {
+          showToast("Không tìm thấy email hợp lệ", "error");
+          return;
+        }
         if (!confirm(`Thêm ${emails.length} email với role '${role_key || "mặc định"}'?`)) return;
 
         let success = 0, failed = 0;
@@ -585,10 +624,12 @@
               body: JSON.stringify({ name: email.split("@")[0].toUpperCase(), email, role_key }),
             });
             if (res.ok) success++; else failed++;
-          } catch { failed++; }
+          } catch {
+            failed++;
+          }
         }
         document.getElementById("bulk-emails").value = "";
-        showMessage("bulk-message", `✅ ${success} thành công, ❌ ${failed} thất bại`);
+        showToast(`✅ ${success} thành công, ❌ ${failed} thất bại`);
         fetchUsers();
       }
 
@@ -598,9 +639,9 @@
       function buildImportRows(data) {
         if (!Array.isArray(data)) return [];
         return data.map((row, idx) => {
-          const email = (row.email || row["e-mail"] || "").toLowerCase().trim();
-          const name = row.name || row["họ và tên"] || "";
-          const role_key = row.role_key || row.role || "";
+          const email = (row.email || row["e-mail"] || row["Email"] || "").toLowerCase().trim();
+          const name = row.name || row["Họ và tên"] || row["Name"] || "";
+          const role_key = row.role_key || row["role"] || row["Role"] || "";
           return { idx: idx + 2, email, name: name || email.split("@")[0].toUpperCase(), role_key };
         }).filter(r => r.email);
       }
@@ -612,43 +653,52 @@
         const btn = document.getElementById("import-submit-btn");
         if (!rows.length) {
           preview.classList.add("hidden");
+          btn.disabled = true;
           return;
         }
         preview.classList.remove("hidden");
-        summary.textContent = `${rows.length} dòng sẵn sàng`;
+        summary.textContent = `${rows.length} dòng sẵn sàng để import`;
         btn.disabled = false;
-        body.innerHTML = rows.slice(0, 10).map((r, i) => `<tr><td>${i+1}</td><td>${escapeHtml(r.name)}</td><td>${escapeHtml(r.email)}</td><td>${escapeHtml(r.role_key)}</td></tr>`).join("");
-        if (rows.length > 10) body.innerHTML += `<tr><td colspan="4" class="text-center">... và ${rows.length-10} dòng khác</td></tr>`;
+        body.innerHTML = rows.slice(0, 10).map((r, i) => `<tr><td>${i + 1}</td><td>${escapeHtml(r.name)}</td><td>${escapeHtml(r.email)}</td><td>${escapeHtml(r.role_key || "mặc định")}</td></tr>`).join("");
+        if (rows.length > 10) body.innerHTML += `<tr><td colspan="4" class="text-center text-slate-400">... và ${rows.length - 10} dòng khác</td></tr>`;
       }
 
       async function importPreparedRows() {
         if (!importedRows.length) return;
         const defaultRoleKey = document.getElementById("import-role").value;
-        const payload = importedRows.map(r => ({ email: r.email, name: r.name, role_key: r.role_key || defaultRoleKey }));
+        const payload = importedRows.map(r => ({
+          email: r.email,
+          name: r.name,
+          role_key: r.role_key || defaultRoleKey,
+        }));
         if (!confirm(`Import ${payload.length} nhân sự?`)) return;
+
         const btn = document.getElementById("import-submit-btn");
-        btn.disabled = true; btn.textContent = "Đang import...";
+        btn.disabled = true;
+        btn.textContent = "Đang import...";
         try {
           const res = await fetch("/api/qc-productivity/users", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ import: payload, defaultRoleKey }),
           });
-          const data = await res.json();
-          if (!res.ok) throw new Error(data.message || "Lỗi");
-          showMessage("import-message", `✅ Đã thêm ${data.insertedCount}, bỏ qua ${data.skippedCount}`);
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok) throw new Error(data.message || `HTTP ${res.status}`);
+          showToast(`✅ Đã thêm ${data.insertedCount || 0} mới, bỏ qua ${data.skippedCount || 0}`);
           importedRows = [];
           renderImportPreview([]);
           document.getElementById("excel-file").value = "";
           fetchUsers();
         } catch (err) {
-          showMessage("import-message", `❌ ${err.message}`, true);
+          showToast(`❌ Lỗi import: ${err.message}`, "error");
         } finally {
-          btn.disabled = false; btn.textContent = "Import Ngay";
+          btn.disabled = false;
+          btn.textContent = "Import Ngay";
         }
       }
 
       function handleImportFile(file) {
+        if (!file) return;
         const reader = new FileReader();
         reader.onload = (e) => {
           try {
@@ -657,22 +707,40 @@
             const rows = XLSX.utils.sheet_to_json(sheet, { defval: "" });
             importedRows = buildImportRows(rows);
             renderImportPreview(importedRows);
-            showMessage("import-message", importedRows.length ? `Đọc được ${importedRows.length} dòng` : "Không có email hợp lệ", !importedRows.length);
+            if (importedRows.length > 0) {
+              showToast(`Đọc được ${importedRows.length} dòng có email hợp lệ`);
+            } else {
+              showToast("Không tìm thấy email hợp lệ trong file", "error");
+            }
           } catch (err) {
-            showMessage("import-message", "Lỗi đọc file", true);
+            showToast("Không thể đọc file: " + err.message, "error");
           }
         };
-        reader.onerror = () => showMessage("import-message", "Lỗi đọc file", true);
+        reader.onerror = () => showToast("Lỗi đọc file", "error");
         if (file.name.endsWith(".csv")) reader.readAsText(file);
         else reader.readAsArrayBuffer(file);
       }
 
-      // ===================== Filter events =====================
-      document.getElementById("allowed-search").addEventListener("input", (e) => { searchQuery = e.target.value; currentPage = 1; renderUserTable(); });
-      document.getElementById("allowed-status-filter").addEventListener("change", (e) => { statusFilter = e.target.value; currentPage = 1; renderUserTable(); });
-      document.getElementById("role-filter").addEventListener("change", (e) => { roleFilter = e.target.value; currentPage = 1; renderUserTable(); });
+      // ===================== Filter Events =====================
+      document.getElementById("allowed-search").addEventListener("input", (e) => {
+        searchQuery = e.target.value;
+        currentPage = 1;
+        renderUserTable();
+      });
+      document.getElementById("allowed-status-filter").addEventListener("change", (e) => {
+        statusFilter = e.target.value;
+        currentPage = 1;
+        renderUserTable();
+      });
+      document.getElementById("role-filter").addEventListener("change", (e) => {
+        roleFilter = e.target.value;
+        currentPage = 1;
+        renderUserTable();
+      });
       document.getElementById("clear-filters-btn").addEventListener("click", () => {
-        searchQuery = ""; statusFilter = "all"; roleFilter = "";
+        searchQuery = "";
+        statusFilter = "all";
+        roleFilter = "";
         document.getElementById("allowed-search").value = "";
         document.getElementById("allowed-status-filter").value = "all";
         document.getElementById("role-filter").value = "";
@@ -680,7 +748,7 @@
         renderUserTable();
       });
 
-      // ===================== Drag & Drop =====================
+      // ===================== Drag & Drop + File =====================
       const dropzone = document.getElementById("import-dropzone");
       const fileInput = document.getElementById("excel-file");
       document.getElementById("import-file-btn").addEventListener("click", () => fileInput.click());
@@ -688,10 +756,19 @@
         const csv = "Họ và tên,Email,role_key\nNguyễn Văn A,nguyenvana@shopee.com,qc_rr\nTrần Thị B,tranthib@shopee.com,qc_cb";
         const blob = new Blob([csv], { type: "text/csv" });
         const url = URL.createObjectURL(blob);
-        const a = document.createElement("a"); a.href = url; a.download = "template.csv"; a.click(); URL.revokeObjectURL(url);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = "qc-users-template.csv";
+        a.click();
+        URL.revokeObjectURL(url);
       });
-      fileInput.addEventListener("change", (e) => { if (e.target.files[0]) handleImportFile(e.target.files[0]); });
-      dropzone.addEventListener("dragover", (e) => { e.preventDefault(); dropzone.classList.add("dragover"); });
+      fileInput.addEventListener("change", (e) => {
+        if (e.target.files[0]) handleImportFile(e.target.files[0]);
+      });
+      dropzone.addEventListener("dragover", (e) => {
+        e.preventDefault();
+        dropzone.classList.add("dragover");
+      });
       dropzone.addEventListener("dragleave", () => dropzone.classList.remove("dragover"));
       dropzone.addEventListener("drop", (e) => {
         e.preventDefault();
@@ -699,13 +776,16 @@
         if (e.dataTransfer.files[0]) handleImportFile(e.dataTransfer.files[0]);
       });
       document.getElementById("import-submit-btn").addEventListener("click", importPreparedRows);
+      document.getElementById("import-submit-btn").disabled = true;
 
       // ===================== Init =====================
-      async function init() {
-        await fetchRoles(); // Tải danh sách role trước
-        await fetchUsers(); // Sau đó tải users
+      async function initApp() {
+        await fetchRoles();
+        await fetchUsers();
+        safeCreateIcons();
       }
-      init();
+
+      initApp();
     </script>
   </body>
 </html>

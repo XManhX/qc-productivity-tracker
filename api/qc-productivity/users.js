@@ -13,50 +13,8 @@ function normalizeName(name) {
   return typeof name === "string" ? name.trim() : "";
 }
 
-// Hàm tạo map role_key -> role_id
-function buildRoleMap(roles) {
-  const map = {};
-  (roles || []).forEach((r) => {
-    if (r.role_key) map[r.role_key.toLowerCase()] = r.id;
-  });
-  return map;
-}
-
-// Normalize import payload, thêm role_id dựa vào roleMap và defaultRoleKey
-function normalizeImportPayload(payload, roleMap, defaultRoleKey) {
-  if (!Array.isArray(payload)) return [];
-
-  return payload
-    .map((item) => {
-      const email = normalizeEmail(item?.email);
-      if (!email) return null;
-
-      let roleKey = (item?.role_key || item?.role || "").toString().toLowerCase().trim();
-      if (!roleKey && defaultRoleKey) roleKey = defaultRoleKey.toLowerCase();
-      const roleId = roleMap[roleKey] || null;
-
-      // Nếu không tìm thấy role, dùng fallback là 'qc_rr' (nếu có)
-      const fallbackRoleId = roleMap['qc_rr'] || null;
-      if (!roleId && !fallbackRoleId) return null;
-
-      return {
-        email,
-        name: normalizeName(item?.name) || email.split("@")[0].toUpperCase(),
-        role_id: roleId || fallbackRoleId,
-      };
-    })
-    .filter(Boolean);
-}
-
 export default async function handler(req, res) {
   const { method } = req;
-
-  // Lấy danh sách roles (dùng chung)
-  const fetchRoles = async () => {
-    const { data, error } = await supabase.from("qc_roles").select("id, role_key");
-    if (error) throw error;
-    return data || [];
-  };
 
   if (method === "GET") {
     try {
@@ -66,18 +24,16 @@ export default async function handler(req, res) {
         .order("created_at", { ascending: false });
 
       if (error) throw error;
-
-      const formatted = (data || []).map((user) => ({
-        id: user.id,
-        email: user.email,
-        name: user.name,
-        is_active: user.is_active,
-        created_at: user.created_at,
-        role_id: user.role_id,
-        role_key: user.qc_roles?.role_key || null,
-        display_name: user.qc_roles?.display_name || null,
+      const formatted = (data || []).map(u => ({
+        id: u.id,
+        email: u.email,
+        name: u.name,
+        is_active: u.is_active,
+        created_at: u.created_at,
+        role_id: u.role_id,
+        role_key: u.qc_roles?.role_key || null,
+        display_name: u.qc_roles?.display_name || null,
       }));
-
       return res.status(200).json(formatted);
     } catch (error) {
       return res.status(500).json({ error: error.message });
@@ -85,91 +41,73 @@ export default async function handler(req, res) {
   }
 
   if (method === "POST") {
-    const { email, name, import: importUsers, role_key, defaultRoleKey } = req.body || {};
+    const { email, name, role_key, import: importUsers } = req.body || {};
 
     // Import hàng loạt
     if (Array.isArray(importUsers) && importUsers.length > 0) {
       try {
-        const roles = await fetchRoles();
-        const roleMap = buildRoleMap(roles);
-        const defaultRole = defaultRoleKey || 'qc_rr';
-        const normalizedRows = normalizeImportPayload(importUsers, roleMap, defaultRole);
-        if (normalizedRows.length === 0) {
-          return res.status(400).json({ message: "No valid emails found in import payload" });
-        }
+        const { data: roles } = await supabase.from("qc_roles").select("id, role_key");
+        const roleMap = {};
+        roles.forEach(r => { roleMap[r.role_key] = r.id; });
 
-        const uniqueRows = normalizedRows.filter(
-          (row, index, arr) => arr.findIndex((item) => item.email === row.email) === index,
-        );
-        const emails = uniqueRows.map((row) => row.email);
+        const defaultRoleKey = req.body.defaultRoleKey || "qc_rr";
+        const defaultRoleId = roleMap[defaultRoleKey] || roles[0]?.id;
 
-        const { data: existingUsers, error: lookupError } = await supabase
-          .from("qc_users")
-          .select("email")
-          .in("email", emails);
+        const toInsert = [];
+        for (const item of importUsers) {
+          const emailNormalized = normalizeEmail(item.email);
+          if (!emailNormalized) continue;
+          let roleKey = item.role_key || defaultRoleKey;
+          const roleId = roleMap[roleKey] || defaultRoleId;
+          if (!roleId) continue;
 
-        if (lookupError) throw lookupError;
-
-        const existingEmails = new Set((existingUsers || []).map((row) => normalizeEmail(row.email)));
-        const toInsert = uniqueRows.filter((row) => !existingEmails.has(row.email));
-
-        if (toInsert.length > 0) {
-          const insertPayload = toInsert.map((row) => ({
-            email: row.email,
-            name: row.name,
-            role_id: row.role_id,
+          toInsert.push({
+            email: emailNormalized,
+            name: normalizeName(item.name) || emailNormalized.split("@")[0].toUpperCase(),
+            role_id: roleId,
             is_active: true,
-          }));
-
-          const { data, error } = await supabase.from("qc_users").insert(insertPayload).select();
-          if (error) throw error;
-
-          return res.status(200).json({
-            insertedCount: data.length,
-            skippedCount: uniqueRows.length - data.length,
-            insertedUsers: data,
           });
         }
 
-        return res.status(200).json({
-          insertedCount: 0,
-          skippedCount: uniqueRows.length,
-          insertedUsers: [],
-        });
+        if (toInsert.length === 0) {
+          return res.status(400).json({ message: "No valid data to import" });
+        }
+
+        const { data, error } = await supabase.from("qc_users").insert(toInsert).select();
+        if (error) {
+          // Trường hợp duplicate email -> bỏ qua
+          if (error.code === "23505") {
+            return res.status(200).json({ insertedCount: 0, skippedCount: toInsert.length, message: "All duplicates" });
+          }
+          throw error;
+        }
+        return res.status(200).json({ insertedCount: data.length, skippedCount: toInsert.length - data.length });
       } catch (error) {
         return res.status(500).json({ error: error.message });
       }
     }
 
     // Thêm một user
-    const normalizedEmail = normalizeEmail(email);
-    if (!normalizedEmail) return res.status(400).json({ message: "Missing email" });
+    const emailNormalized = normalizeEmail(email);
+    if (!emailNormalized) return res.status(400).json({ message: "Missing email" });
 
     try {
       let roleId = null;
       if (role_key) {
-        const roles = await fetchRoles();
-        const found = roles.find((r) => r.role_key === role_key);
-        if (!found) return res.status(400).json({ message: "Invalid role_key" });
-        roleId = found.id;
-      } else {
-        // Mặc định role 'qc_rr'
-        const roles = await fetchRoles();
-        const defaultRole = roles.find((r) => r.role_key === "qc_rr");
-        roleId = defaultRole?.id || null;
+        const { data: roleData } = await supabase.from("qc_roles").select("id").eq("role_key", role_key).single();
+        roleId = roleData?.id;
+      }
+      if (!roleId) {
+        const { data: defaultRole } = await supabase.from("qc_roles").select("id").eq("role_key", "qc_rr").single();
+        roleId = defaultRole?.id;
       }
 
-      const { data, error } = await supabase
-        .from("qc_users")
-        .insert([
-          {
-            email: normalizedEmail,
-            name: normalizeName(name) || normalizedEmail.split("@")[0].toUpperCase(),
-            role_id: roleId,
-            is_active: true,
-          },
-        ])
-        .select();
+      const { data, error } = await supabase.from("qc_users").insert([{
+        email: emailNormalized,
+        name: normalizeName(name) || emailNormalized.split("@")[0].toUpperCase(),
+        role_id: roleId,
+        is_active: true,
+      }]).select();
 
       if (error) throw error;
       return res.status(201).json(data[0]);
@@ -178,46 +116,32 @@ export default async function handler(req, res) {
     }
   }
 
-  if (method === "DELETE") {
-    const { id } = req.query;
-    const { error } = await supabase.from("qc_users").delete().eq("id", id);
-    if (error) return res.status(500).json({ error: error.message });
-    return res.status(200).json({ message: "User deleted successfully" });
-  }
-
   if (method === "PUT") {
     const { id, name, email, is_active, role_key } = req.body || {};
     if (!id) return res.status(400).json({ message: "Missing id" });
 
     const updatePayload = {};
-    if (typeof name === "string") updatePayload.name = normalizeName(name);
-    if (typeof email === "string") updatePayload.email = normalizeEmail(email);
+    if (name !== undefined) updatePayload.name = normalizeName(name);
+    if (email !== undefined) updatePayload.email = normalizeEmail(email);
     if (typeof is_active === "boolean") updatePayload.is_active = is_active;
-
     if (role_key) {
-      try {
-        const roles = await fetchRoles();
-        const found = roles.find((r) => r.role_key === role_key);
-        if (!found) return res.status(400).json({ message: "Invalid role_key" });
-        updatePayload.role_id = found.id;
-      } catch (error) {
-        return res.status(500).json({ error: error.message });
-      }
+      const { data: roleData } = await supabase.from("qc_roles").select("id").eq("role_key", role_key).single();
+      if (roleData) updatePayload.role_id = roleData.id;
     }
 
-    if (Object.keys(updatePayload).length === 0) {
-      return res.status(400).json({ message: "No valid update fields provided" });
-    }
+    if (Object.keys(updatePayload).length === 0) return res.status(400).json({ message: "No fields to update" });
 
-    const { data, error } = await supabase
-      .from("qc_users")
-      .update(updatePayload)
-      .eq("id", id)
-      .select();
-
+    const { data, error } = await supabase.from("qc_users").update(updatePayload).eq("id", id).select();
     if (error) return res.status(500).json({ error: error.message });
-    if (data.length === 0) return res.status(404).json({ message: "User not found" });
+    if (!data.length) return res.status(404).json({ message: "User not found" });
     return res.status(200).json(data[0]);
+  }
+
+  if (method === "DELETE") {
+    const { id } = req.query;
+    const { error } = await supabase.from("qc_users").delete().eq("id", id);
+    if (error) return res.status(500).json({ error: error.message });
+    return res.status(200).json({ message: "Deleted" });
   }
 
   return res.status(405).json({ message: "Method not allowed" });

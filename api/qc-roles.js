@@ -12,7 +12,7 @@ export default async function handler(req, res) {
   try {
     const { data, error } = await supabase
       .from("qc_roles")
-      .select("role_key, display_name")
+      .select("id, role_key, display_name")
       .eq("is_active", true)
       .order("display_name");
 

@@ -7,6 +7,7 @@
     <title>⚡ WMS QC MONITOR - Nhân Sự</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.2/dist/xlsx.full.min.js"></script>
     <style>
       @import url("https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap");
       body {
@@ -14,6 +15,10 @@
       }
       .loading-spinner {
         animation: spin 1s linear infinite;
+      }
+      .import-dropzone.dragover {
+        border-color: #4f46e5;
+        background-color: #eef2ff;
       }
       @keyframes spin {
         100% {
@@ -121,31 +126,134 @@
                 <h3
                   class="text-xs font-bold text-slate-400 uppercase tracking-wider"
                 >
-                  Thêm Hàng Loạt (Bulk Add)
+                  Import từ Excel / CSV
                 </h3>
                 <span
-                  class="bg-amber-100 text-amber-800 text-[10px] font-bold px-2 py-0.5 rounded-full"
-                  >Tính năng xịn</span
+                  class="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2 py-0.5 rounded-full"
+                  >Hỗ trợ chuyên nghiệp</span
                 >
               </div>
               <p class="text-slate-400 text-xs mb-3">
-                Copy và dán danh sách Email vào bên dưới (Các email phân cách
-                nhau bằng dấu phẩy, dấu cách hoặc xuống dòng).
+                Tải file Excel hoặc CSV có cột Email và Họ tên. Hệ thống sẽ đọc
+                và nhập hàng loạt một cách tự động.
               </p>
-              <textarea
-                id="bulk-emails"
-                rows="5"
-                class="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs focus:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition"
-                placeholder="user1@shopee.com, user2@shopee.com&#10;user3@shopee.com"
-              ></textarea>
-              <button
-                onclick="handleBulkAdd()"
-                class="w-full mt-3 bg-slate-900 hover:bg-slate-800 text-white font-semibold text-sm py-2.5 rounded-xl transition shadow-sm flex items-center justify-center gap-2"
+
+              <div
+                id="import-dropzone"
+                class="import-dropzone border-2 border-dashed border-slate-200 rounded-xl p-4 text-center bg-slate-50 transition"
               >
-                <i data-lucide="users-2" class="w-4 h-4"></i>
-                Kích Hoạt Danh Sách Hàng Loạt
-              </button>
-              <div id="bulk-message" class="text-sm hidden mt-2"></div>
+                <input
+                  type="file"
+                  id="excel-file"
+                  accept=".xlsx,.xls,.csv"
+                  class="hidden"
+                />
+                <div
+                  class="flex flex-col items-center justify-center gap-2 py-3"
+                >
+                  <i
+                    data-lucide="file-spreadsheet"
+                    class="w-8 h-8 text-indigo-500"
+                  ></i>
+                  <p class="text-sm font-semibold text-slate-700">
+                    Kéo thả file vào đây hoặc chọn file
+                  </p>
+                  <p class="text-[11px] text-slate-400">
+                    Hỗ trợ .xlsx, .xls, .csv
+                  </p>
+                </div>
+              </div>
+
+              <div class="flex flex-wrap gap-2 mt-3">
+                <button
+                  id="import-file-btn"
+                  type="button"
+                  class="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-sm py-2.5 rounded-xl transition shadow-sm"
+                >
+                  Chọn File
+                </button>
+                <button
+                  id="download-template-btn"
+                  type="button"
+                  class="px-3 py-2.5 border border-slate-200 hover:bg-slate-100 text-slate-600 rounded-xl text-xs font-semibold transition"
+                >
+                  Tải Mẫu CSV
+                </button>
+              </div>
+
+              <div id="import-message" class="text-sm hidden mt-3"></div>
+
+              <div
+                id="import-preview"
+                class="hidden mt-4 border border-slate-200 rounded-xl overflow-hidden"
+              >
+                <div
+                  class="flex items-center justify-between px-4 py-3 bg-slate-50 border-b border-slate-200"
+                >
+                  <div>
+                    <p class="text-sm font-semibold text-slate-800">
+                      Xem trước dữ liệu
+                    </p>
+                    <p id="import-summary" class="text-xs text-slate-400">
+                      0 dòng sẵn sàng
+                    </p>
+                  </div>
+                  <button
+                    id="import-submit-btn"
+                    type="button"
+                    class="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold px-3 py-2 rounded-lg transition"
+                  >
+                    Import Ngay
+                  </button>
+                </div>
+                <div class="overflow-x-auto max-h-56 overflow-y-auto">
+                  <table class="w-full text-left border-collapse text-xs">
+                    <thead class="bg-white border-b border-slate-100">
+                      <tr>
+                        <th class="px-4 py-2 text-slate-500">#</th>
+                        <th class="px-4 py-2 text-slate-500">Họ tên</th>
+                        <th class="px-4 py-2 text-slate-500">Email</th>
+                      </tr>
+                    </thead>
+                    <tbody
+                      id="import-preview-body"
+                      class="divide-y divide-slate-100"
+                    ></tbody>
+                  </table>
+                </div>
+              </div>
+
+              <div class="mt-6 border-t border-slate-100 pt-6">
+                <div class="flex items-center justify-between mb-2">
+                  <h3
+                    class="text-xs font-bold text-slate-400 uppercase tracking-wider"
+                  >
+                    Thêm Hàng Loạt (Bulk Add)
+                  </h3>
+                  <span
+                    class="bg-amber-100 text-amber-800 text-[10px] font-bold px-2 py-0.5 rounded-full"
+                    >Tính năng xịn</span
+                  >
+                </div>
+                <p class="text-slate-400 text-xs mb-3">
+                  Copy và dán danh sách Email vào bên dưới (Các email phân cách
+                  nhau bằng dấu phẩy, dấu cách hoặc xuống dòng).
+                </p>
+                <textarea
+                  id="bulk-emails"
+                  rows="5"
+                  class="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs focus:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition"
+                  placeholder="user1@shopee.com, user2@shopee.com&#10;user3@shopee.com"
+                ></textarea>
+                <button
+                  onclick="handleBulkAdd()"
+                  class="w-full mt-3 bg-slate-900 hover:bg-slate-800 text-white font-semibold text-sm py-2.5 rounded-xl transition shadow-sm flex items-center justify-center gap-2"
+                >
+                  <i data-lucide="users-2" class="w-4 h-4"></i>
+                  Kích Hoạt Danh Sách Hàng Loạt
+                </button>
+                <div id="bulk-message" class="text-sm hidden mt-2"></div>
+              </div>
             </div>
           </div>
         </div>
@@ -229,6 +337,15 @@
     </footer>
 
     <script>
+      function escapeHtml(value) {
+        return String(value)
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/\"/g, "&quot;")
+          .replace(/'/g, "&#39;");
+      }
+
       // Hiển thị thông báo
       function showMessage(elementId, message, isError = false) {
         const el = document.getElementById(elementId);
@@ -239,10 +356,11 @@
         setTimeout(() => el.classList.add("hidden"), 5000);
       }
 
+      let importedRows = [];
+
       // Fetch danh sách user
       async function fetchUsers() {
         const tbody = document.getElementById("user-list-body");
-        // Hiển thị loading
         tbody.innerHTML = `
         <tr>
           <td colspan="3" class="py-12 text-center text-slate-400">
@@ -280,7 +398,6 @@
           users.forEach((user) => {
             const userName = user.name || "";
             const userEmail = user.email;
-            // Escape single quotes for the onclick handler
             const escapedUserName = userName.replace(/'/g, "\\'");
 
             tbody.innerHTML += `
@@ -291,12 +408,12 @@
                     ${(userName || "QC").substring(0, 2)}
                   </div>
                   <div>
-                    <div class="font-semibold text-slate-900">${userName || "Không tên"}</div>
+                    <div class="font-semibold text-slate-900">${escapeHtml(userName || "Không tên")}</div>
                     <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800 mt-0.5">Active</span>
                   </div>
                 </div>
               </td>
-              <td class="px-6 py-4 text-slate-600 font-mono text-xs">${userEmail}</td>
+              <td class="px-6 py-4 text-slate-600 font-mono text-xs">${escapeHtml(userEmail)}</td>
               <td class="px-6 py-4 text-right space-x-2">
                 <button onclick="editUser(${user.id}, '${escapedUserName}', '${userEmail}')" class="inline-flex items-center gap-1.5 px-3 py-1.5 border border-slate-200 hover:bg-slate-100 text-slate-600 rounded-xl text-xs font-semibold transition">
                   <i data-lucide="edit" class="w-3.5 h-3.5"></i>
@@ -360,6 +477,237 @@
             showMessage("single-user-message", `❌ Lỗi: ${err.message}`, true);
           }
         });
+
+      function normalizeEmail(value) {
+        return typeof value === "string" ? value.toLowerCase().trim() : "";
+      }
+
+      function getCellValue(row, candidates) {
+        const normalizedRow = Object.entries(row || {}).reduce(
+          (acc, [key, value]) => {
+            acc[String(key).toLowerCase().trim()] = value;
+            return acc;
+          },
+          {},
+        );
+
+        for (const candidate of candidates) {
+          if (
+            normalizedRow[candidate] !== undefined &&
+            normalizedRow[candidate] !== null &&
+            normalizedRow[candidate] !== ""
+          ) {
+            return String(normalizedRow[candidate]).trim();
+          }
+        }
+
+        for (const [key, value] of Object.entries(row || {})) {
+          const normalizedKey = String(key).toLowerCase().trim();
+          if (
+            candidates.some((candidate) => normalizedKey.includes(candidate))
+          ) {
+            return String(value).trim();
+          }
+        }
+
+        return "";
+      }
+
+      function buildImportRows(data) {
+        if (!Array.isArray(data)) return [];
+
+        return data.reduce((acc, row, index) => {
+          const email = normalizeEmail(
+            getCellValue(row, [
+              "email",
+              "e-mail",
+              "email address",
+              "mail",
+              "address",
+            ]),
+          );
+          const name = getCellValue(row, [
+            "name",
+            "full name",
+            "họ và tên",
+            "ten",
+            "employee name",
+            "nhân viên",
+          ]);
+
+          if (!email) return acc;
+
+          acc.push({
+            rowNumber: index + 2,
+            email,
+            name: name || email.split("@")[0].toUpperCase(),
+          });
+
+          return acc;
+        }, []);
+      }
+
+      function renderImportPreview(rows) {
+        const preview = document.getElementById("import-preview");
+        const body = document.getElementById("import-preview-body");
+        const summary = document.getElementById("import-summary");
+        const submitBtn = document.getElementById("import-submit-btn");
+
+        if (!rows.length) {
+          preview.classList.add("hidden");
+          summary.textContent = "0 dòng sẵn sàng";
+          submitBtn.disabled = true;
+          body.innerHTML = "";
+          return;
+        }
+
+        preview.classList.remove("hidden");
+        summary.textContent = `${rows.length} dòng sẵn sàng để import`;
+        submitBtn.disabled = false;
+
+        const rowsToShow = rows.slice(0, 10);
+        body.innerHTML = rowsToShow
+          .map(
+            (row, index) => `
+            <tr class="hover:bg-slate-50">
+              <td class="px-4 py-2 text-slate-500">${index + 1}</td>
+              <td class="px-4 py-2 text-slate-700">${escapeHtml(row.name)}</td>
+              <td class="px-4 py-2 text-slate-600 font-mono">${escapeHtml(row.email)}</td>
+            </tr>
+          `,
+          )
+          .join("");
+
+        if (rows.length > 10) {
+          body.innerHTML += `
+            <tr>
+              <td colspan="3" class="px-4 py-2 text-center text-slate-400">
+                ... và ${rows.length - 10} dòng khác
+              </td>
+            </tr>
+          `;
+        }
+
+        lucide.createIcons();
+      }
+
+      async function handleImportFile(file) {
+        if (!file) return;
+
+        const isCsv = file.name.toLowerCase().endsWith(".csv");
+        const isExcel = /\.xlsx?$/.test(file.name.toLowerCase());
+        if (!isCsv && !isExcel) {
+          showMessage(
+            "import-message",
+            "Chỉ hỗ trợ file .xlsx, .xls hoặc .csv",
+            true,
+          );
+          return;
+        }
+
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          try {
+            const data = event.target.result;
+            const workbook = isCsv
+              ? XLSX.read(data, { type: "string" })
+              : XLSX.read(data, { type: "array" });
+            const firstSheetName = workbook.SheetNames[0];
+            const worksheet = workbook.Sheets[firstSheetName];
+            const parsedRows = XLSX.utils.sheet_to_json(worksheet, {
+              defval: "",
+            });
+            importedRows = buildImportRows(parsedRows);
+            renderImportPreview(importedRows);
+            if (importedRows.length > 0) {
+              showMessage(
+                "import-message",
+                `Đã đọc được ${importedRows.length} dòng có email hợp lệ.`,
+                false,
+              );
+            } else {
+              showMessage(
+                "import-message",
+                "Không tìm thấy email hợp lệ trong file",
+                true,
+              );
+            }
+          } catch (error) {
+            showMessage(
+              "import-message",
+              `Không thể đọc file: ${error.message}`,
+              true,
+            );
+          }
+        };
+
+        reader.onerror = () => {
+          showMessage("import-message", "Đã xảy ra lỗi khi đọc file", true);
+        };
+
+        if (isCsv) {
+          reader.readAsText(file);
+        } else {
+          reader.readAsArrayBuffer(file);
+        }
+      }
+
+      async function importPreparedRows() {
+        if (!importedRows.length) return;
+
+        const confirmed = confirm(
+          `Bạn có đồng ý import ${importedRows.length} nhân sự từ file này không?`,
+        );
+        if (!confirmed) return;
+
+        const submitBtn = document.getElementById("import-submit-btn");
+        submitBtn.disabled = true;
+        submitBtn.textContent = "Đang import...";
+
+        try {
+          const res = await fetch("/api/qc-productivity/users", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ import: importedRows }),
+          });
+
+          const data = await res.json();
+          if (!res.ok) {
+            throw new Error(data.message || `HTTP ${res.status}`);
+          }
+
+          showMessage(
+            "import-message",
+            `✅ Import hoàn tất: thêm ${data.insertedCount} mới, bỏ qua ${data.skippedCount} người đã tồn tại.`,
+            false,
+          );
+          importedRows = [];
+          renderImportPreview([]);
+          document.getElementById("excel-file").value = "";
+          fetchUsers();
+        } catch (err) {
+          showMessage("import-message", `❌ Lỗi import: ${err.message}`, true);
+        } finally {
+          submitBtn.disabled = false;
+          submitBtn.textContent = "Import Ngay";
+        }
+      }
+
+      function downloadTemplate() {
+        const csvContent =
+          "Họ và tên,Email\nNguyễn Văn A,nguyenvana@shopee.com\nTrần Thị B,tranthib@shopee.com\n";
+        const blob = new Blob([csvContent], {
+          type: "text/csv;charset=utf-8;",
+        });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = "qc-users-template.csv";
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+      }
 
       // Bulk add
       async function handleBulkAdd() {
@@ -429,7 +777,6 @@
         const row = document.getElementById(`user-row-${id}`);
         if (!row) return;
 
-        // Escape single quotes for the value attribute
         const escapedName = name.replace(/'/g, "&apos;");
 
         row.innerHTML = `
@@ -475,10 +822,10 @@
             throw new Error(data.message || `HTTP ${res.status}`);
           }
 
-          fetchUsers(); // Refresh the list to show updated data and exit edit mode
+          fetchUsers();
         } catch (err) {
           alert(`Lỗi khi lưu: ${err.message}`);
-          fetchUsers(); // Refresh to revert changes on error
+          fetchUsers();
         }
       }
 
@@ -496,6 +843,46 @@
           alert(`Xóa thất bại: ${err.message}`);
         }
       }
+
+      const dropzone = document.getElementById("import-dropzone");
+      const fileInput = document.getElementById("excel-file");
+      const importFileBtn = document.getElementById("import-file-btn");
+      const downloadTemplateBtn = document.getElementById(
+        "download-template-btn",
+      );
+      const importSubmitBtn = document.getElementById("import-submit-btn");
+
+      ["dragenter", "dragover"].forEach((eventName) => {
+        dropzone.addEventListener(eventName, (event) => {
+          event.preventDefault();
+          dropzone.classList.add("dragover");
+        });
+      });
+
+      ["dragleave", "dragend", "drop"].forEach((eventName) => {
+        dropzone.addEventListener(eventName, (event) => {
+          event.preventDefault();
+          dropzone.classList.remove("dragover");
+        });
+      });
+
+      dropzone.addEventListener("drop", (event) => {
+        const file = event.dataTransfer.files?.[0];
+        if (file) {
+          handleImportFile(file);
+        }
+      });
+
+      importFileBtn.addEventListener("click", () => fileInput.click());
+      downloadTemplateBtn.addEventListener("click", downloadTemplate);
+      fileInput.addEventListener("change", (event) => {
+        const file = event.target.files?.[0];
+        if (file) {
+          handleImportFile(file);
+        }
+      });
+      importSubmitBtn.addEventListener("click", importPreparedRows);
+      importSubmitBtn.disabled = true;
 
       // Khởi chạy
       fetchUsers();

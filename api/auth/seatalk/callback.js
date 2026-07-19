@@ -1,12 +1,21 @@
 // api/auth/seatalk/callback.js
 import crypto from 'crypto';
 
+// Helper an toàn tránh dùng url.parse (gây deprecation warning)
+function safeRedirect(res, req, path) {
+  const protocol = req.headers['x-forwarded-proto'] || 'http';
+  const host = req.headers.host;
+  const url = new URL(path, `${protocol}://${host}`);
+  res.writeHead(302, { Location: url.href });
+  res.end();
+}
+
 export default async function handler(req, res) {
   const { code, state } = req.query;
 
   if (!code) {
     console.error('[Callback] Thiếu code');
-    return res.redirect('/login.html?error=missing_code');
+    return safeRedirect(res, req, '/login.html?error=missing_code');
   }
 
   const SEATALK_APP_ID = process.env.SEATALK_APP_ID;
@@ -16,7 +25,6 @@ export default async function handler(req, res) {
   const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY;
   const AUTH_SECRET = process.env.AUTH_SECRET;
 
-  // Kiểm tra biến môi trường bắt buộc
   if (!SEATALK_APP_ID || !SEATALK_APP_SECRET || !REDIRECT_URI || !SUPABASE_URL || !SUPABASE_ANON_KEY || !AUTH_SECRET) {
     console.error('[Callback] Thiếu biến môi trường:', {
       hasAppId: !!SEATALK_APP_ID,
@@ -26,13 +34,13 @@ export default async function handler(req, res) {
       hasDbKey: !!SUPABASE_ANON_KEY,
       hasAuthSecret: !!AUTH_SECRET,
     });
-    return res.redirect('/login.html?error=internal_error');
+    return safeRedirect(res, req, '/login.html?error=internal_error');
   }
 
   try {
     // 1. Đổi code lấy access token
     console.log('[Callback] Đang đổi code lấy token...');
-    const tokenRes = await fetch('https://api.seatalk.io/open/auth/token', {
+    const tokenRes = await fetch(new URL('https://api.seatalk.io/open/auth/token'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -45,7 +53,7 @@ export default async function handler(req, res) {
     if (!tokenRes.ok) {
       const errText = await tokenRes.text();
       console.error('[Callback] Lỗi đổi token:', tokenRes.status, errText);
-      return res.redirect('/login.html?error=token_exchange_failed');
+      return safeRedirect(res, req, '/login.html?error=token_exchange_failed');
     }
 
     const tokenData = await tokenRes.json();
@@ -53,19 +61,19 @@ export default async function handler(req, res) {
 
     if (!tokenData.access_token) {
       console.error('[Callback] Không có access_token trong response');
-      return res.redirect('/login.html?error=token_exchange_failed');
+      return safeRedirect(res, req, '/login.html?error=token_exchange_failed');
     }
 
     // 2. Lấy thông tin user
     console.log('[Callback] Đang lấy profile...');
-    const profileRes = await fetch('https://api.seatalk.io/open/auth/user/profile', {
+    const profileRes = await fetch(new URL('https://api.seatalk.io/open/auth/user/profile'), {
       headers: { 'Authorization': `Bearer ${tokenData.access_token}` },
     });
 
     if (!profileRes.ok) {
       const errText = await profileRes.text();
       console.error('[Callback] Lỗi lấy profile:', profileRes.status, errText);
-      return res.redirect('/login.html?error=profile_fetch_failed');
+      return safeRedirect(res, req, '/login.html?error=profile_fetch_failed');
     }
 
     const profile = await profileRes.json();
@@ -74,31 +82,33 @@ export default async function handler(req, res) {
     const email = (profile.email || '').toLowerCase().trim();
     if (!email) {
       console.error('[Callback] Profile không có email');
-      return res.redirect('/login.html?error=profile_fetch_failed');
+      return safeRedirect(res, req, '/login.html?error=profile_fetch_failed');
     }
 
     // 3. Kiểm tra user trong database
     console.log('[Callback] Kiểm tra user trong DB:', email);
-    const dbRes = await fetch(
-      `${SUPABASE_URL}/rest/v1/qc_users?email=eq.${encodeURIComponent(email)}&is_active=eq.true&select=id`,
-      {
-        headers: {
-          'apikey': SUPABASE_ANON_KEY,
-          'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
-        },
-      }
-    );
+    const dbUrl = new URL('/rest/v1/qc_users', SUPABASE_URL);
+    dbUrl.searchParams.set('email', `eq.${email}`);
+    dbUrl.searchParams.set('is_active', 'eq.true');
+    dbUrl.searchParams.set('select', 'id');
+
+    const dbRes = await fetch(dbUrl, {
+      headers: {
+        'apikey': SUPABASE_ANON_KEY,
+        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+      },
+    });
 
     if (!dbRes.ok) {
       const errText = await dbRes.text();
       console.error('[Callback] Lỗi DB:', dbRes.status, errText);
-      return res.redirect('/login.html?error=internal_error');
+      return safeRedirect(res, req, '/login.html?error=internal_error');
     }
 
     const users = await dbRes.json();
     if (!users || users.length === 0) {
       console.warn('[Callback] User không tồn tại hoặc không active:', email);
-      return res.redirect('/login.html?error=unauthorized');
+      return safeRedirect(res, req, '/login.html?error=unauthorized');
     }
 
     // 4. Tạo session token
@@ -107,10 +117,10 @@ export default async function handler(req, res) {
     const token = Buffer.from(`${payload}.${signature}`).toString('base64url');
 
     console.log('[Callback] Đăng nhập thành công, redirect về index');
-    return res.redirect(`/index.html?token=${token}`);
+    return safeRedirect(res, req, `/index.html?token=${token}`);
 
   } catch (error) {
     console.error('[Callback] Lỗi không mong muốn:', error);
-    return res.redirect('/login.html?error=internal_error');
+    return safeRedirect(res, req, '/login.html?error=internal_error');
   }
 }

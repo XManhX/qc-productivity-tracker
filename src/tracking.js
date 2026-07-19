@@ -16,7 +16,7 @@ export function createTrackerSource() {
   // Inject widget code – thay thế placeholder __WIDGET_CODE__
   source = source.replace(
     /const widgetCode = __WIDGET_CODE__ \|\| .*?;/s,
-    `const widgetCode = ${widgetSource};`,
+    `const widgetCode = function() {\n${widgetSource}\n};`,
   );
   // Nếu placeholder không nằm trong biểu thức như trên, có thể dùng:
   // source = source.replace('__WIDGET_CODE__', widgetSource);

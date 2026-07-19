@@ -240,12 +240,15 @@
 
   // ==================== ACTION BUTTON ====================
   const findActionButton = (text) => {
-    const btns = Array.from(document.querySelectorAll("button"));
-    return (
-      btns.find(
-        (b) => normalize(b.innerText).toLowerCase() === text.toLowerCase(),
-      ) || null
+    const candidates = document.querySelectorAll(
+      'button, [role="button"], input[type="submit"], input[type="button"], .btn, [class*="button"]',
     );
+    const target = text.toLowerCase().trim();
+    for (const el of candidates) {
+      const elText = normalize(el.innerText || el.value || "").toLowerCase();
+      if (elText === target) return el;
+    }
+    return null;
   };
 
   // ==================== RECORD ====================

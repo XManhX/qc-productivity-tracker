@@ -663,9 +663,9 @@
               <div class="w-9 h-9 rounded-full bg-slate-100 flex items-center justify-center text-xs font-bold text-slate-600 uppercase border border-slate-200 flex-shrink-0">
                 ${(user.name || user.email).substring(0, 2)}
               </div>
-              <div>
-                <div class="font-semibold text-slate-800 truncate">${user.name || user.email}</div>
-                <div class="text-xs text-slate-500 truncate">${user.name ? user.email : ""}</div>
+              <div class="min-w-0">
+                <div class="font-semibold text-slate-800 truncate" title="${user.name || user.email}">${user.name || user.email}</div>
+                <div class="text-xs text-slate-500 truncate" title="${user.name ? user.email : ''}">${user.name ? user.email : ""}</div>
               </div>
             </div></td>`;
 

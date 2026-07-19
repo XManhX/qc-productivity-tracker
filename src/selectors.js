@@ -14,7 +14,7 @@ export const PAGE_CONFIG = {
     actionText: "Confirm Judged",
     requiredFields: ["scan_value"],
     fields: {
-      scan_value: ["scanInput"],
+      scan_value: ["#rms-judging-input-asnID"],
     },
     urlParam: "id", // <-- ĐÃ CÓ SẴN
   },

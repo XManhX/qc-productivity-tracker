@@ -1,3 +1,4 @@
+<!-- public/login.html -->
 <!doctype html>
 <html lang="vi">
 <head>
@@ -18,51 +19,67 @@
     </div>
     <h1 class="text-2xl font-bold text-slate-900 mb-2">WMS QC Monitor</h1>
     <p class="text-slate-500 text-sm mb-6">Đăng nhập bằng tài khoản SeaTalk để tiếp tục</p>
-    
-    <!-- Nút Login with SeaTalk -->
-    <div id="seatalk_login_app_info"
-         data-appid="YOUR_APP_ID"
-         data-redirect_uri="YOUR_REDIRECT_URI"
-         data-response_type="code">
-    </div>
-    <div id="seatalk_login_button"
-         data-size="large"
-         data-theme="default"
-         data-align="center">
-    </div>
 
-    <!-- Thông báo lỗi nếu có -->
+    <!-- Khu vực sẽ được điền App ID và Redirect URI từ API -->
+    <div id="seatalk_login_app_info"></div>
+    <div id="seatalk_login_button"></div>
+
     <div id="error-message" class="hidden mt-4 p-3 bg-red-50 text-red-700 rounded-lg text-sm"></div>
   </div>
 
   <script src="https://sso.seatalk.io/widget/sdk.js"></script>
   <script>
-    // Hiển thị lỗi từ URL
-    const params = new URLSearchParams(window.location.search);
-    const error = params.get('error');
-    if (error) {
-      const el = document.getElementById('error-message');
-      el.classList.remove('hidden');
-      const messages = {
-        missing_code: 'Thiếu mã xác thực từ SeaTalk.',
-        token_exchange_failed: 'Xác thực không thành công. Vui lòng thử lại.',
-        profile_fetch_failed: 'Không thể lấy thông tin người dùng.',
-        unauthorized: 'Tài khoản của bạn không được phép truy cập hệ thống này.',
-        internal_error: 'Lỗi hệ thống. Vui lòng thử lại sau.',
-      };
-      el.textContent = messages[error] || 'Đã xảy ra lỗi không xác định.';
-    }
+    (async function() {
+      // 1. Nếu đã có session token hợp lệ, chuyển thẳng vào dashboard
+      const token = localStorage.getItem('qc_session_token');
+      if (token) {
+        try {
+          const payload = JSON.parse(atob(token.split('.')[0]));
+          if (payload.exp > Date.now()) {
+            window.location.href = '/index.html';
+            return;
+          }
+        } catch(e) {}
+      }
 
-    // Nếu đã có session token hợp lệ, tự động redirect về dashboard
-    const token = localStorage.getItem('qc_session_token');
-    if (token) {
+      // 2. Hiển thị lỗi từ URL (nếu có)
+      const params = new URLSearchParams(window.location.search);
+      const error = params.get('error');
+      if (error) {
+        const el = document.getElementById('error-message');
+        el.classList.remove('hidden');
+        const messages = {
+          missing_code: 'Thiếu mã xác thực từ SeaTalk.',
+          token_exchange_failed: 'Xác thực không thành công. Vui lòng thử lại.',
+          profile_fetch_failed: 'Không thể lấy thông tin người dùng.',
+          unauthorized: 'Tài khoản của bạn không được phép truy cập hệ thống này.',
+          internal_error: 'Lỗi hệ thống. Vui lòng thử lại sau.',
+        };
+        el.textContent = messages[error] || 'Đã xảy ra lỗi không xác định.';
+      }
+
+      // 3. Lấy cấu hình từ API và khởi tạo nút Seatalk
       try {
-        const payload = JSON.parse(atob(token.split('.')[0]));
-        if (payload.exp > Date.now()) {
-          window.location.href = '/index.html';
+        const res = await fetch('/api/config');
+        if (!res.ok) throw new Error('Không thể tải cấu hình');
+        const config = await res.json();
+
+        if (!config.seatalkAppId || !config.seatalkRedirectUri) {
+          throw new Error('Thiếu cấu hình Seatalk');
         }
-      } catch(e) {}
-    }
+
+        const appInfo = document.getElementById('seatalk_login_app_info');
+        appInfo.setAttribute('data-appid', config.seatalkAppId);
+        appInfo.setAttribute('data-redirect_uri', config.seatalkRedirectUri);
+        appInfo.setAttribute('data-response_type', 'code');
+
+        // Sau khi set attributes, SDK sẽ tự render nút
+      } catch (e) {
+        const el = document.getElementById('error-message');
+        el.classList.remove('hidden');
+        el.textContent = 'Không thể khởi tạo chức năng đăng nhập. Vui lòng thử lại sau.';
+      }
+    })();
   </script>
 </body>
 </html>

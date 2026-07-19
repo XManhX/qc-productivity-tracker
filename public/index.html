@@ -176,6 +176,15 @@
               Xuất Excel
             </button>
             <button
+              id="btn-reset-filters"
+              onclick="resetFilters()"
+              class="flex items-center gap-2 bg-rose-500 hover:bg-rose-600 text-white font-semibold text-sm px-4 py-2.5 rounded-xl transition duration-150 shadow-sm"
+              title="Đặt lại bộ lọc"
+            >
+              <i data-lucide="trash-2" class="w-4 h-4"></i>
+              Đặt lại bộ lọc
+            </button>
+            <button
               onclick="loadDashboardData()"
               class="flex items-center gap-2 bg-slate-900 hover:bg-slate-800 text-white font-semibold text-sm px-5 py-2.5 rounded-xl transition duration-150 shadow-sm"
             >
@@ -441,6 +450,92 @@
         };
       }
 
+      // --- Persist / restore filters (URL + localStorage fallback) ---
+      const STORAGE_KEY = "qc_dashboard_filters";
+
+      function writeFiltersToURL(replace = true) {
+        const params = new URLSearchParams();
+        const date = document.getElementById("filter-date").value;
+        const q = document.getElementById("filter-q").value || "";
+        const minTotal =
+          document.getElementById("filter-min-total").value || "";
+        const hourStartVal =
+          document.getElementById("filter-hour-start").value || startHour;
+        const hourEndVal =
+          document.getElementById("filter-hour-end").value || endHour;
+        const activeOnly =
+          document.getElementById("filter-active-only").checked;
+        const pageSizeVal =
+          document.getElementById("filter-page-size").value || pageSize;
+
+        if (date) params.set("date", date);
+        if (q) params.set("q", q);
+        if (minTotal) params.set("minTotal", minTotal);
+        if (hourStartVal) params.set("hourStart", hourStartVal);
+        if (hourEndVal) params.set("hourEnd", hourEndVal);
+        if (activeOnly) params.set("isActive", "1");
+        if (pageSizeVal) params.set("limit", pageSizeVal);
+        // include current page for shareable view
+        if (typeof currentPage !== "undefined")
+          params.set("page", String(currentPage));
+
+        const newUrl = `${location.pathname}?${params.toString()}`;
+        if (replace) history.replaceState(null, "", newUrl);
+        try {
+          localStorage.setItem(
+            STORAGE_KEY,
+            JSON.stringify(Object.fromEntries(params)),
+          );
+        } catch (e) {
+          // ignore storage errors
+        }
+      }
+
+      function loadFiltersFromURLorStorage() {
+        const params = new URLSearchParams(window.location.search);
+        let fromUrl = false;
+        if ([...params.keys()].length > 0) fromUrl = true;
+
+        let obj = {};
+        if (fromUrl) {
+          obj = Object.fromEntries(params.entries());
+        } else {
+          try {
+            const raw = localStorage.getItem(STORAGE_KEY);
+            if (raw) obj = JSON.parse(raw);
+          } catch (e) {
+            obj = {};
+          }
+        }
+
+        // apply to UI elements if present
+        if (obj.date) document.getElementById("filter-date").value = obj.date;
+        if (obj.q !== undefined)
+          document.getElementById("filter-q").value = obj.q;
+        if (obj.minTotal !== undefined)
+          document.getElementById("filter-min-total").value = obj.minTotal;
+        if (obj.hourStart !== undefined)
+          document.getElementById("filter-hour-start").value = obj.hourStart;
+        if (obj.hourEnd !== undefined)
+          document.getElementById("filter-hour-end").value = obj.hourEnd;
+        if (obj.isActive !== undefined)
+          document.getElementById("filter-active-only").checked =
+            obj.isActive === "1" || obj.isActive === "true";
+        if (obj.limit !== undefined)
+          document.getElementById("filter-page-size").value = obj.limit;
+        // update start/end hour variables
+        const hs = Number(
+          document.getElementById("filter-hour-start").value || startHour,
+        );
+        const he = Number(
+          document.getElementById("filter-hour-end").value || endHour,
+        );
+        startHour = Math.max(0, Math.min(23, isNaN(hs) ? startHour : hs));
+        endHour = Math.max(0, Math.min(23, isNaN(he) ? endHour : he));
+        // restore page if present
+        currentPage = obj.page ? Math.max(1, Number(obj.page) || 1) : 1;
+      }
+
       function getSortValue(row, key) {
         if (key === "name") {
           return (row.name || row.email || "").toLowerCase();
@@ -462,6 +557,8 @@
         const selectedDate = document.getElementById("filter-date").value;
         showLoading();
         currentPage = page || 1;
+        // persist current page + filters into URL/localStorage
+        writeFiltersToURL();
 
         try {
           const q = document.getElementById("filter-q").value || "";
@@ -628,6 +725,27 @@
         lucide.createIcons();
       }
 
+      function resetFilters() {
+        try {
+          localStorage.removeItem(STORAGE_KEY);
+        } catch (e) {}
+        history.replaceState(null, "", location.pathname);
+        // reset UI to defaults
+        setInitialDate();
+        document.getElementById("filter-q").value = "";
+        document.getElementById("filter-min-total").value = "";
+        document.getElementById("filter-hour-start").value = "6";
+        document.getElementById("filter-hour-end").value = "22";
+        document.getElementById("filter-active-only").checked = false;
+        document.getElementById("filter-page-size").value = "25";
+        startHour = 6;
+        endHour = 22;
+        pageSize = 25;
+        currentPage = 1;
+        initTableHeader();
+        loadDashboardData(1);
+      }
+
       function renderPagination() {
         const controls = document.getElementById("pagination-controls");
         controls.innerHTML = "";
@@ -715,11 +833,8 @@
 
       // Khởi chạy
       setInitialDate();
-      // Initialize displayed hour range from inputs if present
-      const _hsInit = document.getElementById("filter-hour-start");
-      const _heInit = document.getElementById("filter-hour-end");
-      if (_hsInit) startHour = Number(_hsInit.value) || startHour;
-      if (_heInit) endHour = Number(_heInit.value) || endHour;
+      // Load persisted filters (URL or localStorage) and initialize header
+      loadFiltersFromURLorStorage();
       initTableHeader();
       document.querySelectorAll("[data-sort-trigger]").forEach((button) => {
         button.addEventListener("click", () => {
@@ -735,6 +850,7 @@
           "input",
           debounce(() => {
             currentPage = 1;
+            writeFiltersToURL();
             loadDashboardData();
           }, 350),
         );
@@ -742,6 +858,7 @@
       if (minEl)
         minEl.addEventListener("change", () => {
           currentPage = 1;
+          writeFiltersToURL();
           loadDashboardData();
         });
       const hs = document.getElementById("filter-hour-start");
@@ -753,6 +870,7 @@
           if (startHour > endHour) endHour = startHour;
           initTableHeader();
           currentPage = 1;
+          writeFiltersToURL();
           loadDashboardData();
         });
       if (he)
@@ -762,18 +880,21 @@
           if (endHour < startHour) startHour = endHour;
           initTableHeader();
           currentPage = 1;
+          writeFiltersToURL();
           loadDashboardData();
         });
       const activeEl = document.getElementById("filter-active-only");
       if (activeEl)
         activeEl.addEventListener("change", () => {
           currentPage = 1;
+          writeFiltersToURL();
           loadDashboardData();
         });
       const pgSize = document.getElementById("filter-page-size");
       if (pgSize)
         pgSize.addEventListener("change", () => {
           currentPage = 1;
+          writeFiltersToURL();
           loadDashboardData();
         });
 

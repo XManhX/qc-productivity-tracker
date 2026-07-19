@@ -27,7 +27,9 @@
     <div id="error-message" class="hidden mt-4 p-3 bg-red-50 text-red-700 rounded-lg text-sm"></div>
   </div>
 
-  <script src="https://sso.seatalk.io/widget/sdk.js"></script>
+  <!-- Dùng CDN chính thức của Shopee/SeaTalk -->
+  <script src="https://static.cdn.haiserve.com/seatalk/client/shared/sop/auth.js"></script>
+  
   <script>
     (async function() {
       // 1. Nếu đã có session token hợp lệ, chuyển thẳng vào dashboard
@@ -73,7 +75,7 @@
         appInfo.setAttribute('data-redirect_uri', config.seatalkRedirectUri);
         appInfo.setAttribute('data-response_type', 'code');
 
-        // Sau khi set attributes, SDK sẽ tự render nút
+        // SDK sẽ tự động render nút sau khi set attributes
       } catch (e) {
         const el = document.getElementById('error-message');
         el.classList.remove('hidden');

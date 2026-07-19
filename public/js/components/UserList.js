@@ -106,7 +106,6 @@ export class UserList {
   _updateView() {
     this._updateSummaryCards();
     this._renderTable();
-    this._renderPagination();
     lucide.createIcons();
   }
 
@@ -182,48 +181,6 @@ export class UserList {
       </tr>`;
       })
       .join("");
-  }
-
-  _renderPagination() {
-    const info = this.container.querySelector("#pagination-info");
-    const controls = this.container.querySelector("#pagination-controls");
-    const { currentPage, pageSize, totalFiltered, totalPages } =
-      userStore.state;
-    const start = totalFiltered ? (currentPage - 1) * pageSize + 1 : 0;
-    const end = Math.min(currentPage * pageSize, totalFiltered);
-    info.textContent = totalFiltered
-      ? `Hiển thị ${start}-${end} trên ${totalFiltered} mục`
-      : "Không có kết quả";
-    if (totalPages <= 1) {
-      controls.innerHTML = "";
-      return;
-    }
-    const makeBtn = (label, disabled, onClick) => {
-      const btn = document.createElement("button");
-      btn.className = `px-3 py-1 rounded-md text-sm ${disabled ? "bg-slate-100 text-slate-400" : "bg-white text-slate-700 hover:bg-slate-50 border border-slate-200"}`;
-      btn.innerText = label;
-      if (!disabled) btn.addEventListener("click", onClick);
-      return btn;
-    };
-    controls.innerHTML = "";
-    controls.appendChild(
-      makeBtn("Trước", currentPage <= 1, () =>
-        userStore.setPage(currentPage - 1),
-      ),
-    );
-    for (let p = 1; p <= totalPages; p++) {
-      const btn = document.createElement("button");
-      btn.className = `px-3 py-1 rounded-md text-sm ${p === currentPage ? "bg-indigo-600 text-white" : "bg-white text-slate-700 hover:bg-slate-50 border border-slate-200"}`;
-      btn.innerText = p;
-      if (p !== currentPage)
-        btn.addEventListener("click", () => userStore.setPage(p));
-      controls.appendChild(btn);
-    }
-    controls.appendChild(
-      makeBtn("Sau", currentPage >= totalPages, () =>
-        userStore.setPage(currentPage + 1),
-      ),
-    );
   }
 
   _bindEvents() {

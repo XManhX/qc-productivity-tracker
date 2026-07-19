@@ -1,6 +1,6 @@
-import { store } from "../store/DashboardStore.js";
-import { refreshIcons } from "../utils/icons.js";
-import { Pagination } from "./Pagination.js";
+import { store } from "../../store/DashboardStore.js";
+import { refreshIcons } from "../../utils/icons.js";
+import { Pagination } from "..shared/Pagination.js";
 
 export class HeatmapTable {
   constructor(container) {

@@ -1,4 +1,4 @@
-import { store } from "../store/DashboardStore.js";
+import { store } from "../../store/DashboardStore.js";
 
 export class StatsOverview {
   constructor(container) {

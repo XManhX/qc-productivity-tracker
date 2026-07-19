@@ -1,6 +1,7 @@
-import { userStore } from "../store/UserStore.js";
-import { showToast } from "../utils/toast.js";
-import { escapeHtml } from "../utils/escapeHtml.js";
+import * as XLSX from "xlsx";
+import { userStore } from "../../store/UserStore.js";
+import { showToast } from "../../utils/toast.js";
+import { escapeHtml } from "../../utils/escapeHtml.js";
 
 export class ImportSection {
   constructor(container) {

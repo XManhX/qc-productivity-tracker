@@ -1,7 +1,7 @@
-import { userStore } from "../store/UserStore.js";
-import { escapeHtml } from "../utils/escapeHtml.js";
-import { showToast } from "../utils/toast.js";
-import { Pagination } from "./Pagination.js";
+import { userStore } from "../../store/UserStore.js";
+import { escapeHtml } from "../../utils/escapeHtml.js";
+import { showToast } from "../../utils/toast.js";
+import { Pagination } from "../shared/Pagination.js";
 
 export class UserList {
   constructor(container) {

@@ -1,6 +1,6 @@
-import { targetStore } from "../store/TargetStore.js";
-import { showToast } from "../utils/toast.js";
-import { escapeHtml } from "../utils/escapeHtml.js";
+import { targetStore } from "../../store/TargetStore.js";
+import { showToast } from "../../utils/toast.js";
+import { escapeHtml } from "../../utils/escapeHtml.js";
 
 export class RoleTable {
   constructor(container) {

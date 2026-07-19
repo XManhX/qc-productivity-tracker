@@ -1,6 +1,7 @@
-import { store } from "../store/DashboardStore.js";
-import { debounce } from "../utils/debounce.js";
-import { refreshIcons } from "../utils/icons.js";
+import * as XLSX from "xlsx";
+import { store } from "../../store/DashboardStore.js";
+import { debounce } from "../../utils/debounce.js";
+import { refreshIcons } from "../../utils/icons.js";
 
 export class FilterBar {
   constructor(container) {

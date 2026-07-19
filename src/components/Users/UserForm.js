@@ -1,5 +1,5 @@
-import { userStore } from "../store/UserStore.js";
-import { showToast } from "../utils/toast.js";
+import { userStore } from "../../store/UserStore.js";
+import { showToast } from "../../utils/toast.js";
 
 export class UserForm {
   constructor(container) {

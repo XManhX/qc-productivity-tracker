@@ -1,5 +1,5 @@
-import { targetStore } from "../store/TargetStore.js";
-import { showToast } from "../utils/toast.js";
+import { targetStore } from "../../store/TargetStore.js";
+import { showToast } from "../../utils/toast.js";
 
 export class TargetTable {
   constructor(container) {

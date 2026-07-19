@@ -14,7 +14,7 @@ export default async function handler(req, res) {
       const { data, error } = await supabase
         .from("qc_roles")
         .select("id, role_key, display_name, is_active")
-        .order("display_name");
+        .order("id");
       if (error) throw error;
       return res.status(200).json(data);
     }

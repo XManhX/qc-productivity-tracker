@@ -255,31 +255,140 @@
           <div
             class="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden"
           >
-            <div
-              class="p-6 border-b border-slate-100 flex items-center justify-between"
-            >
-              <div class="flex items-center gap-2">
-                <div class="bg-emerald-50 p-2 rounded-lg text-emerald-600">
-                  <i data-lucide="shield-check" class="w-5 h-5"></i>
+            <div class="p-6 border-b border-slate-100 bg-slate-50/70">
+              <div class="flex items-center justify-between gap-3 mb-4">
+                <div class="flex items-center gap-2">
+                  <div class="bg-emerald-50 p-2 rounded-lg text-emerald-600">
+                    <i data-lucide="shield-check" class="w-5 h-5"></i>
+                  </div>
+                  <div>
+                    <h2 class="text-lg font-bold text-slate-900">
+                      Danh Sách Allowed
+                    </h2>
+                    <p
+                      id="user-count-badge"
+                      class="text-slate-400 text-xs mt-0.5"
+                    >
+                      0 nhân sự được ủy quyền
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <h2 class="text-lg font-bold text-slate-900">
-                    Danh Sách Allowed
-                  </h2>
-                  <p
-                    id="user-count-badge"
-                    class="text-slate-400 text-xs mt-0.5"
-                  >
-                    0 nhân sự được ủy quyền
-                  </p>
+                <button
+                  onclick="fetchUsers()"
+                  class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-slate-500 hover:text-slate-700 transition"
+                  title="Tải lại dữ liệu"
+                >
+                  <i data-lucide="refresh-cw" class="w-4 h-4"></i>
+                </button>
+              </div>
+
+              <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
+                <div
+                  class="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm"
+                >
+                  <div class="flex items-center justify-between">
+                    <div>
+                      <p
+                        class="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400"
+                      >
+                        Tổng
+                      </p>
+                      <p
+                        id="summary-total"
+                        class="text-xl font-semibold text-slate-900"
+                      >
+                        0
+                      </p>
+                    </div>
+                    <div class="rounded-xl bg-indigo-50 p-2 text-indigo-600">
+                      <i data-lucide="users" class="w-4 h-4"></i>
+                    </div>
+                  </div>
+                </div>
+                <div
+                  class="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm"
+                >
+                  <div class="flex items-center justify-between">
+                    <div>
+                      <p
+                        class="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400"
+                      >
+                        Đang hoạt động
+                      </p>
+                      <p
+                        id="summary-active"
+                        class="text-xl font-semibold text-emerald-600"
+                      >
+                        0
+                      </p>
+                    </div>
+                    <div class="rounded-xl bg-emerald-50 p-2 text-emerald-600">
+                      <i data-lucide="check-circle-2" class="w-4 h-4"></i>
+                    </div>
+                  </div>
+                </div>
+                <div
+                  class="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm"
+                >
+                  <div class="flex items-center justify-between">
+                    <div>
+                      <p
+                        class="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400"
+                      >
+                        Tạm khóa
+                      </p>
+                      <p
+                        id="summary-inactive"
+                        class="text-xl font-semibold text-slate-600"
+                      >
+                        0
+                      </p>
+                    </div>
+                    <div class="rounded-xl bg-slate-100 p-2 text-slate-600">
+                      <i data-lucide="pause-circle" class="w-4 h-4"></i>
+                    </div>
+                  </div>
                 </div>
               </div>
-              <button
-                onclick="fetchUsers()"
-                class="text-slate-400 hover:text-slate-600 transition"
+
+              <div
+                class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between"
               >
-                <i data-lucide="refresh-cw" class="w-4 h-4"></i>
-              </button>
+                <label class="relative flex-1">
+                  <i
+                    data-lucide="search"
+                    class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"
+                  ></i>
+                  <input
+                    id="allowed-search"
+                    type="text"
+                    placeholder="Tìm theo tên hoặc email..."
+                    class="w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-9 pr-3 text-sm text-slate-700 outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
+                  />
+                </label>
+                <div class="flex flex-wrap items-center gap-2">
+                  <label
+                    class="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600"
+                  >
+                    <i data-lucide="filter" class="w-4 h-4 text-slate-400"></i>
+                    <select
+                      id="allowed-status-filter"
+                      class="bg-transparent text-sm font-medium outline-none"
+                    >
+                      <option value="all">Tất cả</option>
+                      <option value="active">Đang hoạt động</option>
+                      <option value="inactive">Tạm khóa</option>
+                    </select>
+                  </label>
+                  <button
+                    id="clear-filters-btn"
+                    type="button"
+                    class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-600 transition hover:bg-slate-100"
+                  >
+                    Xóa bộ lọc
+                  </button>
+                </div>
+              </div>
             </div>
 
             <div class="overflow-x-auto max-h-[600px] overflow-y-auto">
@@ -360,15 +469,65 @@
 
       let importedRows = [];
       let allUsers = [];
+      let filteredUsers = [];
       let currentPage = 1;
+      let searchQuery = "";
+      let statusFilter = "all";
       const pageSize = 8;
+
+      function getFilteredUsers() {
+        const normalizedQuery = searchQuery.toLowerCase().trim();
+
+        return allUsers.filter((user) => {
+          const userName = String(user.name || "").toLowerCase();
+          const userEmail = String(user.email || "").toLowerCase();
+          const isActive = user.is_active !== false;
+          const matchesQuery =
+            !normalizedQuery ||
+            userName.includes(normalizedQuery) ||
+            userEmail.includes(normalizedQuery);
+          const matchesStatus =
+            statusFilter === "all" ||
+            (statusFilter === "active" && isActive) ||
+            (statusFilter === "inactive" && !isActive);
+
+          return matchesQuery && matchesStatus;
+        });
+      }
+
+      function updateSummaryCards() {
+        const total = allUsers.length;
+        const active = allUsers.filter(
+          (user) => user.is_active !== false,
+        ).length;
+        const inactive = total - active;
+
+        const totalEl = document.getElementById("summary-total");
+        const activeEl = document.getElementById("summary-active");
+        const inactiveEl = document.getElementById("summary-inactive");
+        const countBadge = document.getElementById("user-count-badge");
+
+        if (totalEl) totalEl.textContent = total;
+        if (activeEl) activeEl.textContent = active;
+        if (inactiveEl) inactiveEl.textContent = inactive;
+
+        if (!countBadge) return;
+        const visibleCount = filteredUsers.length;
+        if (visibleCount === 0) {
+          countBadge.innerText = "Không có nhân sự nào phù hợp";
+        } else if (visibleCount === total) {
+          countBadge.innerText = `${total} nhân sự được ủy quyền`;
+        } else {
+          countBadge.innerText = `${visibleCount} / ${total} nhân sự phù hợp bộ lọc`;
+        }
+      }
 
       function renderPagination() {
         const info = document.getElementById("pagination-info");
         const controls = document.getElementById("pagination-controls");
         if (!info || !controls) return;
 
-        const totalItems = allUsers.length;
+        const totalItems = filteredUsers.length;
         const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
         const startItem =
           totalItems === 0 ? 0 : (currentPage - 1) * pageSize + 1;
@@ -376,7 +535,7 @@
 
         info.innerHTML =
           totalItems === 0
-            ? '<span class="text-slate-400">Chưa có dữ liệu</span>'
+            ? '<span class="text-slate-400">Không có kết quả để hiển thị</span>'
             : `<span>Hiển thị ${startItem}-${endItem} trên ${totalItems} mục</span>`;
 
         if (totalPages <= 1) {
@@ -423,23 +582,48 @@
 
       function renderUserTable() {
         const tbody = document.getElementById("user-list-body");
-        const totalItems = allUsers.length;
+        filteredUsers = getFilteredUsers();
+        updateSummaryCards();
+
+        const totalItems = filteredUsers.length;
         const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
 
         if (currentPage > totalPages) {
           currentPage = totalPages;
         }
 
-        document.getElementById("user-count-badge").innerText =
-          `${totalItems} nhân sự được ủy quyền`;
+        if (allUsers.length === 0) {
+          tbody.innerHTML = `
+            <tr>
+              <td colspan="4" class="py-14 text-center text-slate-400">
+                <div class="flex flex-col items-center justify-center gap-2">
+                  <div class="rounded-2xl bg-slate-100 p-3 text-slate-500">
+                    <i data-lucide="user-x" class="w-8 h-8"></i>
+                  </div>
+                  <div>
+                    <p class="font-semibold text-slate-700">Chưa có nhân viên nào được cho phép</p>
+                    <p class="mt-1 text-sm text-slate-400">Thêm nhân sự mới để bắt đầu quản lý quyền truy cập</p>
+                  </div>
+                </div>
+              </td>
+            </tr>`;
+          renderPagination();
+          lucide.createIcons();
+          return;
+        }
 
         if (totalItems === 0) {
           tbody.innerHTML = `
             <tr>
-              <td colspan="4" class="py-12 text-center text-slate-400">
-                <div class="flex flex-col items-center justify-center gap-1">
-                  <i data-lucide="user-x" class="w-10 h-10 text-slate-300"></i>
-                  <span class="font-medium">Chưa có nhân viên nào được cho phép</span>
+              <td colspan="4" class="py-14 text-center text-slate-400">
+                <div class="flex flex-col items-center justify-center gap-2">
+                  <div class="rounded-2xl bg-slate-100 p-3 text-slate-500">
+                    <i data-lucide="search-x" class="w-8 h-8"></i>
+                  </div>
+                  <div>
+                    <p class="font-semibold text-slate-700">Không tìm thấy nhân sự phù hợp</p>
+                    <p class="mt-1 text-sm text-slate-400">Hãy thử từ khóa khác hoặc đổi bộ lọc</p>
+                  </div>
                 </div>
               </td>
             </tr>`;
@@ -449,7 +633,10 @@
         }
 
         const startIndex = (currentPage - 1) * pageSize;
-        const pagedUsers = allUsers.slice(startIndex, startIndex + pageSize);
+        const pagedUsers = filteredUsers.slice(
+          startIndex,
+          startIndex + pageSize,
+        );
 
         tbody.innerHTML = pagedUsers
           .map((user) => {
@@ -459,23 +646,31 @@
 
             return `
               <tr id="user-row-${user.id}" class="hover:bg-slate-50/50 transition duration-150 align-top">
-                <td class="px-6 py-4">
-                  <input
-                    id="inline-name-${user.id}"
-                    type="text"
-                    value="${escapeHtml(userName || "")}" 
-                    class="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700 outline-none transition focus:border-indigo-500 focus:bg-white"
-                  />
+                <td class="px-6 py-4 align-top">
+                  <div class="space-y-2">
+                    <input
+                      id="inline-name-${user.id}"
+                      type="text"
+                      value="${escapeHtml(userName || "")}"
+                      class="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700 outline-none transition focus:border-indigo-500 focus:bg-white"
+                      placeholder="Tên nhân sự"
+                    />
+                    <p class="text-[11px] text-slate-400">Tên hiển thị trong hệ thống</p>
+                  </div>
                 </td>
-                <td class="px-6 py-4">
-                  <input
-                    id="inline-email-${user.id}"
-                    type="email"
-                    value="${escapeHtml(userEmail || "")}"
-                    class="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700 outline-none transition focus:border-indigo-500 focus:bg-white"
-                  />
+                <td class="px-6 py-4 align-top">
+                  <div class="space-y-2">
+                    <input
+                      id="inline-email-${user.id}"
+                      type="email"
+                      value="${escapeHtml(userEmail || "")}" 
+                      class="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700 outline-none transition focus:border-indigo-500 focus:bg-white"
+                      placeholder="email@shopee.com"
+                    />
+                    <p class="text-[11px] text-slate-400">Email dùng để đăng nhập</p>
+                  </div>
                 </td>
-                <td class="px-6 py-4">
+                <td class="px-6 py-4 align-top">
                   <div class="flex items-center gap-3">
                     <button
                       id="inline-status-${user.id}"
@@ -493,11 +688,11 @@
                     <span class="text-xs font-semibold ${
                       isActive ? "text-emerald-700" : "text-slate-500"
                     }">
-                      ${isActive ? "Active" : "Inactive"}
+                      ${isActive ? "Đang hoạt động" : "Tạm khóa"}
                     </span>
                   </div>
                 </td>
-                <td class="px-6 py-4 text-right">
+                <td class="px-6 py-4 text-right align-top">
                   <div class="flex flex-wrap justify-end gap-2">
                     <button onclick="saveInlineUser(${user.id})" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-xs font-semibold transition">
                       <i data-lucide="check" class="w-3.5 h-3.5"></i>
@@ -519,11 +714,41 @@
       }
 
       function goToPage(page) {
-        const totalPages = Math.max(1, Math.ceil(allUsers.length / pageSize));
+        const totalPages = Math.max(
+          1,
+          Math.ceil(filteredUsers.length / pageSize),
+        );
         if (page < 1 || page > totalPages) return;
         currentPage = page;
         renderUserTable();
       }
+
+      const allowedSearchInput = document.getElementById("allowed-search");
+      const allowedStatusFilter = document.getElementById(
+        "allowed-status-filter",
+      );
+      const clearFiltersBtn = document.getElementById("clear-filters-btn");
+
+      allowedSearchInput?.addEventListener("input", (event) => {
+        searchQuery = event.target.value;
+        currentPage = 1;
+        renderUserTable();
+      });
+
+      allowedStatusFilter?.addEventListener("change", (event) => {
+        statusFilter = event.target.value;
+        currentPage = 1;
+        renderUserTable();
+      });
+
+      clearFiltersBtn?.addEventListener("click", () => {
+        searchQuery = "";
+        statusFilter = "all";
+        if (allowedSearchInput) allowedSearchInput.value = "";
+        if (allowedStatusFilter) allowedStatusFilter.value = "all";
+        currentPage = 1;
+        renderUserTable();
+      });
 
       // Fetch danh sách user
       async function fetchUsers() {

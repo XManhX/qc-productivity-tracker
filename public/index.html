@@ -858,9 +858,10 @@
       // ========== Init ==========
       async function initApp() {
         setInitialDate();
-        await loadRoles(); // đợi roles tải xong
-        initTableHeader();
-        loadFiltersFromURLorStorage(); // khôi phục filter role đã có options
+        await loadRoles();              // 1. Tải roles
+        loadFiltersFromURLorStorage();  // 2. Khôi phục filter (cập nhật startHour, endHour)
+        initTableHeader();              // 3. Tạo header bảng đúng theo filter
+
 
         document.querySelectorAll("[data-sort-trigger]").forEach((btn) => {
           btn.addEventListener("click", () =>

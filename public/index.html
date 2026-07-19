@@ -166,17 +166,7 @@
                 <span>Chỉ hiển thị đang active</span></label
               >
             </div>
-            <div
-              class="flex items-center bg-white border border-slate-200 rounded-xl px-3 py-2"
-            >
-              <label class="text-sm text-slate-500 mr-2">Hiển thị</label>
-              <select id="filter-page-size" class="text-sm focus:outline-none">
-                <option value="10">10</option>
-                <option value="25" selected>25</option>
-                <option value="50">50</option>
-                <option value="100">100</option>
-              </select>
-            </div>
+            
             <button
               id="btn-export"
               onclick="exportToExcel()"
@@ -341,9 +331,20 @@
           class="px-6 py-4 border-t border-slate-100 bg-slate-50 flex items-center justify-between"
         >
           <div class="text-sm text-slate-600">
-            Hiển thị <span id="page-info"></span>
+            Hiển thị <span id="page-info">0 - 0 / 0</span>
           </div>
-          <div id="pagination-controls" class="flex items-center gap-2"></div>
+          <div class="flex items-center gap-3">
+            <div class="flex items-center bg-white border border-slate-200 rounded-xl px-3 py-2">
+              <label class="text-sm text-slate-500 mr-2">Hiển thị</label>
+              <select id="filter-page-size" class="text-sm focus:outline-none">
+                <option value="10">10</option>
+                <option value="25" selected>25</option>
+                <option value="50">50</option>
+                <option value="100">100</option>
+              </select>
+            </div>
+            <div id="pagination-controls" class="flex items-center gap-2"></div>
+          </div>
         </div>
       </div>
     </main>

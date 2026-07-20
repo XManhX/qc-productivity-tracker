@@ -100,7 +100,7 @@
 
     // Fallback webhook
     if (WD.FALLBACK_WEBHOOK && !WD.FALLBACK_WEBHOOK.includes("xxx")) {
-      const msg = `⚠️ **Cảnh báo QC**\nUser: **${email}**\nQC không tăng trong **${payload.idle_minutes}** phút.\n- Hiện tại: **${qc}**\n- Hoạt động cuối: ${new Date(lastAct).toLocaleTimeString("vi-VN")}`;
+      const msg = `⚠️ **Cảnh báo QC**\nUser: **${email}**\nQC không tăng trong **${payload.idle_minutes}** phút.\n- Hiện tại: **${qc}**\n- Hoạt động cuối: ${new Date(lastAct).toLocaleTimeString("vi-VN", "Asia/Ho_Chi_Minh")}`;
       return new Promise((res) => {
         GM_xmlhttpRequest({
           method: "POST",

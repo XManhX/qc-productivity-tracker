@@ -723,6 +723,7 @@
         const pageType = getPageType(location.href);
         if (pageType === "unknown") {
           log("Unsupported page, initialization skipped");
+          localStorage.setItem("widget_visible", "false");
           return;
         }
 

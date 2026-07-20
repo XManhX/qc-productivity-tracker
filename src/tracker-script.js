@@ -817,18 +817,12 @@
         state.initPromise = null;
 
         // Sau khi init hiện tại kết thúc, nếu có URL khác đang chờ thì chạy lại
-        if (
-          state.pendingReinitUrl &&
-          state.pendingReinitUrl !== location.href
-        ) {
-          log("Re-initializing for pending URL:", state.pendingReinitUrl);
-          // Cập nhật lastUrl để tránh vòng lặp nếu URL không thay đổi thêm
-          state.lastUrl = state.pendingReinitUrl;
-          init(); // gọi lại không await để không chặn
-        } else if (state.pendingReinitUrl) {
-          // URL vẫn là trang hiện tại, chỉ cần xóa pending
-          state.pendingReinitUrl = null;
+        if (state.pendingReinitUrl) {
+          state.lastUrl = nextUrl;
         }
+
+        // Gọi lại init bất đồng bộ (đảm bảo state.initPromise đã = null)
+        setTimeout(() => init(), 0);
       }
     })();
 

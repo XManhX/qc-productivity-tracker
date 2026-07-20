@@ -31,6 +31,8 @@ async function init() {
   // 4. Load dữ liệu lần đầu
   await store.loadData();
 
+  console.log(store.state.data); // Debug state ban đầu
+
   // 5. Tự động refresh mỗi 2 phút nếu đang xem ngày hôm nay
   setInterval(() => {
     if (store.state.filters.date === store.getTodayVN()) {

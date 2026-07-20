@@ -218,3 +218,4 @@ class DashboardStore {
 }
 
 export const store = new DashboardStore();
+window.store = store;  // Thêm dòng này để debug toàn cục

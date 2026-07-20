@@ -202,6 +202,8 @@ export class TargetTable {
         setTimeout(() => {
           this._suppressUpdate = false;
         }, 100);
+
+        showToast("Đã lưu ngưỡng năng suất", "success");
       } else {
         showToast(`Lỗi: ${res.message}`, "error");
       }

@@ -259,13 +259,25 @@
   };
 
   // ==================== ACTION BUTTON DETECTION ====================
-  const findActionButton = (text) => {
+  const findActionButton = (cfg) => {
+    // 1. Ưu tiên selector
+    if (cfg.actionSelector) {
+      return document.querySelector(cfg.actionSelector);
+    }
+
+    // 2. Fallback: tìm theo text, giới hạn trong container nếu có
+    const container = cfg.containerSelector
+      ? document.querySelector(cfg.containerSelector)
+      : document;
+    if (!container) return null;
+
+    const text = normalize(cfg.actionText || "").toLowerCase();
     if (!text) return null;
-    const normalizedText = normalize(text).toLowerCase();
-    const btns = Array.from(document.querySelectorAll("button"));
+
+    const buttons = container.querySelectorAll("button");
     return (
-      btns.find(
-        (b) => normalize(b.innerText).toLowerCase() === normalizedText,
+      Array.from(buttons).find(
+        (btn) => normalize(btn.innerText).toLowerCase() === text,
       ) || null
     );
   };
@@ -536,21 +548,44 @@
   // ==================== EVENT LISTENERS SETUP ====================
   const setupButtonListener = (pageType, email) => {
     const cfg = PAGE_CONFIG[pageType];
-    if (!cfg?.actionText) return;
+    if (!cfg) return;
 
-    const btn = findActionButton(cfg.actionText);
-    if (!btn || btn.dataset.qcTrackerBound) return;
+    const btn = findActionButton(cfg);
+    if (!btn) return;
 
-    btn.dataset.qcTrackerBound = "1";
-    btn.addEventListener(
-      "click",
-      () => {
-        log("Action button clicked:", cfg.actionText);
-        handleActionComplete(pageType, email);
-      },
-      true,
-    );
-    log("Button bound for page:", pageType, "text:", cfg.actionText);
+    // Nếu đã gắn listener rồi thì bỏ qua
+    if (btn.dataset.qcTrackerBound === "1") return;
+
+    const bindClick = () => {
+      btn.dataset.qcTrackerBound = "1";
+      btn.addEventListener(
+        "click",
+        () => {
+          log("Action button clicked:", cfg.actionSelector || cfg.actionText);
+          handleActionComplete(pageType, email);
+        },
+        true,
+      );
+      log("Listener bound to:", btn);
+    };
+
+    // Nếu đang enable → gắn ngay
+    if (!btn.disabled) {
+      bindClick();
+    } else {
+      // Đợi đến khi hết disabled
+      log("Button is disabled, observing...");
+      const observer = new MutationObserver(() => {
+        if (!btn.disabled) {
+          observer.disconnect();
+          bindClick();
+        }
+      });
+      observer.observe(btn, {
+        attributes: true,
+        attributeFilter: ["disabled"],
+      });
+    }
   };
 
   const setupFieldListeners = (pageType) => {

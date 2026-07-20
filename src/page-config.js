@@ -1,7 +1,7 @@
 export const PAGE_CONFIG = {
   qc: {
     pathIncludes: "/v2/returninbound/qc",
-    actionText: "Complete",
+    actionSelector: ".btn-confirm > button",
     requiredFields: ["scan_value"],
     fields: {
       scan_value: ["sheet_id"],
@@ -10,7 +10,7 @@ export const PAGE_CONFIG = {
   },
   judgement: {
     pathIncludes: "/v2/returninbound/judgement",
-    actionText: "Confirm Judged",
+    actionSelector: ".confirm-judged-btn > button",
     requiredFields: ["scan_value"],
     fields: {
       scan_value: ["#rms-judging-input-asnID"],
@@ -19,6 +19,7 @@ export const PAGE_CONFIG = {
   },
   rimassreceive: {
     pathIncludes: "/v2/returninbound/rimassreceive",
+    containerSelector: ".ssc-form-item-content",
     actionText: "Save",
     requiredFields: ["device_id", "scan_value"],
     fields: {

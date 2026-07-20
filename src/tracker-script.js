@@ -440,25 +440,15 @@
   // ==================== WIDGET VISIBILITY CONTROL ====================
   const setWidgetVisible = (visible) => {
     localStorage.setItem("widget_visible", visible ? "true" : "false");
-    const widgetEl = document.getElementById("qc-widget-container");
+    // Widget thật có ID là "qc-tracker-floating-widget"
+    const widgetEl = document.getElementById("qc-tracker-floating-widget");
     if (widgetEl) {
       widgetEl.style.display = visible ? "block" : "none";
-    }
-    // Gọi hàm toggle của widget nếu có (tuỳ vào __WIDGET_CODE__)
-    if (typeof toggleWidgetVisibility === "function") {
-      toggleWidgetVisibility(visible);
     }
   };
 
   // NEW: cập nhật widget với dữ liệu từ server hoặc fallback local
   const syncWidgetWithStats = async () => {
-    // Tự tạo lại widget nếu bị mất
-    if (
-      !document.getElementById("qc-widget-container") &&
-      typeof initWidget === "function"
-    ) {
-      initWidget();
-    }
     if (typeof updateWidget !== "function") return;
     const serverStats = await fetchStatsFromServer();
 
@@ -779,6 +769,11 @@
 
         setWidgetVisible(auth.widget_visible);
 
+        // Hiển thị widget ngay với dữ liệu local (trước khi fetch server)
+        if (auth.widget_visible && typeof updateWidget === "function") {
+          updateWidget();
+        }
+
         if (!auth.allowed) {
           warn("User not authorized:", auth.reason);
           return;
@@ -787,12 +782,12 @@
         log("Authorization successful");
 
         // Nếu widget đã bị xóa khỏi DOM (do SPA chuyển trang), tạo lại
-        if (
-          typeof initWidget === "function" &&
-          !document.getElementById("qc-widget-container")
-        ) {
-          initWidget();
-        }
+        // if (
+        //   typeof initWidget === "function" &&
+        //   !document.getElementById("qc-widget-container")
+        // ) {
+        //   initWidget();
+        // }
 
         // Flush any pending logs from previous sessions
         await flushPending();

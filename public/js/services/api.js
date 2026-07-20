@@ -1,48 +1,47 @@
-export async function fetchDashboard(params) {
-  const qs = new URLSearchParams(params).toString();
-  const res = await fetch(`/api/qc-productivity/dashboard?${qs}`);
+// services/api.js
+const BASE_URL = "/api/qc-productivity";
+
+async function request(url, options = {}) {
+  const token = localStorage.getItem("qc_session_token");
+  const headers = {
+    "Content-Type": "application/json",
+    ...(token && { Authorization: `Bearer ${token}` }),
+    ...options.headers,
+  };
+
+  const res = await fetch(url, { ...options, headers });
+
   if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.error || `HTTP ${res.status}`);
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error || body.message || `HTTP ${res.status}`);
   }
+
   const data = await res.json();
-  if (!data.success) throw new Error(data.error || "Dữ liệu không hợp lệ");
+  if (data.success === false) throw new Error(data.error || "Request failed");
   return data;
 }
 
+// Dashboard
+export async function fetchDashboard(params) {
+  const qs = new URLSearchParams(params).toString();
+  return request(`${BASE_URL}/dashboard?${qs}`);
+}
+
+// Roles
 export async function fetchRoles() {
-  const res = await fetch("/api/qc-roles");
-  if (!res.ok) throw new Error("Không thể tải roles");
-  return res.json();
+  return request("/api/qc-roles");
 }
 
-export async function fetchMe() {
-  const token = localStorage.getItem("qc_session_token");
-  const res = await fetch("/api/qc-productivity/me", {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  if (!res.ok) throw new Error("Không lấy được thông tin user");
-  return res.json();
-}
-
-// ========== Users API ==========
+// Users
 export async function fetchUsers() {
-  const res = await fetch("/api/qc-productivity/users");
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  return res.json();
+  return request(`${BASE_URL}/users`);
 }
 
 export async function createUser({ name, email, role_key }) {
-  const res = await fetch("/api/qc-productivity/users", {
+  return request(`${BASE_URL}/users`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ name, email, role_key }),
   });
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    throw new Error(data.message || `HTTP ${res.status}`);
-  }
-  return res.json();
 }
 
 export async function updateUser({
@@ -53,9 +52,8 @@ export async function updateUser({
   is_active,
   widget_visible,
 }) {
-  const res = await fetch("/api/qc-productivity/users", {
+  return request(`${BASE_URL}/users`, {
     method: "PUT",
-    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       id,
       name,
@@ -65,78 +63,47 @@ export async function updateUser({
       widget_visible,
     }),
   });
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    throw new Error(data.message || `HTTP ${res.status}`);
-  }
-  return res.json();
 }
 
 export async function bulkCreateUsers(payload) {
-  // payload = { import: [...] } hoặc gửi thẳng array tùy API
-  const res = await fetch("/api/qc-productivity/users", {
+  return request(`${BASE_URL}/users`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
   });
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    throw new Error(data.message || `HTTP ${res.status}`);
-  }
-  return res.json();
 }
 
-// Thêm vào cuối file api.js
+// Targets
 export async function fetchTargets() {
-  const res = await fetch("/api/qc-productivity/targets");
-  if (!res.ok) throw new Error("Lỗi tải targets");
-  return res.json();
-}
-
-export async function createRole(data) {
-  const res = await fetch("/api/qc-roles", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(data),
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.message || "Lỗi");
-  }
-  return res.json();
-}
-
-export async function updateRole(data) {
-  const res = await fetch("/api/qc-roles", {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(data),
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.message || "Lỗi");
-  }
-  return res.json();
-}
-
-export async function deleteRole(id) {
-  const res = await fetch(`/api/qc-roles?id=${id}`, { method: "DELETE" });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.message || "Lỗi");
-  }
-  return res.json();
+  return request(`${BASE_URL}/targets`);
 }
 
 export async function updateTarget(data) {
-  const res = await fetch("/api/qc-productivity/targets", {
+  return request(`${BASE_URL}/targets`, {
     method: "PUT",
-    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),
   });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.message || "Lỗi");
-  }
-  return res.json();
+}
+
+// Roles (CRUD)
+export async function createRole(data) {
+  return request("/api/qc-roles", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function updateRole(data) {
+  return request("/api/qc-roles", {
+    method: "PUT",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function deleteRole(id) {
+  return request(`/api/qc-roles?id=${id}`, { method: "DELETE" });
+}
+
+// Auth
+export async function fetchMe() {
+  return request(`${BASE_URL}/me`);
 }

@@ -109,6 +109,18 @@ class DashboardStore {
     const page = parseInt(rawFilters.page, 10);
     this.state.filters.page = isNaN(page) || page < 1 ? 1 : page;
 
+    // --- Sắp xếp ---
+    const validSortKeys = ["total", "name", "role", ...Array(24).keys()].map(
+      (i) => `hour-${i}`,
+    );
+    const rawSortKey = rawFilters.sortBy;
+    const rawSortDir = rawFilters.sortDir;
+
+    const sortKey = validSortKeys.includes(rawSortKey) ? rawSortKey : "total";
+    const sortDir = rawSortDir === "asc" ? "asc" : "desc";
+
+    this.state.sort = { key: sortKey, direction: sortDir };
+
     // Đồng bộ URL và localStorage với giá trị đã chuẩn hóa
     this.updateURL();
   }
@@ -253,13 +265,17 @@ class DashboardStore {
   }
 
   updateURL() {
-    const { filters } = this.state;
+    const { filters, sort } = this.state;
     const params = new URLSearchParams();
 
     // Chỉ set những tham số có ý nghĩa
     params.set("date", filters.date);
     params.set("page", String(filters.page));
     params.set("limit", String(filters.pageSize));
+
+    // Thêm sort vào URL
+    params.set("sortBy", sort.key);
+    params.set("sortDir", sort.direction);
 
     if (filters.role) params.set("role", filters.role);
     if (filters.q) params.set("q", filters.q);
@@ -283,6 +299,8 @@ class DashboardStore {
         activeOnly: filters.activeOnly,
         limit: filters.pageSize,
         page: filters.page,
+        sortBy: sort.key,
+        sortDir: sort.direction,
       };
       localStorage.setItem("qc_dashboard_filters", JSON.stringify(toStore));
     } catch (e) {

@@ -749,6 +749,8 @@
           return;
         }
 
+        localStorage.setItem("widget_visible", "true");
+
         // Check authorization
         const auth = await checkAuth(email);
 

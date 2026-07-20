@@ -767,15 +767,19 @@
         // Check authorization
         const auth = await checkAuth(email);
 
-        setWidgetVisible(auth.widget_visible);
-
-        // Hiển thị widget ngay với dữ liệu local (trước khi fetch server)
-        if (auth.widget_visible && typeof updateWidget === "function") {
-          updateWidget();
+        // Chỉ thay đổi visibility khi API trả về giá trị rõ ràng (true/false)
+        if (auth && typeof auth.widget_visible === "boolean") {
+          setWidgetVisible(auth.widget_visible);
         }
+        // Nếu auth không có widget_visible (do lỗi), giữ nguyên trạng thái hiện tại của widget
 
         if (!auth.allowed) {
           warn("User not authorized:", auth.reason);
+          // Không ẩn widget ở đây nữa vì quyền bị từ chối nhưng widget vẫn có thể hiển thị?
+          // Tốt nhất nếu không được phép, vẫn nên ẩn:
+          if (auth.allowed === false) {
+            setWidgetVisible(false);
+          }
           return;
         }
 

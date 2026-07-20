@@ -168,6 +168,14 @@ class DashboardStore {
     this.loadData();
   }
 
+  validateFilters() {
+    const { role } = this.state.filters;
+    if (role && !this.state.roles.some((r) => r.role_key === role)) {
+      this.state.filters.role = "";
+      this.updateURL(); // đồng bộ lại URL và localStorage
+    }
+  }
+
   resetFilters() {
     this.state.filters = {
       date: this.getTodayVN(),

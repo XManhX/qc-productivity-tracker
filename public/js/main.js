@@ -23,6 +23,7 @@ async function init() {
   // 2. Tải danh sách roles
   await store.loadRoles();
 
+  store.validateFilters();
   // 3. Khởi tạo các component (chúng tự subscribe store)
   new FilterBar(document.getElementById("filter-bar-container"));
   new StatsOverview(document.getElementById("stats-overview"));

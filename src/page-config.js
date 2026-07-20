@@ -10,7 +10,8 @@ export const PAGE_CONFIG = {
   },
   judgement: {
     pathIncludes: "/v2/returninbound/judgement",
-    actionSelector: ".confirm-judged-btn > button",
+    containerSelector: ".confirm-judged-btn",
+    actionText: "Confirm Judged",
     requiredFields: ["scan_value"],
     fields: {
       scan_value: ["#rms-judging-input-asnID"],

@@ -59,7 +59,7 @@ export class TargetTable {
     // Validate realtime
     tbody.addEventListener("input", (e) => {
       const input = e.target;
-      if (!input.matches('input[data-role-id]')) return;
+      if (!input.matches("input[data-role-id]")) return;
       const roleId = input.dataset.roleId;
       this._validateInputs(roleId);
     });
@@ -67,7 +67,7 @@ export class TargetTable {
     // Hủy debounce khi focus trở lại
     tbody.addEventListener("focusin", (e) => {
       const input = e.target;
-      if (!input.matches('input[data-role-id]')) return;
+      if (!input.matches("input[data-role-id]")) return;
       const roleId = input.dataset.roleId;
       if (this._saveTimeouts[roleId]) {
         clearTimeout(this._saveTimeouts[roleId]);
@@ -78,7 +78,7 @@ export class TargetTable {
     // Auto-save khi giá trị thay đổi và blur (dùng sự kiện change)
     tbody.addEventListener("change", (e) => {
       const input = e.target;
-      if (!input.matches('input[data-role-id]')) return;
+      if (!input.matches("input[data-role-id]")) return;
       const roleId = input.dataset.roleId;
       this._scheduleAutoSave(roleId);
     });
@@ -86,7 +86,7 @@ export class TargetTable {
 
   // ---------- Helpers ----------
   /**
-   * Lấy định danh duy nhất của role từ dataset. 
+   * Lấy định danh duy nhất của role từ dataset.
    * Trả về string để đảm bảo nhất quán với role_key (nếu có chữ).
    */
   _getRoleIdentifier(input) {
@@ -96,8 +96,12 @@ export class TargetTable {
   // ---------- Validate realtime ----------
   _validateInputs(roleIdentifier) {
     // Dùng attribute selector với data-role-id để tránh trùng id
-    const lowEl = this.container.querySelector(`input[data-role-id="${roleIdentifier}"][id^="low-"]`);
-    const mediumEl = this.container.querySelector(`input[data-role-id="${roleIdentifier}"][id^="medium-"]`);
+    const lowEl = this.container.querySelector(
+      `input[data-role-id="${roleIdentifier}"][id^="low-"]`,
+    );
+    const mediumEl = this.container.querySelector(
+      `input[data-role-id="${roleIdentifier}"][id^="medium-"]`,
+    );
     if (!lowEl || !mediumEl) return false;
 
     const low = Number(lowEl.value);
@@ -105,19 +109,24 @@ export class TargetTable {
     const isValid = !isNaN(low) && !isNaN(medium) && low < medium;
 
     // Xoá thông báo lỗi cũ
-    [lowEl, mediumEl].forEach(el => {
-      el.parentNode.querySelectorAll('.target-feedback').forEach(fb => fb.remove());
+    [lowEl, mediumEl].forEach((el) => {
+      el.parentNode
+        .querySelectorAll(".target-feedback")
+        .forEach((fb) => fb.remove());
     });
 
     if (isValid) {
-      lowEl.classList.remove('target-error');
-      mediumEl.classList.remove('target-error');
+      lowEl.classList.remove("target-error");
+      mediumEl.classList.remove("target-error");
     } else {
-      lowEl.classList.add('target-error');
-      mediumEl.classList.add('target-error');
-      const msg = isNaN(low) || isNaN(medium) ? 'Vui lòng nhập số' : 'Low phải nhỏ hơn Medium';
-      const feedback = document.createElement('div');
-      feedback.className = 'target-feedback';
+      lowEl.classList.add("target-error");
+      mediumEl.classList.add("target-error");
+      const msg =
+        isNaN(low) || isNaN(medium)
+          ? "Vui lòng nhập số"
+          : "Low phải nhỏ hơn Medium";
+      const feedback = document.createElement("div");
+      feedback.className = "target-feedback";
       feedback.textContent = msg;
       mediumEl.parentNode.appendChild(feedback);
     }
@@ -138,8 +147,12 @@ export class TargetTable {
   async _saveRole(roleIdentifier) {
     if (this._saving[roleIdentifier]) return;
 
-    const lowEl = this.container.querySelector(`input[data-role-id="${roleIdentifier}"][id^="low-"]`);
-    const mediumEl = this.container.querySelector(`input[data-role-id="${roleIdentifier}"][id^="medium-"]`);
+    const lowEl = this.container.querySelector(
+      `input[data-role-id="${roleIdentifier}"][id^="low-"]`,
+    );
+    const mediumEl = this.container.querySelector(
+      `input[data-role-id="${roleIdentifier}"][id^="medium-"]`,
+    );
     if (!lowEl || !mediumEl) return;
 
     const low = Number(lowEl.value);
@@ -147,9 +160,12 @@ export class TargetTable {
     if (isNaN(low) || isNaN(medium) || low >= medium) return;
 
     // So sánh với dữ liệu gốc (dùng roleIdentifier để tìm)
-    const original = this._originalTargets.find(t => this._getTargetIdentifier(t) === roleIdentifier);
+    const original = this._originalTargets.find(
+      (t) => this._getTargetIdentifier(t) === roleIdentifier,
+    );
     if (!original) return;
-    if (low === original.low_threshold && medium === original.medium_threshold) return;
+    if (low === original.low_threshold && medium === original.medium_threshold)
+      return;
 
     this._saving[roleIdentifier] = true;
 
@@ -159,34 +175,38 @@ export class TargetTable {
       const res = await targetStore.updateTarget(
         isNaN(numericRoleId) ? roleIdentifier : numericRoleId,
         low,
-        medium
+        medium,
       );
 
       if (res.success) {
-        [lowEl, mediumEl].forEach(el => {
-          el.style.borderColor = '#10b981';
-          el.style.boxShadow = '0 0 0 1px #10b981';
+        [lowEl, mediumEl].forEach((el) => {
+          el.style.borderColor = "#10b981";
+          el.style.boxShadow = "0 0 0 1px #10b981";
         });
         setTimeout(() => {
-          [lowEl, mediumEl].forEach(el => {
-            el.style.borderColor = '';
-            el.style.boxShadow = '';
+          [lowEl, mediumEl].forEach((el) => {
+            el.style.borderColor = "";
+            el.style.boxShadow = "";
           });
         }, 1500);
 
-        const idx = this._originalTargets.findIndex(t => this._getTargetIdentifier(t) === roleIdentifier);
+        const idx = this._originalTargets.findIndex(
+          (t) => this._getTargetIdentifier(t) === roleIdentifier,
+        );
         if (idx !== -1) {
           this._originalTargets[idx].low_threshold = low;
           this._originalTargets[idx].medium_threshold = medium;
         }
 
         this._suppressUpdate = true;
-        setTimeout(() => { this._suppressUpdate = false; }, 100);
+        setTimeout(() => {
+          this._suppressUpdate = false;
+        }, 100);
       } else {
-        showToast(`Lỗi: ${res.message}`, 'error');
+        showToast(`Lỗi: ${res.message}`, "error");
       }
     } catch (err) {
-      showToast('Lỗi kết nối', 'error');
+      showToast("Lỗi kết nối", "error");
     } finally {
       delete this._saving[roleIdentifier];
     }
@@ -204,6 +224,7 @@ export class TargetTable {
   _updateView() {
     const tbody = this.container.querySelector("#targets-tbody");
     const { loading, error, targets } = targetStore.state;
+    console.log("Raw targets from store:", JSON.stringify(targets, null, 2));
 
     if (loading) {
       tbody.innerHTML = `<tr><td colspan="3" class="py-12 text-center">Đang tải...</td></tr>`;
@@ -219,7 +240,7 @@ export class TargetTable {
     }
 
     // Lưu bản sao gốc, đảm bảo không undefined
-    this._originalTargets = targets.map(t => ({
+    this._originalTargets = targets.map((t) => ({
       ...t,
       low_threshold: t.low_threshold ?? 0,
       medium_threshold: t.medium_threshold ?? 0,
@@ -231,7 +252,7 @@ export class TargetTable {
         const identifier = this._getTargetIdentifier(t) || `index-${index}`; // fallback cứng
         return `
           <tr>
-            <td class="px-6 py-4 font-medium">${t.display_name || t.role_key || `Role ${index+1}`}</td>
+            <td class="px-6 py-4 font-medium">${t.display_name || t.role_key || `Role ${index + 1}`}</td>
             <td class="px-6 py-4">
               <input id="low-${identifier}" data-role-id="${identifier}" type="number" min="0" 
                      value="${t.low_threshold ?? 0}"
@@ -249,7 +270,7 @@ export class TargetTable {
 
     lucide.createIcons();
     // Validate tất cả để xoá lỗi cũ
-    targets.forEach(t => {
+    targets.forEach((t) => {
       const id = this._getTargetIdentifier(t);
       if (id) this._validateInputs(id);
     });

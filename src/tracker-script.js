@@ -478,7 +478,6 @@
         qc: 0,
         judgement: 0,
         rimassreceive: 0,
-        lastUpdated: 0,
       });
 
       // Tăng số tương ứng với pageType

@@ -7,18 +7,17 @@
     API_BASE_URL: "__API_BASE_URL__",
     AUTH_ENDPOINT: "/api/qc-productivity/authz",
     LOG_ENDPOINT: "/api/qc-productivity/log",
-    DEBUG: false, // Set to false in production
+    DEBUG: false,
     AUTH_CACHE_MS: 5 * 60 * 1000,
     AUTH_RETRY_MAX: 2,
     AUTH_RETRY_DELAY_MS: 1000,
     DUPLICATE_WINDOW_MS: 3000,
     EMAIL_CACHE_MS: 5 * 60 * 1000,
-    FLUSH_INTERVAL_MS: 60 * 1000, // Flush pending logs every minute
+    FLUSH_INTERVAL_MS: 60 * 1000,
     INIT_DEBOUNCE_MS: 500,
     REQUEST_TIMEOUT_MS: 10000,
   };
 
-  // __PAGE_CONFIG__ will be replaced at build time
   const PAGE_CONFIG = __PAGE_CONFIG__ || {};
 
   // ==================== STATE MANAGEMENT ====================

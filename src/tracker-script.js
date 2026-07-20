@@ -400,6 +400,7 @@
 
       if (Object.prototype.hasOwnProperty.call(stats, pageType)) {
         stats[pageType] += 1;
+        stats.lastUpdated = Date.now();
         setStore(statsKey, stats);
         if (typeof updateWidget === "function") {
           updateWidget();

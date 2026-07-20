@@ -1,150 +1,156 @@
 // ==================== QC WATCHDOG (SEATALK ALERT) ====================
 (function () {
-  // Chỉ chạy một lần, tránh trùng lặp khi script chính re-init
   if (window.__qcWatchdogInstalled) return;
   window.__qcWatchdogInstalled = true;
 
-  const WD_CONFIG = {
-    WEBHOOK_URL: "https://openapi.seatalk.io/webhook/group/cwpkcNpDQPyNkXyIWjUaag", // <= điền webhook thật
-    CHECK_INTERVAL_MINUTES: 10,
-    POLL_INTERVAL_MS: 60000,
+  const WD = {
+    // API endpoint tổng hợp alert (ưu tiên)
+    ALERT_API: "__API_BASE_URL__/api/qc-productivity/alert",
+    // Fallback webhook nếu API không dùng được (tùy chọn)
+    FALLBACK_WEBHOOK: "", // bỏ trống nếu chỉ dùng API
+    CHECK_MIN: 10,               // phút
+    POLL_MS: 60000,
     REPEAT_ALERT: false,
+    SILENT_HOURS: [
+      { start: "12:30", end: "13:30" }
+    ],
     DEBUG: false
   };
 
-  const wdLog = (...args) => WD_CONFIG.DEBUG && console.log("[QC-WD]", ...args);
-  const wdWarn = (...args) => console.warn("[QC-WD]", ...args);
+  const wLog = (...a) => WD.DEBUG && console.log("[QC-WD]", ...a);
+  const wWarn = (...a) => console.warn("[QC-WD]", ...a);
 
-  const todayKey = () => new Date().toISOString().split("T")[0];
+  // Helpers
+  const todayKey = () => new Date().toISOString().slice(0, 10);
   const statsKey = () => `stats_${todayKey()}`;
-
-  // Trạng thái watchdog (lưu persistence)
-  let lastIncrementTime = 0;       // timestamp ms
-  let alertSent = false;
-  let lastQc = 0;
-
-  // Đọc/ghi an toàn qua GM storage (không JSON – đồng bộ với script chính)
-  const wdGet = (key, fallback) => {
-    try { const v = GM_getValue(key); return v === undefined ? fallback : v; } catch { return fallback; }
-  };
-  const wdSet = (key, val) => {
-    try { GM_setValue(key, val); } catch (e) { wdWarn("wdSet failed", e); }
-  };
-
-  // Lấy số qc hiện tại từ stats
-  const getCurrentQc = () => {
-    const stats = wdGet(statsKey(), { qc: 0, judgement: 0, rimassreceive: 0 });
-    return typeof stats.qc === "number" ? stats.qc : 0;
-  };
-
-  // Gọi khi qc tăng
-  const onQcIncreased = () => {
-    lastIncrementTime = Date.now();
-    alertSent = false;
-    wdSet("qc_wd_last_inc", lastIncrementTime);
-    wdSet("qc_wd_alert_sent", false);
-    wdLog("QC increased, reset watchdog timer");
-  };
-
-  // Gửi cảnh báo qua webhook
-  const sendAlert = async (currentQc, lastInc) => {
-    if (!WD_CONFIG.WEBHOOK_URL || WD_CONFIG.WEBHOOK_URL.includes("xxxxxxxx")) {
-      wdWarn("Webhook URL not configured");
-      return false;
+  const wGet = (k, fb) => { try { const v = GM_getValue(k); return v === undefined ? fb : v; } catch { return fb; } };
+  const getStats = () => {
+    const raw = wGet(statsKey(), null);
+    if (!raw) return { qc: 0, lastUpdated: 0 };
+    if (typeof raw === 'string') {
+      try { return JSON.parse(raw); } catch { return { qc: 0, lastUpdated: 0 }; }
     }
-    const minutes = Math.floor((Date.now() - lastInc) / 60000);
-    const msg = `⚠️ **Cảnh báo QC**\nSản lượng QC không tăng trong **${minutes}** phút.\n- Hiện tại: **${currentQc}**\n- Lần tăng cuối: ${new Date(lastInc).toLocaleTimeString("vi-VN")}\nVui lòng kiểm tra!`;
-    const payload = { tag: "text", text: { format: 2, content: msg } };
+    return raw;
+  };
+  const getQc = () => getStats().qc || 0;
+  const getLastUpdated = () => getStats().lastUpdated || 0;
+  const getEmail = () => {
+    const e = wGet("user_email", "");
+    return e.includes("@") ? e : "unknown";
+  };
 
-    return new Promise((resolve) => {
-      GM_xmlhttpRequest({
-        method: "POST",
-        url: WD_CONFIG.WEBHOOK_URL,
-        headers: { "Content-Type": "application/json" },
-        data: JSON.stringify(payload),
-        timeout: 10000,
-        onload: (r) => {
-          if (r.status >= 200 && r.status < 300) { wdLog("Alert sent"); resolve(true); }
-          else { wdWarn("Alert failed", r.status); resolve(false); }
-        },
-        onerror: (e) => { wdWarn("Alert network error", e); resolve(false); },
-        ontimeout: () => { wdWarn("Alert timeout"); resolve(false); }
-      });
+  // Silent hours
+  const isSilent = () => {
+    const d = new Date();
+    const m = d.getHours() * 60 + d.getMinutes();
+    return WD.SILENT_HOURS.some(({ start, end }) => {
+      const [sh, sm] = start.split(":").map(Number);
+      const [eh, em] = end.split(":").map(Number);
+      const s = sh * 60 + sm;
+      const e = eh * 60 + em;
+      return s <= e ? (m >= s && m < e) : (m >= s || m < e);
     });
   };
 
-  // Kiểm tra định kỳ
-  const check = async () => {
-    const cur = getCurrentQc();
-    wdLog("Check qc=" + cur + " lastInc=" + lastIncrementTime);
+  // Trạng thái
+  let alertSent = false;
+  let silentEnd = 0;
+  let wasSilent = isSilent();
 
-    if (cur > lastQc) {
-      // Phát hiện tăng qua polling (fallback khi listener không hoạt động)
-      onQcIncreased();
+  // Gửi alert lên API
+  const sendAlert = async (qc, lastAct, email) => {
+    const payload = {
+      email,
+      current_qc: qc,
+      last_activity_ts: lastAct,
+      idle_minutes: Math.floor((Date.now() - lastAct) / 60000),
+      timestamp: Date.now()
+    };
+
+    // Gửi API trước
+    if (WD.ALERT_API && !WD.ALERT_API.includes("__API_BASE_URL__")) {
+      try {
+        await new Promise((res, rej) => {
+          GM_xmlhttpRequest({
+            method: "POST",
+            url: WD.ALERT_API,
+            headers: { "Content-Type": "application/json" },
+            data: JSON.stringify(payload),
+            timeout: 10000,
+            onload: (r) => (r.status >= 200 && r.status < 300) ? res() : rej(r),
+            onerror: rej,
+            ontimeout: rej
+          });
+        });
+        wLog("Alert sent to API");
+        return true;
+      } catch (e) {
+        wWarn("API failed, trying fallback");
+      }
     }
-    lastQc = cur;
 
-    if (lastIncrementTime === 0) {
-      // Chưa từng có lần tăng nào => đặt mốc bây giờ để không báo động giả
-      lastIncrementTime = Date.now();
-      wdSet("qc_wd_last_inc", lastIncrementTime);
+    // Fallback webhook
+    if (WD.FALLBACK_WEBHOOK && !WD.FALLBACK_WEBHOOK.includes("xxx")) {
+      const msg = `⚠️ **Cảnh báo QC**\nUser: **${email}**\nQC không tăng trong **${payload.idle_minutes}** phút.\n- Hiện tại: **${qc}**\n- Hoạt động cuối: ${new Date(lastAct).toLocaleTimeString("vi-VN")}`;
+      return new Promise(res => {
+        GM_xmlhttpRequest({
+          method: "POST",
+          url: WD.FALLBACK_WEBHOOK,
+          headers: { "Content-Type": "application/json" },
+          data: JSON.stringify({ tag: "text", text: { format: 2, content: msg } }),
+          timeout: 10000,
+          onload: (r) => res(r.status >= 200 && r.status < 300),
+          onerror: () => res(false),
+          ontimeout: () => res(false)
+        });
+      });
+    }
+    return false;
+  };
+
+  // Kiểm tra
+  const check = async () => {
+    if (isSilent()) {
+      wasSilent = true;
+      alertSent = false;
       return;
     }
+    if (wasSilent) {
+      silentEnd = Date.now();
+      wasSilent = false;
+      alertSent = false;
+    }
 
-    const elapsed = Date.now() - lastIncrementTime;
-    if (elapsed >= WD_CONFIG.CHECK_INTERVAL_MINUTES * 60 * 1000) {
-      if (!alertSent || WD_CONFIG.REPEAT_ALERT) {
-        const ok = await sendAlert(cur, lastIncrementTime);
-        if (ok) {
-          alertSent = true;
-          wdSet("qc_wd_alert_sent", true);
-        }
+    const qc = getQc();
+    const last = getLastUpdated();
+    const effective = Math.max(last, silentEnd);
+    if (!effective) return;
+
+    if (Date.now() - effective >= WD.CHECK_MIN * 60 * 1000) {
+      if (!alertSent || WD.REPEAT_ALERT) {
+        const ok = await sendAlert(qc, effective, getEmail());
+        if (ok) alertSent = true;
       }
     }
   };
 
-  // Đăng ký listener để bắt sự kiện tăng qc ngay lập tức
-  const setupListener = () => {
-    if (typeof GM_addValueChangeListener !== "function") {
-      wdWarn("GM_addValueChangeListener not available, relying on polling");
-      return;
-    }
+  // Listener
+  if (typeof GM_addValueChangeListener === "function") {
     try {
-      GM_addValueChangeListener(statsKey(), (name, oldValue, newValue) => {
-        let oldQc = 0, newQc = 0;
-        try { oldQc = (oldValue && oldValue.qc) || 0; } catch {}
-        try { newQc = (newValue && newValue.qc) || 0; } catch {}
-        if (newQc > oldQc) {
-          wdLog("Listener detected increase", oldQc, "->", newQc);
-          onQcIncreased();
-          lastQc = newQc;
+      GM_addValueChangeListener(statsKey(), (name, old, val) => {
+        let oUp = 0, nUp = 0;
+        try { oUp = JSON.parse(old || '{}').lastUpdated || 0; } catch {}
+        try { nUp = JSON.parse(val || '{}').lastUpdated || 0; } catch {}
+        if (nUp > oUp) {
+          alertSent = false;
+          if (!isSilent()) silentEnd = 0;
         }
       });
-      wdLog("Storage listener registered for", statsKey());
-    } catch (e) {
-      wdWarn("Failed to register listener", e);
-    }
-  };
+    } catch (e) {}
+  }
 
   // Khởi động
-  const start = () => {
-    // Khôi phục trạng thái cũ
-    lastIncrementTime = wdGet("qc_wd_last_inc", 0);
-    alertSent = wdGet("qc_wd_alert_sent", false);
-    lastQc = getCurrentQc();
-
-    // Nếu đã có qc > 0 nhưng chưa có mốc, đặt mốc cách đây 1 phút
-    if (lastQc > 0 && lastIncrementTime === 0) {
-      lastIncrementTime = Date.now() - 60000;
-      wdSet("qc_wd_last_inc", lastIncrementTime);
-    }
-
-    setupListener();
-    setInterval(check, WD_CONFIG.POLL_INTERVAL_MS);
-    setTimeout(check, 2000);
-    wdLog("Watchdog started");
-  };
-
-  // Bắt đầu ngay khi được inject
-  start();
+  setInterval(check, WD.POLL_MS);
+  setTimeout(check, 3000);
+  wLog("Watchdog started, email:", getEmail());
 })();

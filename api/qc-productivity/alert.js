@@ -68,7 +68,7 @@ async function sendAggregatedAlert() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           tag: 'text',
-          text: { format: 2, content: message },
+          text: { format: 1, content: message },
         }),
       });
       lastSentTime = now;

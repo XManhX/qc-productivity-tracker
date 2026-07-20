@@ -97,7 +97,7 @@
           method: "POST",
           url: WD.FALLBACK_WEBHOOK,
           headers: { "Content-Type": "application/json" },
-          data: JSON.stringify({ tag: "text", text: { format: 2, content: msg } }),
+          data: JSON.stringify({ tag: "text", text: { format: 1, content: msg } }),
           timeout: 10000,
           onload: (r) => res(r.status >= 200 && r.status < 300),
           onerror: () => res(false),

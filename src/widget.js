@@ -33,46 +33,46 @@ function initWidget() {
 initWidget();
 
 // ==================== BỔ SUNG: TỰ ĐỘNG PHẢN ỨNG KHI widget_visible THAY ĐỔI ====================
-(function setupWidgetVisibilityListener() {
-  // Override localStorage.setItem để dispatch custom event khi thay đổi
-  const originalSetItem = localStorage.setItem;
-  localStorage.setItem = function (key, value) {
-    const oldValue = localStorage.getItem(key);
-    originalSetItem.call(localStorage, key, value);
-    if (key === "widget_visible" && value !== oldValue) {
-      // Dispatch một sự kiện đồng bộ cho widget
-      window.dispatchEvent(
-        new CustomEvent("widgetVisibilityChanged", {
-          detail: { visible: value !== "false" },
-        }),
-      );
-    }
-  };
+// (function setupWidgetVisibilityListener() {
+//   // Override localStorage.setItem để dispatch custom event khi thay đổi
+//   const originalSetItem = localStorage.setItem;
+//   localStorage.setItem = function (key, value) {
+//     const oldValue = localStorage.getItem(key);
+//     originalSetItem.call(localStorage, key, value);
+//     if (key === "widget_visible" && value !== oldValue) {
+//       // Dispatch một sự kiện đồng bộ cho widget
+//       window.dispatchEvent(
+//         new CustomEvent("widgetVisibilityChanged", {
+//           detail: { visible: value !== "false" },
+//         }),
+//       );
+//     }
+//   };
 
-  // Lắng nghe sự kiện
-  window.addEventListener("widgetVisibilityChanged", function (e) {
-    const visible = e.detail.visible;
-    const widget = document.getElementById("qc-tracker-floating-widget");
-    if (!visible) {
-      if (widget) {
-        widget.remove();
-        // Nếu có các listener như resize, observer cũng nên được dọn
-        // Ta có thể lưu lại các handler để remove, nhưng có thể dùng cờ isDestroyed
-        // Dưới đây là cách an toàn: observer đã gắn ở widget creation sẽ tự disconnect khi node bị xóa
-      }
-    } else if (visible && !widget) {
-      // Nếu trở lại visible, có thể gọi updateWidget để tạo lại widget
-      // Nhưng cần đảm bảo updateWidget được gọi với dữ liệu mới.
-      // Gọi updateWidget không tham số để lấy từ localStorage
-      if (typeof updateWidget === "function") {
-        updateWidget();
-      }
-    }
-  });
+//   // Lắng nghe sự kiện
+//   window.addEventListener("widgetVisibilityChanged", function (e) {
+//     const visible = e.detail.visible;
+//     const widget = document.getElementById("qc-tracker-floating-widget");
+//     if (!visible) {
+//       if (widget) {
+//         widget.remove();
+//         // Nếu có các listener như resize, observer cũng nên được dọn
+//         // Ta có thể lưu lại các handler để remove, nhưng có thể dùng cờ isDestroyed
+//         // Dưới đây là cách an toàn: observer đã gắn ở widget creation sẽ tự disconnect khi node bị xóa
+//       }
+//     } else if (visible && !widget) {
+//       // Nếu trở lại visible, có thể gọi updateWidget để tạo lại widget
+//       // Nhưng cần đảm bảo updateWidget được gọi với dữ liệu mới.
+//       // Gọi updateWidget không tham số để lấy từ localStorage
+//       if (typeof updateWidget === "function") {
+//         updateWidget();
+//       }
+//     }
+//   });
 
-  // Kiểm tra ngay trạng thái ban đầu (khi script vừa chạy, có thể widget đã tồn tại từ trước?)
-  // Thực tế updateWidget sẽ kiểm tra khi được gọi, nhưng ta vẫn có thể chạy một lần.
-})();
+//   // Kiểm tra ngay trạng thái ban đầu (khi script vừa chạy, có thể widget đã tồn tại từ trước?)
+//   // Thực tế updateWidget sẽ kiểm tra khi được gọi, nhưng ta vẫn có thể chạy một lần.
+// })();
 
 // ==================== WIDGET CORE ====================
 const widgetState = {

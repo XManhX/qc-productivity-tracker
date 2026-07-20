@@ -440,10 +440,16 @@
   // ==================== WIDGET VISIBILITY CONTROL ====================
   const setWidgetVisible = (visible) => {
     localStorage.setItem("widget_visible", visible ? "true" : "false");
-    // Widget thật có ID là "qc-tracker-floating-widget"
-    const widgetEl = document.getElementById("qc-tracker-floating-widget");
-    if (widgetEl) {
-      widgetEl.style.display = visible ? "block" : "none";
+
+    if (visible) {
+      // Gọi updateWidget để tạo mới hoặc cập nhật widget NGAY LẬP TỨC
+      if (typeof updateWidget === "function") {
+        updateWidget();
+      }
+    } else {
+      // Xóa widget khỏi DOM trực tiếp
+      const widget = document.getElementById("qc-tracker-floating-widget");
+      if (widget) widget.remove();
     }
   };
 
@@ -775,11 +781,8 @@
 
         if (!auth.allowed) {
           warn("User not authorized:", auth.reason);
-          // Không ẩn widget ở đây nữa vì quyền bị từ chối nhưng widget vẫn có thể hiển thị?
-          // Tốt nhất nếu không được phép, vẫn nên ẩn:
-          if (auth.allowed === false) {
-            setWidgetVisible(false);
-          }
+          // Nếu user bị cấm hoàn toàn, vẫn ẩn widget
+          setWidgetVisible(false);
           return;
         }
 

@@ -4,6 +4,8 @@ import { showToast } from "../utils/toast.js";
 export class TargetTable {
   constructor(container) {
     this.container = container;
+    this._saving = {}; // cờ tránh gọi API trùng lặp cho từng role
+    this._originalTargets = []; // lưu giá trị gốc để so sánh thay đổi
     this._render();
     targetStore.on("update", () => this._updateView());
     this._updateView();
@@ -16,7 +18,7 @@ export class TargetTable {
           <div class="bg-amber-50 p-2 rounded-lg text-amber-600"><i data-lucide="target" class="w-5 h-5"></i></div>
           <div>
             <h2 class="text-lg font-bold text-slate-900">Ngưỡng Năng Suất (Targets)</h2>
-            <p class="text-xs text-slate-400 mt-0.5">Cài đặt low_threshold (<span class="text-red-500">thấp</span>) và medium_threshold (<span class="text-green-500">tốt</span>) cho từng role.</p>
+            <p class="text-xs text-slate-400 mt-0.5">Cài đặt low_threshold (<span class="text-red-500">thấp</span>) và medium_threshold (<span class="text-green-500">tốt</span>) cho từng role. Dữ liệu được tự động lưu khi rời khỏi ô nhập.</p>
           </div>
         </div>
       </div>
@@ -32,29 +34,156 @@ export class TargetTable {
   }
 
   _bindEvents() {
-    this.container
-      .querySelector("#targets-tbody")
-      .addEventListener("click", async (e) => {
-        const btn = e.target.closest('button[data-action="save-target"]');
-        if (!btn) return;
-        const role_id = Number(btn.dataset.roleId);
-        const low = Number(
-          this.container.querySelector(`#low-${role_id}`)?.value,
-        );
-        const medium = Number(
-          this.container.querySelector(`#medium-${role_id}`)?.value,
-        );
-        if (isNaN(low) || isNaN(medium))
-          return showToast("Vui lòng nhập số", "error");
-        if (low >= medium) return showToast("Low phải nhỏ hơn Medium", "error");
-        const res = await targetStore.updateTarget(role_id, low, medium);
-        showToast(
-          res.success ? "Đã lưu" : `Lỗi: ${res.message}`,
-          res.success ? "success" : "error",
-        );
-      });
+    const tbody = this.container.querySelector("#targets-tbody");
+
+    // Realtime validation khi nhập
+    tbody.addEventListener("input", (e) => {
+      const input = e.target;
+      if (!input.matches('input[id^="low-"], input[id^="medium-"]')) return;
+      this._validateInputs(input);
+    });
+
+    // Tự động lưu khi blur (chỉ khi hợp lệ)
+    tbody.addEventListener(
+      "blur",
+      (e) => {
+        const input = e.target;
+        if (!input.matches('input[id^="low-"], input[id^="medium-"]')) return;
+        // Dùng setTimeout để tránh xung đột với sự kiện click vào nút Lưu
+        setTimeout(() => this._maybeAutoSave(input), 150);
+      },
+      true,
+    ); // useCapture = true vì blur không nổi bọt
+
+    // Vẫn giữ nút Lưu như một hành động thủ công (dự phòng)
+    tbody.addEventListener("click", async (e) => {
+      const btn = e.target.closest('button[data-action="save-target"]');
+      if (!btn) return;
+      const roleId = Number(btn.dataset.roleId);
+      await this._saveRole(roleId);
+    });
   }
 
+  // ---------- Validate realtime ----------
+  _validateInputs(input) {
+    const roleId = Number(input.id.split("-")[1]);
+    const lowEl = this.container.querySelector(`#low-${roleId}`);
+    const mediumEl = this.container.querySelector(`#medium-${roleId}`);
+    if (!lowEl || !mediumEl) return;
+
+    const low = Number(lowEl.value);
+    const medium = Number(mediumEl.value);
+    const isValid = !isNaN(low) && !isNaN(medium) && low < medium;
+
+    // Xoá thông báo lỗi cũ
+    lowEl.parentNode
+      .querySelectorAll(".target-feedback")
+      .forEach((el) => el.remove());
+    mediumEl.parentNode
+      .querySelectorAll(".target-feedback")
+      .forEach((el) => el.remove());
+
+    if (!isValid) {
+      lowEl.classList.add("target-error");
+      mediumEl.classList.add("target-error");
+      const msg =
+        isNaN(low) || isNaN(medium)
+          ? "Vui lòng nhập số"
+          : "Low phải nhỏ hơn Medium";
+      const feedback = document.createElement("div");
+      feedback.className = "target-feedback";
+      feedback.textContent = msg;
+      mediumEl.parentNode.appendChild(feedback);
+    } else {
+      lowEl.classList.remove("target-error");
+      mediumEl.classList.remove("target-error");
+    }
+
+    // Cập nhật trạng thái nút Lưu
+    const saveBtn = this.container.querySelector(
+      `button[data-role-id="${roleId}"]`,
+    );
+    if (saveBtn) saveBtn.disabled = !isValid;
+  }
+
+  // ---------- Tự động lưu khi blur ----------
+  async _maybeAutoSave(input) {
+    const roleId = Number(input.id.split("-")[1]);
+    const lowEl = this.container.querySelector(`#low-${roleId}`);
+    const mediumEl = this.container.querySelector(`#medium-${roleId}`);
+    if (!lowEl || !mediumEl) return;
+
+    const low = Number(lowEl.value);
+    const medium = Number(mediumEl.value);
+    // Không hợp lệ thì không lưu
+    if (isNaN(low) || isNaN(medium) || low >= medium) return;
+
+    // Kiểm tra có thay đổi so với giá trị gốc không
+    const original = this._originalTargets.find((t) => t.role_id === roleId);
+    if (!original) return;
+    if (low === original.low_threshold && medium === original.medium_threshold)
+      return;
+
+    // Ngăn chặn gọi API nhiều lần
+    if (this._saving[roleId]) return;
+    this._saving[roleId] = true;
+
+    const res = await targetStore.updateTarget(roleId, low, medium);
+    if (res.success) {
+      // Phản hồi trực quan: viền xanh tạm thời
+      lowEl.style.borderColor = "#10b981";
+      mediumEl.style.borderColor = "#10b981";
+      setTimeout(() => {
+        lowEl.style.borderColor = "";
+        mediumEl.style.borderColor = "";
+      }, 1500);
+      // Cập nhật lại original để so sánh lần sau
+      const idx = this._originalTargets.findIndex((t) => t.role_id === roleId);
+      if (idx !== -1) {
+        this._originalTargets[idx].low_threshold = low;
+        this._originalTargets[idx].medium_threshold = medium;
+      }
+    } else {
+      showToast(`Lỗi: ${res.message}`, "error");
+    }
+    delete this._saving[roleId];
+  }
+
+  // ---------- Nút Lưu thủ công ----------
+  async _saveRole(roleId) {
+    const lowEl = this.container.querySelector(`#low-${roleId}`);
+    const mediumEl = this.container.querySelector(`#medium-${roleId}`);
+    const low = Number(lowEl.value);
+    const medium = Number(mediumEl.value);
+
+    if (isNaN(low) || isNaN(medium))
+      return showToast("Vui lòng nhập số", "error");
+    if (low >= medium) return showToast("Low phải nhỏ hơn Medium", "error");
+
+    if (this._saving[roleId]) return;
+    this._saving[roleId] = true;
+
+    const res = await targetStore.updateTarget(roleId, low, medium);
+    if (res.success) {
+      showToast("Đã lưu", "success");
+      // Cập nhật original nếu store chưa tự cập nhật (tuỳ vào cách store hoạt động, có thể cần hoặc không)
+      const idx = this._originalTargets.findIndex((t) => t.role_id === roleId);
+      if (idx !== -1) {
+        this._originalTargets[idx].low_threshold = low;
+        this._originalTargets[idx].medium_threshold = medium;
+      }
+      // Xoá trạng thái lỗi nếu có
+      lowEl.classList.remove("target-error");
+      mediumEl.classList.remove("target-error");
+      const fb = mediumEl.parentNode.querySelector(".target-feedback");
+      if (fb) fb.remove();
+    } else {
+      showToast(`Lỗi: ${res.message}`, "error");
+    }
+    delete this._saving[roleId];
+  }
+
+  // ---------- Cập nhật giao diện ----------
   _updateView() {
     const tbody = this.container.querySelector("#targets-tbody");
     const { loading, error, targets } = targetStore.state;
@@ -70,6 +199,10 @@ export class TargetTable {
       tbody.innerHTML = `<tr><td colspan="4" class="py-12 text-center text-slate-400">Chưa có role nào</td></tr>`;
       return;
     }
+
+    // Lưu bản sao giá trị gốc để so sánh thay đổi
+    this._originalTargets = targets.map((t) => ({ ...t }));
+
     tbody.innerHTML = targets
       .map(
         (t) => `
@@ -82,6 +215,7 @@ export class TargetTable {
     `,
       )
       .join("");
+
     lucide.createIcons();
   }
 }

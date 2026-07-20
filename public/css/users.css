@@ -41,3 +41,13 @@
 .toast.error {
   background-color: #dc2626;
 }
+
+input.target-error {
+  border-color: #ef4444;
+  background-color: #fef2f2;
+}
+.target-feedback {
+  font-size: 0.75rem;
+  color: #ef4444;
+  margin-top: 2px;
+}

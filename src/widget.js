@@ -5,7 +5,7 @@
 //   todayKey()
 //   log, warn (optional)
 
-(function () {
+function initWidget() {
   // Safety checks – if the host script hasn't provided them, create fallbacks.
   if (typeof getStore !== "function") {
     window.getStore = (k, fb) => {
@@ -27,7 +27,10 @@
   if (typeof todayKey !== "function") {
     window.todayKey = () => new Date().toISOString().split("T")[0];
   }
-})();
+}
+
+// Gọi lần đầu khi script chạy
+initWidget();
 
 // ==================== BỔ SUNG: TỰ ĐỘNG PHẢN ỨNG KHI widget_visible THAY ĐỔI ====================
 (function setupWidgetVisibilityListener() {

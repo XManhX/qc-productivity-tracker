@@ -437,10 +437,31 @@
   };
 
   // ==================== WIDGET UPDATE HELPER ====================
+  // ==================== WIDGET VISIBILITY CONTROL ====================
+  const setWidgetVisible = (visible) => {
+    localStorage.setItem("widget_visible", visible ? "true" : "false");
+    const widgetEl = document.getElementById("qc-widget-container");
+    if (widgetEl) {
+      widgetEl.style.display = visible ? "block" : "none";
+    }
+    // Gọi hàm toggle của widget nếu có (tuỳ vào __WIDGET_CODE__)
+    if (typeof toggleWidgetVisibility === "function") {
+      toggleWidgetVisibility(visible);
+    }
+  };
+
   // NEW: cập nhật widget với dữ liệu từ server hoặc fallback local
   const syncWidgetWithStats = async () => {
+    // Tự tạo lại widget nếu bị mất
+    if (
+      !document.getElementById("qc-widget-container") &&
+      typeof initWidget === "function"
+    ) {
+      initWidget();
+    }
     if (typeof updateWidget !== "function") return;
     const serverStats = await fetchStatsFromServer();
+
     if (serverStats) {
       updateWidget(serverStats);
     } else {
@@ -724,7 +745,7 @@
         const pageType = getPageType(location.href);
         if (pageType === "unknown") {
           log("Unsupported page, initialization skipped");
-          localStorage.setItem("widget_visible", "false");
+          setWidgetVisible(false);
           return;
         }
 
@@ -740,7 +761,7 @@
         const email = getEmail();
         if (!email) {
           warn("No email found, initialization aborted");
-          localStorage.setItem("widget_visible", "false");
+          setWidgetVisible(false);
           if (typeof updateWidget === "function")
             updateWidget({
               qc: 0,
@@ -751,15 +772,12 @@
           return;
         }
 
-        localStorage.setItem("widget_visible", "true");
+        setWidgetVisible(true);
 
         // Check authorization
         const auth = await checkAuth(email);
 
-        localStorage.setItem(
-          "widget_visible",
-          auth.widget_visible ? "true" : "false",
-        );
+        setWidgetVisible(auth.widget_visible);
 
         if (!auth.allowed) {
           warn("User not authorized:", auth.reason);
@@ -767,6 +785,14 @@
         }
 
         log("Authorization successful");
+
+        // Nếu widget đã bị xóa khỏi DOM (do SPA chuyển trang), tạo lại
+        if (
+          typeof initWidget === "function" &&
+          !document.getElementById("qc-widget-container")
+        ) {
+          initWidget();
+        }
 
         // Flush any pending logs from previous sessions
         await flushPending();

@@ -16,6 +16,7 @@
     FLUSH_INTERVAL_MS: 60 * 1000,
     INIT_DEBOUNCE_MS: 500,
     REQUEST_TIMEOUT_MS: 10000,
+    STATS_SYNC_INTERVAL_MS: 30000, // NEW: cập nhật widget định kỳ
   };
 
   const PAGE_CONFIG = __PAGE_CONFIG__ || {};
@@ -28,6 +29,7 @@
     observer: null,
     initPromise: null,
     flushIntervalId: null,
+    statsSyncIntervalId: null, // NEW
     isDestroyed: false,
   };
 
@@ -132,7 +134,6 @@
 
   // ==================== WATCHDOG ====================
   // __WATCHDOG_CODE__
-
 
   // ==================== EMAIL EXTRACTION ====================
   const getEmail = () => {
@@ -389,25 +390,53 @@
     }
   };
 
-  const updateDailyStats = (pageType) => {
+  // ==================== STATS FROM SERVER ====================
+  // NEW: fetch thống kê từ API backend
+  const fetchStatsFromServer = async () => {
+    const operator = getEmail();
+    if (!operator) return null;
     try {
-      const statsKey = `stats_${todayKey()}`;
-      const stats = getStore(statsKey, {
+      const resp = await retryRequest(
+        () =>
+          gmRequest(
+            "GET",
+            `${CONFIG.API_BASE_URL}${CONFIG.LOG_ENDPOINT}?operator=${encodeURIComponent(operator)}`,
+          ),
+        CONFIG.AUTH_RETRY_MAX,
+        CONFIG.AUTH_RETRY_DELAY_MS,
+      );
+      if (resp.status === 200 && resp.data) {
+        const stats = {
+          qc: Number(resp.data.qc) || 0,
+          judgement: Number(resp.data.judgement) || 0,
+          rimassreceive: Number(resp.data.rimassreceive) || 0,
+        };
+        // Cập nhật local store để fallback khi offline
+        setStore(`stats_${todayKey()}`, stats);
+        return stats;
+      }
+      return null;
+    } catch (e) {
+      warn("fetchStatsFromServer failed:", e.message);
+      return null;
+    }
+  };
+
+  // ==================== WIDGET UPDATE HELPER ====================
+  // NEW: cập nhật widget với dữ liệu từ server hoặc fallback local
+  const syncWidgetWithStats = async () => {
+    if (typeof updateWidget !== "function") return;
+    const serverStats = await fetchStatsFromServer();
+    if (serverStats) {
+      updateWidget(serverStats);
+    } else {
+      // Fallback local
+      const localStats = getStore(`stats_${todayKey()}`, {
         qc: 0,
         judgement: 0,
         rimassreceive: 0,
       });
-
-      if (Object.prototype.hasOwnProperty.call(stats, pageType)) {
-        stats[pageType] += 1;
-        stats.lastUpdated = Date.now();
-        setStore(statsKey, stats);
-        if (typeof updateWidget === "function") {
-          updateWidget();
-        }
-      }
-    } catch (e) {
-      warn("Failed to update daily stats:", e);
+      updateWidget(localStats);
     }
   };
 
@@ -431,7 +460,8 @@
     const ok = await sendRecord(record);
     if (ok) {
       log("Action completed and recorded successfully");
-      updateDailyStats(pageType);
+      // NEW: sau khi gửi thành công, đồng bộ lại widget từ server
+      await syncWidgetWithStats();
     }
   };
 
@@ -586,7 +616,7 @@
       GM_addValueChangeListener(statsKey, (name, oldValue, newValue) => {
         log("Storage changed:", name, "updating widget...");
         if (typeof updateWidget === "function") {
-          updateWidget();
+          updateWidget(newValue);
         }
       });
     } catch (e) {
@@ -604,6 +634,12 @@
     if (state.flushIntervalId) {
       clearInterval(state.flushIntervalId);
       state.flushIntervalId = null;
+    }
+
+    if (state.statsSyncIntervalId) {
+      // NEW
+      clearInterval(state.statsSyncIntervalId);
+      state.statsSyncIntervalId = null;
     }
 
     state.isDestroyed = true;
@@ -644,17 +680,13 @@
           setPageStartTimeIfNeeded(initialId);
         }
 
-        // Update widget if available
-        if (typeof updateWidget === "function") {
-          updateWidget();
-        }
-
         // Get user email
         const email = getEmail();
         if (!email) {
           warn("No email found, initialization aborted");
           localStorage.setItem("widget_visible", "false");
-          if (typeof updateWidget === "function") updateWidget();
+          if (typeof updateWidget === "function")
+            updateWidget({ qc: 0, judgement: 0, rimassreceive: 0 });
           return;
         }
 
@@ -682,6 +714,16 @@
             flushPending().catch((e) => warn("Periodic flush failed:", e));
           }
         }, CONFIG.FLUSH_INTERVAL_MS);
+
+        // NEW: Đồng bộ widget ngay sau khi xác thực thành công
+        await syncWidgetWithStats();
+
+        // NEW: Định kỳ đồng bộ widget từ server (mỗi 30s)
+        state.statsSyncIntervalId = setInterval(async () => {
+          if (!state.isDestroyed) {
+            await syncWidgetWithStats();
+          }
+        }, CONFIG.STATS_SYNC_INTERVAL_MS);
 
         // Setup button and field listeners
         setupButtonListener(pageType, email);

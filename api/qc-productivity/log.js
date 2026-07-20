@@ -1,9 +1,11 @@
+// pages/api/log.js
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY;
 
+// Cache danh sách user được phép
 let allowedUsersCache = null;
 let cacheTime = 0;
-const CACHE_TTL = 60 * 1000;
+const CACHE_TTL = 60 * 1000; // 1 phút
 
 async function isUserAllowed(email) {
   if (!email) return false;
@@ -35,16 +37,85 @@ async function isUserAllowed(email) {
   }
 }
 
-export default async (req, res) => {
+// Lấy khoảng thời gian bắt đầu và kết thúc của ngày hôm nay (UTC)
+function getTodayRange() {
+  const now = new Date();
+  const start = new Date(
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()),
+  );
+  const end = new Date(start.getTime() + 24 * 60 * 60 * 1000);
+  return {
+    start: start.toISOString(),
+    end: end.toISOString(),
+  };
+}
+
+export default async function handler(req, res) {
+  // CORS
   res.setHeader("Access-Control-Allow-Credentials", true);
   res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "POST,OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
 
   if (req.method === "OPTIONS") return res.status(200).end();
-  if (req.method !== "POST")
-    return res.status(405).json({ error: "Method not allowed" });
 
+  // Xác định operator email
+  let operatorEmail;
+  if (req.method === "GET") {
+    operatorEmail = req.query.operator?.trim().toLowerCase();
+  } else if (req.method === "POST") {
+    operatorEmail = req.body.operator?.trim().toLowerCase();
+  } else {
+    return res.status(405).json({ error: "Method not allowed" });
+  }
+
+  if (!operatorEmail) {
+    return res.status(400).json({ error: "Missing operator email" });
+  }
+
+  // Kiểm tra quyền
+  const allowed = await isUserAllowed(operatorEmail);
+  if (!allowed) {
+    console.warn(`[API] Unauthorized: ${operatorEmail}`);
+    return res.status(403).json({ error: "User not authorized" });
+  }
+
+  // ==================== GET: Thống kê ngày ====================
+  if (req.method === "GET") {
+    try {
+      const { start, end } = getTodayRange();
+      const response = await fetch(
+        `${SUPABASE_URL}/rest/v1/qc_logs?select=page&operator=eq.${encodeURIComponent(operatorEmail)}&created_at=gte.${start}&created_at=lt.${end}`,
+        {
+          headers: {
+            apikey: SUPABASE_ANON_KEY,
+            Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+          },
+        },
+      );
+
+      if (!response.ok) {
+        const errText = await response.text();
+        console.error("[Stats API] Query error:", errText);
+        return res.status(500).json({ error: "Failed to fetch stats" });
+      }
+
+      const logs = await response.json();
+      const stats = { qc: 0, judgement: 0, rimassreceive: 0 };
+      logs.forEach((log) => {
+        if (log.page === "qc") stats.qc++;
+        else if (log.page === "judgement") stats.judgement++;
+        else if (log.page === "rimassreceive") stats.rimassreceive++;
+      });
+
+      return res.status(200).json(stats);
+    } catch (error) {
+      console.error("[Stats API] Error:", error);
+      return res.status(500).json({ error: "Internal server error" });
+    }
+  }
+
+  // ==================== POST: Ghi log ====================
   try {
     const logData = req.body;
     console.log(
@@ -52,19 +123,6 @@ export default async (req, res) => {
       JSON.stringify(logData, null, 2),
     );
 
-    const operatorEmail = logData.operator?.trim().toLowerCase();
-    if (!operatorEmail) {
-      console.warn("[Log API] Missing operator email");
-      return res.status(400).json({ error: "Missing operator email" });
-    }
-
-    const allowed = await isUserAllowed(operatorEmail);
-    if (!allowed) {
-      console.warn(`[Log API] Unauthorized attempt from ${operatorEmail}`);
-      return res.status(403).json({ error: "User not authorized" });
-    }
-
-    // Insert bao gồm scan_value và page_start_time
     const insertData = {
       version: logData.version || null,
       created_at: logData.timestamp || new Date().toISOString(),
@@ -77,11 +135,6 @@ export default async (req, res) => {
       page_start_time: logData.page_start_time || null,
       page_end_time: logData.page_end_time || null,
     };
-
-    console.log(
-      "[Log API] Inserting data:",
-      JSON.stringify(insertData, null, 2),
-    );
 
     const dbResponse = await fetch(`${SUPABASE_URL}/rest/v1/qc_logs`, {
       method: "POST",
@@ -106,4 +159,4 @@ export default async (req, res) => {
     console.error("[Log API] Fatal error:", error);
     return res.status(500).json({ error: "Internal server error" });
   }
-};
+}

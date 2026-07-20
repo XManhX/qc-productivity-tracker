@@ -198,8 +198,18 @@ const createStatLine = (content, label, id, color) => {
 
 /**
  * Main update function – called by the host script.
+ * Now accepts an optional stats object from the server.
  */
-const updateWidget = () => {
+const updateWidget = (stats) => {
+  // Nếu không có stats truyền vào (các lần gọi cũ), dùng local store làm fallback
+  if (!stats) {
+    stats = getStore(`stats_${todayKey()}`, {
+      qc: 0,
+      judgement: 0,
+      rimassreceive: 0,
+    });
+  }
+
   const widgetVisible = localStorage.getItem("widget_visible");
   if (widgetVisible === "false") {
     // Xóa widget nếu đang tồn tại
@@ -207,12 +217,6 @@ const updateWidget = () => {
     if (existing) existing.remove();
     return;
   }
-
-  const stats = getStore(`stats_${todayKey()}`, {
-    qc: 0,
-    judgement: 0,
-    rimassreceive: 0,
-  });
 
   // Sanitise values to numbers
   const qc = Number(stats.qc) || 0;

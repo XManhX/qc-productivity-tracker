@@ -461,6 +461,23 @@
 
     const ok = await sendRecord(record);
     if (ok) {
+      const key = `stats_${todayKey()}`;
+      const stats = getStore(key, {
+        qc: 0,
+        judgement: 0,
+        rimassreceive: 0,
+        lastUpdated: 0,
+      });
+
+      // Tăng số tương ứng với pageType
+      if (pageType === "qc") stats.qc = (stats.qc || 0) + 1;
+      else if (pageType === "judgement")
+        stats.judgement = (stats.judgement || 0) + 1;
+      else if (pageType === "rimassreceive")
+        stats.rimassreceive = (stats.rimassreceive || 0) + 1;
+      stats.lastUpdated = Date.now();
+      setStore(key, stats);
+
       log("Action completed and recorded successfully");
       // NEW: sau khi gửi thành công, đồng bộ lại widget từ server
       await syncWidgetWithStats();

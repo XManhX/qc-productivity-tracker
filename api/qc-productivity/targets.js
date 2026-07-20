@@ -10,19 +10,33 @@ export default async function handler(req, res) {
   const { method } = req;
 
   try {
+    // ─── GET: Lấy danh sách role kèm target ─────────────────
     if (method === "GET") {
-      // Lấy tất cả roles kèm target (nếu có)
-      const { data, error } = await supabase
+      // 1. Lấy tất cả roles
+      const { data: roles, error: rolesError } = await supabase
         .from("qc_roles")
-        .select(`
-          id, role_key, display_name, is_active,
-          qc_productivity_targets ( low_threshold, medium_threshold )
-        `)
+        .select("id, role_key, display_name, is_active")
         .order("display_name");
-      if (error) throw error;
+      if (rolesError) throw rolesError;
 
-      const result = data.map(role => {
-        const target = role.qc_productivity_targets?.[0] || {};
+      // 2. Lấy tất cả targets hiện có
+      const { data: targets, error: targetsError } = await supabase
+        .from("qc_productivity_targets")
+        .select("role_id, low_threshold, medium_threshold");
+      if (targetsError) throw targetsError;
+
+      // 3. Tạo map để tra cứu nhanh target theo role_id
+      const targetMap = {};
+      (targets || []).forEach((t) => {
+        targetMap[t.role_id] = {
+          low_threshold: t.low_threshold,
+          medium_threshold: t.medium_threshold,
+        };
+      });
+
+      // 4. Ghép dữ liệu, giữ giá trị mặc định nếu chưa có target
+      const result = roles.map((role) => {
+        const target = targetMap[role.id] || {};
         return {
           role_id: role.id,
           role_key: role.role_key,
@@ -32,34 +46,51 @@ export default async function handler(req, res) {
           medium_threshold: target.medium_threshold ?? 16,
         };
       });
+
       return res.status(200).json(result);
     }
 
+    // ─── PUT: Cập nhật / tạo mới target ─────────────────
     if (method === "PUT") {
       const { role_id, low_threshold, medium_threshold } = req.body || {};
-      if (!role_id) return res.status(400).json({ message: "Thiếu role_id" });
+      if (!role_id) {
+        return res.status(400).json({ message: "Thiếu role_id" });
+      }
 
       const low = Number(low_threshold);
       const medium = Number(medium_threshold);
-      if (isNaN(low) || isNaN(medium)) return res.status(400).json({ message: "Ngưỡng không hợp lệ" });
-      if (low >= medium) return res.status(400).json({ message: "low_threshold phải nhỏ hơn medium_threshold" });
+      if (isNaN(low) || isNaN(medium)) {
+        return res.status(400).json({ message: "Ngưỡng không hợp lệ" });
+      }
+      if (low >= medium) {
+        return res
+          .status(400)
+          .json({ message: "low_threshold phải nhỏ hơn medium_threshold" });
+      }
 
-      // Upsert target (dùng ON CONFLICT)
+      // Upsert target (ON CONFLICT role_id)
       const { data, error } = await supabase
         .from("qc_productivity_targets")
         .upsert(
-          { role_id, low_threshold: low, medium_threshold: medium, updated_at: new Date().toISOString() },
-          { onConflict: "role_id" }
+          {
+            role_id,
+            low_threshold: low,
+            medium_threshold: medium,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: "role_id" },
         )
         .select()
         .single();
+
       if (error) throw error;
       return res.status(200).json(data);
     }
 
+    // ─── Các method khác ─────────────────────────────────
     return res.status(405).json({ message: "Method not allowed" });
   } catch (error) {
-    console.error(error);
+    console.error("Targets API error:", error);
     return res.status(500).json({ error: error.message });
   }
 }

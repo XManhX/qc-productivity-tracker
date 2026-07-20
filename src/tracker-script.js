@@ -19,7 +19,7 @@
   };
 
   // __PAGE_CONFIG__ will be replaced at build time
-  const PAGE_CONFIG = {};
+  const PAGE_CONFIG = __PAGE_CONFIG__ || {};
 
   // ==================== STATE MANAGEMENT ====================
   const state = {

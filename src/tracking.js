@@ -1,3 +1,11 @@
+// src/tracking.js
+import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
+import { PAGE_CONFIG } from "./selectors.js";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
 export function createTrackerSource() {
   const scriptPath = path.join(__dirname, "tracker-script.js");
   const widgetPath = path.join(__dirname, "widget.js");
@@ -8,10 +16,11 @@ export function createTrackerSource() {
   // Inject widget code
   source = source.replace("// __WIDGET_CODE__", widgetSource);
 
-  // Replace the __PAGE_CONFIG__ placeholder with the actual config object
+  // Inject page config
+  const configJson = JSON.stringify(PAGE_CONFIG, null, 2);
   source = source.replace(
-    "__PAGE_CONFIG__",
-    JSON.stringify(PAGE_CONFIG, null, 2)
+    /const PAGE_CONFIG = \{\};/,
+    `const PAGE_CONFIG = ${configJson};`,
   );
 
   return source;

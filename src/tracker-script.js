@@ -410,6 +410,7 @@
           qc: Number(resp.data.qc) || 0,
           judgement: Number(resp.data.judgement) || 0,
           rimassreceive: Number(resp.data.rimassreceive) || 0,
+          lastUpdated: Date.now(),
         };
         // Cập nhật local store để fallback khi offline
         setStore(`stats_${todayKey()}`, stats);
@@ -435,6 +436,7 @@
         qc: 0,
         judgement: 0,
         rimassreceive: 0,
+        lastUpdated: 0,
       });
       updateWidget(localStats);
     }
@@ -686,7 +688,12 @@
           warn("No email found, initialization aborted");
           localStorage.setItem("widget_visible", "false");
           if (typeof updateWidget === "function")
-            updateWidget({ qc: 0, judgement: 0, rimassreceive: 0 });
+            updateWidget({
+              qc: 0,
+              judgement: 0,
+              rimassreceive: 0,
+              lastUpdated: 0,
+            });
           return;
         }
 

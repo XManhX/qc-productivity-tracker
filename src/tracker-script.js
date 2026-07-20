@@ -643,19 +643,17 @@
     // Patch History API
     const originalPushState = history.pushState;
     const originalReplaceState = history.replaceState;
-
     history.pushState = function (...args) {
       originalPushState.apply(this, args);
       handleUrlChange();
     };
-
     history.replaceState = function (...args) {
       originalReplaceState.apply(this, args);
       handleUrlChange();
     };
 
     window.addEventListener("popstate", handleUrlChange);
-    window.addEventListener("hashchange", handleUrlChange);
+    window.addEventListener("hashchange", handleUrlChange); // <-- thêm dòng này
   };
 
   // ==================== STORAGE CHANGE LISTENER ====================
@@ -702,7 +700,7 @@
 
   // ==================== INITIALIZATION ====================
   const init = async () => {
-    // Nếu có init đang chạy, lưu URL hiện tại để chạy lại sau
+    // Nếu có init đang chạy, lưu URL hiện tại để chạy lại sau khi xong
     if (state.initPromise) {
       log("Init already in progress, scheduling re-init for current URL");
       state.pendingReinitUrl = location.href;
@@ -712,7 +710,7 @@
     state.initPromise = (async () => {
       try {
         log("Starting initialization for:", location.href);
-        state.pendingReinitUrl = null;
+        state.pendingReinitUrl = null; // reset trước khi bắt đầu
 
         // Cleanup previous observers
         cleanup();
@@ -780,10 +778,10 @@
           }
         }, CONFIG.FLUSH_INTERVAL_MS);
 
-        // NEW: Đồng bộ widget ngay sau khi xác thực thành công
+        // Đồng bộ widget ngay sau khi xác thực thành công
         await syncWidgetWithStats();
 
-        // NEW: Định kỳ đồng bộ widget từ server (mỗi 30s)
+        // Định kỳ đồng bộ widget từ server
         state.statsSyncIntervalId = setInterval(async () => {
           if (!state.isDestroyed) {
             await syncWidgetWithStats();
@@ -816,13 +814,20 @@
       } finally {
         state.initPromise = null;
 
-        // Sau khi init hiện tại kết thúc, nếu có URL khác đang chờ thì chạy lại
+        // === PHẦN SỬA QUAN TRỌNG ===
+        // Nếu trong lúc init đang chạy có URL khác được yêu cầu, luôn chạy lại init cho URL đó
         if (state.pendingReinitUrl) {
-          state.lastUrl = nextUrl;
-        }
+          const nextUrl = state.pendingReinitUrl;
+          state.pendingReinitUrl = null; // xóa pending ngay
 
-        // Gọi lại init bất đồng bộ (đảm bảo state.initPromise đã = null)
-        setTimeout(() => init(), 0);
+          // Cập nhật lastUrl để SPA monitoring không trigger lại không cần thiết
+          if (nextUrl !== state.lastUrl) {
+            state.lastUrl = nextUrl;
+          }
+
+          // Gọi lại init bất đồng bộ (đảm bảo state.initPromise đã = null)
+          setTimeout(() => init(), 0);
+        }
       }
     })();
 

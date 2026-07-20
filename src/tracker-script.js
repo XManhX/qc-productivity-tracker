@@ -29,8 +29,9 @@
     observer: null,
     initPromise: null,
     flushIntervalId: null,
-    statsSyncIntervalId: null, // NEW
+    statsSyncIntervalId: null,
     isDestroyed: false,
+    pendingReinitUrl: null, // URL cần khởi tạo lại sau khi init hiện tại kết thúc
   };
 
   // ==================== UTILITY FUNCTIONS ====================
@@ -654,6 +655,7 @@
     };
 
     window.addEventListener("popstate", handleUrlChange);
+    window.addEventListener("hashchange", handleUrlChange);
   };
 
   // ==================== STORAGE CHANGE LISTENER ====================
@@ -700,15 +702,17 @@
 
   // ==================== INITIALIZATION ====================
   const init = async () => {
-    // Prevent concurrent initializations
+    // Nếu có init đang chạy, lưu URL hiện tại để chạy lại sau
     if (state.initPromise) {
-      log("Initialization already in progress, waiting...");
+      log("Init already in progress, scheduling re-init for current URL");
+      state.pendingReinitUrl = location.href;
       return state.initPromise;
     }
 
     state.initPromise = (async () => {
       try {
-        log("Starting initialization...");
+        log("Starting initialization for:", location.href);
+        state.pendingReinitUrl = null;
 
         // Cleanup previous observers
         cleanup();
@@ -811,6 +815,20 @@
         error("Fatal initialization error:", e);
       } finally {
         state.initPromise = null;
+
+        // Sau khi init hiện tại kết thúc, nếu có URL khác đang chờ thì chạy lại
+        if (
+          state.pendingReinitUrl &&
+          state.pendingReinitUrl !== location.href
+        ) {
+          log("Re-initializing for pending URL:", state.pendingReinitUrl);
+          // Cập nhật lastUrl để tránh vòng lặp nếu URL không thay đổi thêm
+          state.lastUrl = state.pendingReinitUrl;
+          init(); // gọi lại không await để không chặn
+        } else if (state.pendingReinitUrl) {
+          // URL vẫn là trang hiện tại, chỉ cần xóa pending
+          state.pendingReinitUrl = null;
+        }
       }
     })();
 

@@ -4,10 +4,10 @@ import { showToast } from "../utils/toast.js";
 export class TargetTable {
   constructor(container) {
     this.container = container;
-    this._saving = {}; // roleId -> true nếu đang gọi API
-    this._saveTimeouts = {}; // roleId -> timeout ID cho debounce
+    this._saving = {}; // roleId → true nếu đang lưu
+    this._saveTimeouts = {}; // roleId → timeout ID (debounce)
     this._originalTargets = []; // bản sao dữ liệu gốc để so sánh
-    this._suppressUpdate = false; // cờ tránh render lại khi tự lưu
+    this._suppressUpdate = false; // tránh render lại khi tự lưu
 
     this._render();
     targetStore.on("update", () => {
@@ -60,7 +60,7 @@ export class TargetTable {
       this._validateInputs(roleId);
     });
 
-    // Khi focus vào input -> hủy debounce auto‑save đang chờ (nếu có)
+    // Khi focus vào input → hủy debounce đang chờ (nếu có)
     tbody.addEventListener("focusin", (e) => {
       const input = e.target;
       if (!input.matches('input[id^="low-"], input[id^="medium-"]')) return;
@@ -71,25 +71,20 @@ export class TargetTable {
       }
     });
 
-    // Khi blur -> bắt đầu debounce để auto‑save
-    tbody.addEventListener(
-      "blur",
-      (e) => {
-        const input = e.target;
-        if (!input.matches('input[id^="low-"], input[id^="medium-"]')) return;
-        const roleId = this._getRoleId(input);
-        this._scheduleAutoSave(roleId);
-      },
-      true,
-    ); // capture vì blur không nổi bọt
+    // Khi giá trị thay đổi VÀ người dùng rời khỏi input (change event)
+    tbody.addEventListener("change", (e) => {
+      const input = e.target;
+      if (!input.matches('input[id^="low-"], input[id^="medium-"]')) return;
+      const roleId = this._getRoleId(input);
+      this._scheduleAutoSave(roleId);
+    });
   }
 
-  // ---------- Helpers ----------
   _getRoleId(input) {
     return Number(input.id.split("-")[1]);
   }
 
-  // ---------- Validate realtime ----------
+  // ───── Validate realtime ─────
   _validateInputs(roleId) {
     const lowEl = this.container.querySelector(`#low-${roleId}`);
     const mediumEl = this.container.querySelector(`#medium-${roleId}`);
@@ -125,13 +120,13 @@ export class TargetTable {
     return isValid;
   }
 
-  // ---------- Debounce & Auto‑save ----------
+  // ───── Debounce & Auto‑save ─────
   _scheduleAutoSave(roleId) {
     // Hủy timeout cũ nếu có
     if (this._saveTimeouts[roleId]) {
       clearTimeout(this._saveTimeouts[roleId]);
     }
-    // Đặt timeout mới (600ms, đủ để người dùng chuyển sang ô khác hoặc click chuột)
+    // Đặt timeout mới (600 ms)
     this._saveTimeouts[roleId] = setTimeout(() => {
       delete this._saveTimeouts[roleId];
       this._saveRole(roleId);
@@ -139,7 +134,7 @@ export class TargetTable {
   }
 
   async _saveRole(roleId) {
-    // Tránh gọi nhiều lần
+    // Tránh gọi API trùng lặp
     if (this._saving[roleId]) return;
 
     const lowEl = this.container.querySelector(`#low-${roleId}`);
@@ -152,7 +147,7 @@ export class TargetTable {
     // Chỉ lưu nếu hợp lệ
     if (isNaN(low) || isNaN(medium) || low >= medium) return;
 
-    // So sánh với dữ liệu gốc
+    // So sánh với dữ liệu gốc (tránh lưu lại giá trị không đổi)
     const original = this._originalTargets.find((t) => t.role_id === roleId);
     if (!original) return;
     if (low === original.low_threshold && medium === original.medium_threshold)
@@ -163,7 +158,7 @@ export class TargetTable {
     try {
       const res = await targetStore.updateTarget(roleId, low, medium);
       if (res.success) {
-        // Phản hồi thành công: viền xanh 1.5s
+        // Highlight xanh nhẹ
         [lowEl, mediumEl].forEach((el) => {
           el.style.borderColor = "#10b981";
           el.style.boxShadow = "0 0 0 1px #10b981";
@@ -175,7 +170,7 @@ export class TargetTable {
           });
         }, 1500);
 
-        // Cập nhật original để không lưu lại cùng giá trị
+        // Cập nhật original để lần sau không lưu lại
         const idx = this._originalTargets.findIndex(
           (t) => t.role_id === roleId,
         );
@@ -184,7 +179,7 @@ export class TargetTable {
           this._originalTargets[idx].medium_threshold = medium;
         }
 
-        // Chặn render lại từ store update (chính mình gây ra)
+        // Chặn render lại do store update (chính mình vừa gọi)
         this._suppressUpdate = true;
         setTimeout(() => {
           this._suppressUpdate = false;
@@ -199,7 +194,7 @@ export class TargetTable {
     }
   }
 
-  // ---------- Cập nhật giao diện (chỉ khi dữ liệu từ store thay đổi) ----------
+  // ───── Cập nhật giao diện (khi store thay đổi từ bên ngoài) ─────
   _updateView() {
     const tbody = this.container.querySelector("#targets-tbody");
     const { loading, error, targets } = targetStore.state;
@@ -217,10 +212,10 @@ export class TargetTable {
       return;
     }
 
-    // Lưu bản sao giá trị gốc
+    // Lưu bản sao dữ liệu gốc
     this._originalTargets = targets.map((t) => ({ ...t }));
 
-    // Render (chú ý: không còn nút Lưu)
+    // Render (không còn nút Lưu)
     tbody.innerHTML = targets
       .map(
         (t) => `
@@ -240,7 +235,7 @@ export class TargetTable {
       .join("");
 
     lucide.createIcons();
-    // Sau khi render lại, validate tất cả role một lần để xoá trạng thái lỗi cũ (nếu có)
+    // Validate lại toàn bộ để xoá lỗi cũ (nếu có)
     targets.forEach((t) => this._validateInputs(t.role_id));
   }
 }

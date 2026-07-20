@@ -1,7 +1,8 @@
 export const PAGE_CONFIG = {
   qc: {
     pathIncludes: "/v2/returninbound/qc",
-    actionSelector: ".btn-confirm > button",
+    containerSelector: ".btn-confirm",
+    actionText: "Complete",
     requiredFields: ["scan_value"],
     fields: {
       scan_value: ["sheet_id"],

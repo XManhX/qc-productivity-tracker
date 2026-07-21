@@ -631,17 +631,12 @@
 
   // ==================== SPA NAVIGATION DETECTION ====================
   const setupSPAMonitoring = () => {
-    const debouncedInit = debounce(() => {
-      if (!state.isDestroyed) {
-        init();
-      }
-    }, CONFIG.INIT_DEBOUNCE_MS);
-
     const handleUrlChange = () => {
       if (location.href !== state.lastUrl) {
         state.lastUrl = location.href;
         log("SPA navigation detected, re-initializing...");
-        debouncedInit();
+        // Gọi init ngay lập tức, không debounce
+        init();
       }
     };
 
@@ -658,7 +653,7 @@
     };
 
     window.addEventListener("popstate", handleUrlChange);
-    window.addEventListener("hashchange", handleUrlChange); // <-- thêm dòng này
+    window.addEventListener("hashchange", handleUrlChange);
   };
 
   // ==================== STORAGE CHANGE LISTENER ====================

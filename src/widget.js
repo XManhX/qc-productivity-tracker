@@ -1,5 +1,8 @@
-// ==================== WIDGET MANAGER (Persistent Overlay + Self-healing Singleton) ====================
-const WidgetManager = (() => {
+// ==================== WIDGET MANAGER (Self-contained, relies on passed store functions) ====================
+const WidgetManager = (function () {
+  // Nhận store functions từ bên ngoài (sẽ được truyền khi khởi tạo)
+  let _getStore, _setStore;
+
   // ---------- PRIVATE STATE ----------
   let widgetEl = null;
   let headerEl = null;
@@ -41,7 +44,9 @@ const WidgetManager = (() => {
     widgetEl.style.top = top + "px";
     widgetEl.style.left = left + "px";
 
-    setStore("widget_position", { top: top + "px", left: left + "px" });
+    if (_setStore) {
+      _setStore("widget_position", { top: top + "px", left: left + "px" });
+    }
   };
 
   // ---------- DRAGGING ----------
@@ -88,10 +93,12 @@ const WidgetManager = (() => {
     const onEnd = () => {
       if (!isDragging) return;
       isDragging = false;
-      setStore("widget_position", {
-        top: widgetEl.style.top,
-        left: widgetEl.style.left,
-      });
+      if (_setStore) {
+        _setStore("widget_position", {
+          top: widgetEl.style.top,
+          left: widgetEl.style.left,
+        });
+      }
       document.removeEventListener("mousemove", onMove);
       document.removeEventListener("mouseup", onEnd);
       document.removeEventListener("touchmove", onMove);
@@ -107,7 +114,15 @@ const WidgetManager = (() => {
   const createWidget = () => {
     if (widgetEl) return;
 
-    const pos = getStore("widget_position", { top: "80px", left: "20px" });
+    const defaultPos = { top: "80px", left: "20px" };
+    const pos = _getStore
+      ? _getStore("widget_position", defaultPos)
+      : defaultPos;
+    if (!pos || !pos.top || !pos.left) {
+      pos.top = defaultPos.top;
+      pos.left = defaultPos.left;
+    }
+
     widgetEl = document.createElement("div");
     widgetEl.id = "qc-tracker-floating-widget";
     widgetEl.style.cssText = `
@@ -154,7 +169,6 @@ const WidgetManager = (() => {
     enforceBounds();
 
     window.addEventListener("resize", enforceBounds);
-    // Lưu handler để dọn khi remove
     widgetEl._resizeHandler = enforceBounds;
   };
 
@@ -183,15 +197,12 @@ const WidgetManager = (() => {
   const startGuard = () => {
     if (guardObserver) return;
     guardObserver = new MutationObserver(() => {
-      // Nếu widget không còn trong DOM nhưng lẽ ra phải hiển thị
       if (shouldBeVisible && widgetEl && !document.body.contains(widgetEl)) {
-        // Widget đã bị xóa bởi SPA
         widgetEl = null;
         headerEl = null;
         createWidget();
         updateDisplay(currentStats);
       } else if (shouldBeVisible && !widgetEl && document.body) {
-        // Widget chưa hề được tạo
         createWidget();
         updateDisplay(currentStats);
       }
@@ -208,6 +219,10 @@ const WidgetManager = (() => {
 
   // ---------- PUBLIC API ----------
   return {
+    init(storeGetter, storeSetter) {
+      _getStore = storeGetter;
+      _setStore = storeSetter;
+    },
     setVisible(visible) {
       shouldBeVisible = !!visible;
       localStorage.setItem("widget_visible", visible ? "true" : "false");
@@ -226,7 +241,6 @@ const WidgetManager = (() => {
       if (!stats) return;
       currentStats = { ...stats };
       if (widgetEl) updateDisplay(currentStats);
-      // Đồng bộ vào local store (nếu cần, script chính tự làm)
     },
     isVisible() {
       return shouldBeVisible && !!widgetEl && document.body.contains(widgetEl);

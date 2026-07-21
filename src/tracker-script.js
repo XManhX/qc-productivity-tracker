@@ -133,6 +133,15 @@
   // ==================== WIDGET ====================
   // __WIDGET_CODE__
 
+  // Khởi tạo WidgetManager với store functions
+  if (typeof WidgetManager !== "undefined" && WidgetManager.init) {
+    WidgetManager.init(getStore, setStore);
+  } else {
+    console.error(
+      "[QC Tracker] WidgetManager not found or missing init method",
+    );
+  }
+
   // ==================== EMAIL EXTRACTION ====================
   const getEmail = () => {
     // Try to get from storage first (fresh data)

@@ -107,3 +107,14 @@ export async function deleteRole(id) {
 export async function fetchMe() {
   return request(`${BASE_URL}/me`);
 }
+
+export async function fetchAlertConfig() {
+  return request(`${BASE_URL}/config`);
+}
+
+export async function updateAlertConfig(data) {
+  return request(`${BASE_URL}/config`, {
+    method: "PUT",
+    body: JSON.stringify(data),
+  });
+}

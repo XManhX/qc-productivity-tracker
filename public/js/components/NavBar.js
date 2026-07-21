@@ -29,6 +29,12 @@ export class NavBar {
         icon: "target",
         label: "Roles & Targets",
       },
+      {
+        key: "alert-config",
+        href: "/alert-config.html",
+        icon: "bell-ring",
+        label: "Cấu hình Alert",
+      },
     ];
 
     const linksHtml = pages

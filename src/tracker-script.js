@@ -94,6 +94,12 @@
    * Xoá toàn bộ key của ngày cũ để giảm tải bộ nhớ (chạy không đồng bộ từng phần).
    */
   const cleanOldData = () => {
+    // Kiểm tra API tồn tại
+    if (typeof GM_listValues !== "function") {
+      log("GM_listValues not available, skipping cleanup");
+      return;
+    }
+
     const today = todayKey();
     try {
       const allKeys = GM_listValues();

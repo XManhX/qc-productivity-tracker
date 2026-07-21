@@ -11,6 +11,7 @@
 // @grant        GM_listValues
 // @grant        GM_xmlhttpRequest
 // @grant        GM_addValueChangeListener
+// @grant        GM_addStyle
 // @connect      wms.ssc.shopee.vn
 // @connect      *
 // @updateURL    __API_BASE_URL__/install/qc-productivity-tracker.user.js

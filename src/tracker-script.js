@@ -927,4 +927,14 @@
   init()
     .then(() => log("Tracker started"))
     .catch((e) => error("Startup error:", e));
+
+  // ==================== OPTIONAL: VISUAL HIGHLIGHT FOR TRACKED BUTTONS ====================
+  if (typeof GM_addStyle !== "undefined") {
+    GM_addStyle(`
+    [data-qc-tracked="true"] {
+      outline: 2px solid #00cc66 !important;
+      outline-offset: 2px;
+    }
+  `);
+  }
 })();

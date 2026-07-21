@@ -13,7 +13,7 @@
     AUTH_RETRY_DELAY_MS: 1000,
     EMAIL_CACHE_MS: 5 * 60 * 1000,
     FLUSH_INTERVAL_MS: 60 * 1000,
-    INIT_DEBOUNCE_MS: 500, // <-- nay được dùng để debounce init
+    INIT_DEBOUNCE_MS: 500,
     REQUEST_TIMEOUT_MS: 10000,
     STATS_SYNC_INTERVAL_MS: 30000,
     API_CAPTURE_TIMEOUT_MS: 15000,
@@ -36,10 +36,6 @@
     authPromise: null,
     currentPageType: null,
     currentEmail: null,
-    // Thêm để quản lý apiWaiters và navigation callbacks
-    apiWaiters: [],
-    navCallbacks: new Set(),
-    installedNavHooks: false,
   };
 
   // ==================== UTILITIES ====================
@@ -91,47 +87,34 @@
 
   // ==================== DAILY CLEANUP ====================
   /**
-   * Xoá toàn bộ key của ngày cũ để giảm tải bộ nhớ (chạy không đồng bộ từng phần).
+   * Xoá toàn bộ key của ngày cũ để giảm tải bộ nhớ.
+   * Chừa lại các key không có tiền tố ngày (như user_email).
    */
   const cleanOldData = () => {
-    // Kiểm tra API tồn tại
-    if (typeof GM_listValues !== "function") {
-      log("GM_listValues not available, skipping cleanup");
-      return;
-    }
-
     const today = todayKey();
     try {
       const allKeys = GM_listValues();
-      const datePattern = /^\d{4}-\d{2}-\d{2}$/;
-      const keysToDelete = [];
+      const datePattern = /^\d{4}-\d{2}-\d{2}$/; // dạng ngày trong key
       for (const key of allKeys) {
+        // Các key đặc biệt không được xoá
         if (
           key.startsWith("user_email") ||
           key.startsWith("qc_authz_") ||
           key === "qc_pending_logs" ||
           key === "qc_last_fingerprint" ||
           key === "qc_last_fingerprint_time"
-        )
+        ) {
           continue;
+        }
+        // Xoá mọi key chứa ngày cũ (định dạng yyyy-mm-dd)
+        // Ví dụ: qc_dedup_2026-07-20_... hoặc stats_2026-07-20
         const parts = key.split("_");
         const datePart = parts.find((p) => datePattern.test(p));
         if (datePart && datePart !== today) {
-          keysToDelete.push(key);
+          deleteStore(key);
+          log("Deleted old key:", key);
         }
       }
-      // Xoá theo chunk để không chặn main thread quá lâu
-      const deleteChunk = (startIdx = 0, chunkSize = 50) => {
-        const end = Math.min(startIdx + chunkSize, keysToDelete.length);
-        for (let i = startIdx; i < end; i++) {
-          deleteStore(keysToDelete[i]);
-          log("Deleted old key:", keysToDelete[i]);
-        }
-        if (end < keysToDelete.length) {
-          setTimeout(() => deleteChunk(end, chunkSize), 0);
-        }
-      };
-      if (keysToDelete.length) deleteChunk(0);
     } catch (e) {
       warn("Error during daily cleanup:", e);
     }
@@ -202,8 +185,6 @@
 
   // ==================== WIDGET ====================
   // __WIDGET_CODE__
-  // LƯU Ý BẢO MẬT: Đảm bảo WidgetManager cập nhật giao diện bằng textContent
-  // hoặc các phương thức an toàn, không dùng innerHTML với dữ liệu không tin cậy.
 
   if (typeof WidgetManager !== "undefined" && WidgetManager.init) {
     WidgetManager.init(getStore, setStore);
@@ -302,22 +283,13 @@
   };
 
   // ==================== API INTERCEPTOR & WAITER ====================
-  // Dời apiWaiters vào state để quản lý tập trung, tránh rò rỉ.
-  // Hàm huỷ toàn bộ waiter đang chờ.
-  const cancelAllApiWaiters = () => {
-    const waiters = state.apiWaiters;
-    while (waiters.length) {
-      const w = waiters.pop();
-      clearTimeout(w.timeoutId);
-      w.reject(new Error("Tracker destroyed or re-initialized"));
-    }
-  };
+  const apiWaiters = [];
 
   const addApiWaiter = (urlPattern, method, timeoutMs, successCondition) => {
     return new Promise((resolve, reject) => {
       const timeoutId = setTimeout(() => {
-        const idx = state.apiWaiters.indexOf(waiter);
-        if (idx > -1) state.apiWaiters.splice(idx, 1);
+        const idx = apiWaiters.indexOf(waiter);
+        if (idx > -1) apiWaiters.splice(idx, 1);
         reject(new Error("API capture timeout"));
       }, timeoutMs);
       const waiter = {
@@ -328,11 +300,11 @@
         timeoutId,
         successCondition,
       };
-      state.apiWaiters.push(waiter);
+      apiWaiters.push(waiter);
     });
   };
 
-  // Override fetch – giữ nguyên logic, chỉ thay mảng apiWaiters sang state
+  // Override fetch
   const originalFetch = window.fetch;
   window.fetch = function (input, init) {
     const url =
@@ -352,9 +324,8 @@
           .clone()
           .json()
           .then((data) => {
-            const waiters = state.apiWaiters;
-            for (let i = waiters.length - 1; i >= 0; i--) {
-              const w = waiters[i];
+            for (let i = apiWaiters.length - 1; i >= 0; i--) {
+              const w = apiWaiters[i];
               if (url.includes(w.urlPattern) && method === w.method) {
                 clearTimeout(w.timeoutId);
                 if (w.successCondition(data)) {
@@ -362,17 +333,17 @@
                 } else {
                   w.reject(new Error("API failed condition"));
                 }
-                waiters.splice(i, 1);
+                apiWaiters.splice(i, 1);
               }
             }
           })
-          .catch(() => {}); // Bỏ qua lỗi parse từ response clone
+          .catch(() => {});
       })
       .catch(() => {});
     return fetchPromise;
   };
 
-  // Override XMLHttpRequest – tương tự
+  // Override XMLHttpRequest
   const XHRProto = XMLHttpRequest.prototype;
   const originalOpen = XHRProto.open;
   const originalSend = XHRProto.send;
@@ -388,9 +359,8 @@
       if (xhr.readyState === 4) {
         try {
           const data = JSON.parse(xhr.responseText);
-          const waiters = state.apiWaiters;
-          for (let i = waiters.length - 1; i >= 0; i--) {
-            const w = waiters[i];
+          for (let i = apiWaiters.length - 1; i >= 0; i--) {
+            const w = apiWaiters[i];
             if (
               xhr._qcUrl &&
               xhr._qcUrl.includes(w.urlPattern) &&
@@ -402,7 +372,7 @@
               } else {
                 w.reject(new Error("API failed condition"));
               }
-              waiters.splice(i, 1);
+              apiWaiters.splice(i, 1);
             }
           }
         } catch (e) {}
@@ -612,13 +582,18 @@
     const record = makeRecord(pageType, userEmail, endTimeOverride);
     if (shouldSkip(record, pageType)) return;
 
+    // Chống trùng trong ngày: kiểm tra dedup key
     if (isRecordedToday(record)) {
       log("Duplicate in today's dedup set, skipping");
       return;
     }
+    // Đánh dấu ngay để khoá vĩnh viễn trong ngày
     markRecordedToday(record);
+
+    // Thêm vào hàng đợi gửi
     addToPending(record);
 
+    // Tăng thống kê cục bộ
     const statsKey = `stats_${todayKey()}`;
     const stats = getStore(statsKey, {
       qc: 0,
@@ -636,7 +611,7 @@
       await sendRecord(record);
       await syncWidgetWithStats();
     } else if (!state.authStatus) {
-      ensureAuth(userEmail);
+      ensureAuth(userEmail); // sẽ tự động flush khi auth thành công
     }
   };
 
@@ -681,6 +656,7 @@
 
       log("Action button clicked:", cfg.actionSelector || cfg.actionText);
 
+      // Chờ API capture nếu được cấu hình
       if (cfg.apiCapture) {
         try {
           await addApiWaiter(
@@ -693,7 +669,7 @@
           log("API capture succeeded, recording action");
         } catch (err) {
           warn("API capture failed:", err.message);
-          return;
+          return; // Không ghi nhận nếu API thất bại
         }
       }
 
@@ -734,11 +710,10 @@
     true,
   );
 
-  // ==================== NAVIGATION MONITOR (cải tiến: hỗ trợ unbind, debounce) ====================
+  // ==================== NAVIGATION MONITOR ====================
   const NavigationMonitor = (() => {
-    const callbacks = state.navCallbacks; // Sử dụng Set để dễ dàng xoá
-    const installed = () => state.installedNavHooks;
-
+    const callbacks = [];
+    let installed = false;
     const notify = () =>
       callbacks.forEach((fn) => {
         try {
@@ -747,12 +722,11 @@
           warn("Nav callback error:", e);
         }
       });
-
     return {
       onNavigate(callback) {
-        callbacks.add(callback);
-        if (!installed()) {
-          state.installedNavHooks = true;
+        callbacks.push(callback);
+        if (!installed) {
+          installed = true;
           const origPush = history.pushState;
           history.pushState = function (...args) {
             origPush.apply(this, args);
@@ -766,18 +740,6 @@
           window.addEventListener("popstate", notify);
           window.addEventListener("hashchange", notify);
         }
-        // Trả về hàm huỷ để caller có thể gỡ bỏ khi không cần
-        return () => {
-          callbacks.delete(callback);
-        };
-      },
-      // Dành cho việc dọn dẹp hoàn toàn nếu cần (hiếm khi dùng)
-      destroy() {
-        callbacks.clear();
-        // Không thể khôi phục history methods, nhưng có thể loại bỏ listener
-        window.removeEventListener("popstate", notify);
-        window.removeEventListener("hashchange", notify);
-        state.installedNavHooks = false;
       },
     };
   })();
@@ -785,8 +747,6 @@
   // ==================== WIDGET VISIBILITY WATCHER ====================
   const WidgetVisibilityWatcher = (() => {
     let lastDecision = null;
-    let unbindNav = null;
-
     const shouldBeVisible = async () => {
       const pt = getPageType(location.href);
       if (pt === "unknown") return false;
@@ -795,7 +755,6 @@
       const auth = await ensureAuth(email);
       return auth.allowed;
     };
-
     const apply = async () => {
       const visible = await shouldBeVisible();
       const decision = visible ? "visible" : "hidden";
@@ -805,21 +764,9 @@
         if (visible) syncWidgetWithStats();
       }
     };
-
-    // Đăng ký với NavigationMonitor và lưu lại hàm huỷ
-    unbindNav = NavigationMonitor.onNavigate(apply);
+    NavigationMonitor.onNavigate(apply);
     apply();
-
-    return {
-      applyVisibility: apply,
-      // Cung cấp phương thức dọn dẹp nếu cần
-      destroy() {
-        if (unbindNav) {
-          unbindNav();
-          unbindNav = null;
-        }
-      },
-    };
+    return { applyVisibility: apply };
   })();
 
   // ==================== STORAGE LISTENER ====================
@@ -837,56 +784,29 @@
 
   // ==================== CLEANUP ====================
   const cleanup = () => {
-    // Dừng tất cả interval
     if (state.flushIntervalId) clearInterval(state.flushIntervalId);
     if (state.statsSyncIntervalId) clearInterval(state.statsSyncIntervalId);
     state.flushIntervalId = state.statsSyncIntervalId = null;
-
-    // Huỷ tất cả API waiter đang treo
-    cancelAllApiWaiters();
-
-    // Dọn dẹp navigation callback của WidgetVisibilityWatcher (nếu có)
-    // WidgetVisibilityWatcher.destroy();
-
-    // Không reset NavigationMonitor toàn bộ vì có thể ảnh hưởng đến các phần khác.
     state.isDestroyed = true;
   };
 
-  // ==================== BEFOREUNLOAD (cải tiến dùng sendBeacon) ====================
   window.addEventListener("beforeunload", () => {
     const pending = getPendingLogs();
     if (pending.length) {
-      const payload = JSON.stringify(pending);
-      const url = CONFIG.API_BASE_URL + CONFIG.LOG_ENDPOINT;
-      // Sử dụng sendBeacon để gửi dữ liệu cuối cùng không đồng bộ, đáng tin cậy hơn XHR
-      if (navigator.sendBeacon) {
-        navigator.sendBeacon(
-          url,
-          new Blob([payload], { type: "application/json" }),
-        );
-      } else {
-        // Fallback XHR (đồng bộ có thể không được hỗ trợ, nhưng vẫn cố gắng)
-        try {
-          GM_xmlhttpRequest({
-            method: "POST",
-            url,
-            headers: { "Content-Type": "application/json" },
-            data: payload,
-          });
-        } catch (e) {}
-      }
+      try {
+        GM_xmlhttpRequest({
+          method: "POST",
+          url: CONFIG.API_BASE_URL + CONFIG.LOG_ENDPOINT,
+          headers: { "Content-Type": "application/json" },
+          data: JSON.stringify(pending),
+        });
+      } catch (e) {}
       setPendingLogs([]);
     }
     cleanup();
   });
 
-  // ==================== INIT (có debounce) ====================
-  let debounceTimer = null;
-  const debouncedInit = () => {
-    if (debounceTimer) clearTimeout(debounceTimer);
-    debounceTimer = setTimeout(init, CONFIG.INIT_DEBOUNCE_MS);
-  };
-
+  // ==================== INIT ====================
   const init = async () => {
     if (state.initPromise) {
       state.pendingReinitUrl = location.href;
@@ -903,7 +823,7 @@
         state.authStatus = null;
         state.authPromise = null;
 
-        // Dọn dẹp dữ liệu cũ không đồng bộ
+        // Dọn dẹp toàn bộ dữ liệu cũ của các ngày trước đó
         cleanOldData();
 
         const pageType = getPageType(location.href);
@@ -921,9 +841,7 @@
         }
         state.currentEmail = email;
 
-        WidgetVisibilityWatcher.apply();
-
-        // Auth không chặn
+        // Bắt đầu auth không chặn
         ensureAuth(email)
           .then((auth) => {
             if (!auth.allowed) warn("User not authorized:", auth.reason);
@@ -952,22 +870,22 @@
           const nextUrl = state.pendingReinitUrl;
           state.pendingReinitUrl = null;
           if (nextUrl !== state.lastUrl) state.lastUrl = nextUrl;
-          debouncedInit(); // Sử dụng debounce thay vì setTimeout trực tiếp
+          setTimeout(init, 0);
         }
       }
     })();
     return state.initPromise;
   };
 
-  // Đăng ký navigation sử dụng debouncedInit
   NavigationMonitor.onNavigate(() => {
     if (location.href !== state.lastUrl) {
       state.lastUrl = location.href;
       log("Navigation detected, re-init");
-      debouncedInit();
+      init();
     }
   });
 
-  // Khởi động lần đầu
-  debouncedInit();
+  init()
+    .then(() => log("Tracker started"))
+    .catch((e) => error("Startup error:", e));
 })();

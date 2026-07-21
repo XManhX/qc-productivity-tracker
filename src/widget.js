@@ -1,19 +1,33 @@
-// ==================== WIDGET MANAGER (Self-contained, relies on passed store functions) ====================
+// ==================== WIDGET MANAGER (Final) ====================
 const WidgetManager = (function () {
-  // Nhận store functions từ bên ngoài (sẽ được truyền khi khởi tạo)
-  let _getStore, _setStore;
+  let _getStore = null;
+  let _setStore = null;
 
-  // ---------- PRIVATE STATE ----------
   let widgetEl = null;
   let headerEl = null;
   let shouldBeVisible = false;
   let currentStats = { qc: 0, judgement: 0, rimassreceive: 0 };
   let guardObserver = null;
+  let guardInterval = null;
   let isDragging = false;
   let dragStartPos = { top: 0, left: 0 };
   let dragStartMouse = { x: 0, y: 0 };
 
-  // ---------- POSITION & BOUNDS ----------
+  // Try to use store if available, else fallback
+  const getPos = () => {
+    try {
+      if (_getStore)
+        return _getStore("widget_position", { top: "80px", left: "20px" });
+    } catch (e) {}
+    return { top: "80px", left: "20px" };
+  };
+
+  const savePos = (pos) => {
+    try {
+      if (_setStore) _setStore("widget_position", pos);
+    } catch (e) {}
+  };
+
   const enforceBounds = () => {
     if (!widgetEl || isDragging) return;
     const rect = widgetEl.getBoundingClientRect();
@@ -22,34 +36,13 @@ const WidgetManager = (function () {
     let top = parseFloat(widgetEl.style.top) || 0;
     let left = parseFloat(widgetEl.style.left) || 0;
 
-    if (widgetEl.style.right && widgetEl.style.right !== "auto") {
-      const r = parseFloat(widgetEl.style.right);
-      if (!isNaN(r)) {
-        left = vw - rect.width - r;
-        widgetEl.style.left = left + "px";
-        widgetEl.style.right = "auto";
-      }
-    }
-    if (widgetEl.style.bottom && widgetEl.style.bottom !== "auto") {
-      const b = parseFloat(widgetEl.style.bottom);
-      if (!isNaN(b)) {
-        top = vh - rect.height - b;
-        widgetEl.style.top = top + "px";
-        widgetEl.style.bottom = "auto";
-      }
-    }
-
     top = Math.max(0, Math.min(top, vh - rect.height));
     left = Math.max(0, Math.min(left, vw - rect.width));
     widgetEl.style.top = top + "px";
     widgetEl.style.left = left + "px";
-
-    if (_setStore) {
-      _setStore("widget_position", { top: top + "px", left: left + "px" });
-    }
+    savePos({ top: top + "px", left: left + "px" });
   };
 
-  // ---------- DRAGGING ----------
   const makeDraggable = () => {
     if (!widgetEl || !headerEl) return;
     headerEl.style.cursor = "move";
@@ -80,25 +73,16 @@ const WidgetManager = (function () {
       let newTop = dragStartPos.top + (clientY - dragStartMouse.y);
       let newLeft = dragStartPos.left + (clientX - dragStartMouse.x);
       const rect = widgetEl.getBoundingClientRect();
-      const vw = window.innerWidth;
-      const vh = window.innerHeight;
-      newTop = Math.max(0, Math.min(newTop, vh - rect.height));
-      newLeft = Math.max(0, Math.min(newLeft, vw - rect.width));
+      newTop = Math.max(0, Math.min(newTop, window.innerHeight - rect.height));
+      newLeft = Math.max(0, Math.min(newLeft, window.innerWidth - rect.width));
       widgetEl.style.top = newTop + "px";
       widgetEl.style.left = newLeft + "px";
-      widgetEl.style.right = "auto";
-      widgetEl.style.bottom = "auto";
     };
 
     const onEnd = () => {
       if (!isDragging) return;
       isDragging = false;
-      if (_setStore) {
-        _setStore("widget_position", {
-          top: widgetEl.style.top,
-          left: widgetEl.style.left,
-        });
-      }
+      savePos({ top: widgetEl.style.top, left: widgetEl.style.left });
       document.removeEventListener("mousemove", onMove);
       document.removeEventListener("mouseup", onEnd);
       document.removeEventListener("touchmove", onMove);
@@ -110,19 +94,16 @@ const WidgetManager = (function () {
     headerEl.addEventListener("touchstart", onStart, { passive: false });
   };
 
-  // ---------- CREATE / REMOVE ----------
   const createWidget = () => {
-    if (widgetEl) return;
+    if (widgetEl && document.body.contains(widgetEl)) return;
 
-    const defaultPos = { top: "80px", left: "20px" };
-    const pos = _getStore
-      ? _getStore("widget_position", defaultPos)
-      : defaultPos;
-    if (!pos || !pos.top || !pos.left) {
-      pos.top = defaultPos.top;
-      pos.left = defaultPos.left;
+    // Remove old if detached
+    if (widgetEl && !document.body.contains(widgetEl)) {
+      widgetEl = null;
+      headerEl = null;
     }
 
+    const pos = getPos();
     widgetEl = document.createElement("div");
     widgetEl.id = "qc-tracker-floating-widget";
     widgetEl.style.cssText = `
@@ -161,15 +142,16 @@ const WidgetManager = (function () {
     addLine("2. Đã Judge:", "qc-tracker-value-judgement", "#29b6f6");
     addLine("3. Đã Receive:", "qc-tracker-value-rimassreceive", "#ffca28");
     if (content.lastChild) content.lastChild.style.marginBottom = "0";
-
     widgetEl.appendChild(content);
-    document.body.appendChild(widgetEl);
 
+    document.body.appendChild(widgetEl);
     makeDraggable();
     enforceBounds();
-
     window.addEventListener("resize", enforceBounds);
     widgetEl._resizeHandler = enforceBounds;
+
+    // Update display with current stats
+    updateDisplay(currentStats);
   };
 
   const removeWidget = () => {
@@ -182,32 +164,38 @@ const WidgetManager = (function () {
   };
 
   const updateDisplay = (stats) => {
-    currentStats = stats;
+    currentStats = stats || currentStats;
     if (!widgetEl) return;
-    const setVal = (id, val) => {
-      const el = document.getElementById(id);
-      if (el) el.textContent = val;
-    };
-    setVal("qc-tracker-value-qc", Number(stats.qc) || 0);
-    setVal("qc-tracker-value-judgement", Number(stats.judgement) || 0);
-    setVal("qc-tracker-value-rimassreceive", Number(stats.rimassreceive) || 0);
+    document.getElementById("qc-tracker-value-qc") &&
+      (document.getElementById("qc-tracker-value-qc").textContent =
+        Number(currentStats.qc) || 0);
+    document.getElementById("qc-tracker-value-judgement") &&
+      (document.getElementById("qc-tracker-value-judgement").textContent =
+        Number(currentStats.judgement) || 0);
+    document.getElementById("qc-tracker-value-rimassreceive") &&
+      (document.getElementById("qc-tracker-value-rimassreceive").textContent =
+        Number(currentStats.rimassreceive) || 0);
   };
 
-  // ---------- GUARD (Self-healing) ----------
   const startGuard = () => {
-    if (guardObserver) return;
+    stopGuard(); // Clear old ones first
     guardObserver = new MutationObserver(() => {
-      if (shouldBeVisible && widgetEl && !document.body.contains(widgetEl)) {
-        widgetEl = null;
-        headerEl = null;
-        createWidget();
-        updateDisplay(currentStats);
-      } else if (shouldBeVisible && !widgetEl && document.body) {
-        createWidget();
-        updateDisplay(currentStats);
+      if (shouldBeVisible) {
+        if (!widgetEl || !document.body.contains(widgetEl)) {
+          createWidget();
+        }
       }
     });
     guardObserver.observe(document.body, { childList: true, subtree: true });
+
+    // Also poll every 1s as safety net
+    guardInterval = setInterval(() => {
+      if (shouldBeVisible) {
+        if (!widgetEl || !document.body.contains(widgetEl)) {
+          createWidget();
+        }
+      }
+    }, 1000);
   };
 
   const stopGuard = () => {
@@ -215,22 +203,22 @@ const WidgetManager = (function () {
       guardObserver.disconnect();
       guardObserver = null;
     }
+    if (guardInterval) {
+      clearInterval(guardInterval);
+      guardInterval = null;
+    }
   };
 
-  // ---------- PUBLIC API ----------
   return {
-    init(storeGetter, storeSetter) {
-      _getStore = storeGetter;
-      _setStore = storeSetter;
+    init(getter, setter) {
+      _getStore = getter;
+      _setStore = setter;
     },
     setVisible(visible) {
       shouldBeVisible = !!visible;
       localStorage.setItem("widget_visible", visible ? "true" : "false");
       if (visible) {
-        if (!widgetEl) {
-          createWidget();
-          updateDisplay(currentStats);
-        }
+        createWidget();
         startGuard();
       } else {
         removeWidget();
@@ -238,9 +226,10 @@ const WidgetManager = (function () {
       }
     },
     updateStats(stats) {
-      if (!stats) return;
-      currentStats = { ...stats };
-      if (widgetEl) updateDisplay(currentStats);
+      if (stats) {
+        currentStats = { ...stats };
+        if (widgetEl) updateDisplay(currentStats);
+      }
     },
     isVisible() {
       return shouldBeVisible && !!widgetEl && document.body.contains(widgetEl);

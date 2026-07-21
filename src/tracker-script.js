@@ -676,7 +676,13 @@
       const btn = matchActionButton(e.target, cfg);
       if (!btn || btn.disabled) return;
 
-      log("Action button clicked:", cfg.actionSelector || cfg.actionText);
+      // Gắn cờ để dễ kiểm tra: thêm data attribute
+      btn.dataset.qcTracked = "true";
+      log(
+        "✅ Action button tracked:",
+        cfg.actionSelector || cfg.actionText,
+        btn,
+      );
 
       if (cfg.apiCapture) {
         try {

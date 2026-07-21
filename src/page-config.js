@@ -32,5 +32,10 @@ export const PAGE_CONFIG = {
       device_id: ["#rms-receiving-input-deviceID"],
       scan_value: ["inbound_id"],
     },
+    apiCapture: {
+      urlPattern: "/api/apps/process/returninbound/receiving/scan_device_id",
+      method: "POST",
+      successCondition: (data) => data && data.retcode === 0,
+    },
   },
 };

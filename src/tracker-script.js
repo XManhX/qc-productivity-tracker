@@ -11,7 +11,7 @@
     AUTH_CACHE_MS: 5 * 60 * 1000,
     AUTH_RETRY_MAX: 2,
     AUTH_RETRY_DELAY_MS: 1000,
-    DUPLICATE_WINDOW_MS: 3000, // Đặt 0 để tắt hoàn toàn chống duplicate
+    DUPLICATE_WINDOW_MS: 3000,
     EMAIL_CACHE_MS: 5 * 60 * 1000,
     FLUSH_INTERVAL_MS: 60 * 1000,
     INIT_DEBOUNCE_MS: 500,
@@ -32,10 +32,9 @@
     statsSyncIntervalId: null,
     isDestroyed: false,
     pendingReinitUrl: null,
-    // Mới: trạng thái auth để listener có thể dùng ngay
-    authStatus: null, // { allowed, reason, ... } | null = chưa xác định
-    authPromise: null, // Promise đang chờ auth
-    pendingClicks: [], // Lưu click khi auth chưa sẵn sàng
+    authStatus: null,
+    authPromise: null,
+    pendingClicks: [],
     currentPageType: null,
     currentEmail: null,
   };
@@ -128,7 +127,7 @@
     throw lastError;
   };
 
-  // ==================== WIDGET ====================
+  // ==================== WIDGET (giữ nguyên) ====================
   // __WIDGET_CODE__
 
   if (typeof WidgetManager !== "undefined" && WidgetManager.init) {
@@ -138,54 +137,6 @@
       "[QC Tracker] WidgetManager not found or missing init method",
     );
   }
-
-  // ==================== WIDGET VISIBILITY WATCHER ====================
-  const WidgetVisibilityWatcher = (() => {
-    let lastDecision = null;
-
-    const shouldWidgetBeVisible = async () => {
-      const pageType = getPageType(location.href);
-      if (pageType === "unknown") return false;
-      const email = getEmail();
-      if (!email) return false;
-      const auth = await checkAuth(email);
-      return auth.allowed;
-    };
-
-    const applyVisibility = async () => {
-      const visible = await shouldWidgetBeVisible();
-      const newDecision = visible ? "visible" : "hidden";
-      if (newDecision !== lastDecision) {
-        lastDecision = newDecision;
-        WidgetManager.setVisible(visible);
-        if (visible) {
-          syncWidgetWithStats();
-        }
-      }
-    };
-
-    const watchURLChanges = () => {
-      const handle = () => applyVisibility();
-      window.addEventListener("popstate", handle);
-      window.addEventListener("hashchange", handle);
-
-      const originalPushState = history.pushState;
-      history.pushState = function (...args) {
-        originalPushState.apply(this, args);
-        handle();
-      };
-      const originalReplaceState = history.replaceState;
-      history.replaceState = function (...args) {
-        originalReplaceState.apply(this, args);
-        handle();
-      };
-    };
-
-    watchURLChanges();
-    applyVisibility();
-
-    return { applyVisibility };
-  })();
 
   // ==================== EMAIL EXTRACTION ====================
   const getEmail = () => {
@@ -309,12 +260,10 @@
 
   // ==================== ACTION BUTTON DETECTION ====================
   const findActionButton = (cfg) => {
-    // 1. Ưu tiên selector
     if (cfg.actionSelector) {
       return document.querySelector(cfg.actionSelector);
     }
 
-    // 2. Fallback: tìm theo text trong container
     const container = cfg.containerSelector
       ? document.querySelector(cfg.containerSelector)
       : document;
@@ -327,7 +276,6 @@
       'button, input[type="submit"], a[role="button"], div[role="button"]',
     );
 
-    // Hỗ trợ match mode từ config: "exact" (mặc định) hoặc "contains"
     const matchMode = cfg.actionTextMatch || "exact";
 
     return (
@@ -336,7 +284,7 @@
         if (matchMode === "contains") {
           return elText.includes(text);
         }
-        return elText === text; // exact
+        return elText === text;
       }) || null
     );
   };
@@ -392,7 +340,7 @@
   };
 
   const isDuplicate = (fingerprint) => {
-    if (CONFIG.DUPLICATE_WINDOW_MS <= 0) return false; // Tính năng tắt
+    if (CONFIG.DUPLICATE_WINDOW_MS <= 0) return false;
 
     const lastFinger = getStore("qc_last_fingerprint", "");
     const lastTime = getStore("qc_last_fingerprint_time", 0);
@@ -506,19 +454,15 @@
     }
   };
 
-  // ==================== ACTION HANDLER (có xử lý auth chưa sẵn sàng) ====================
+  // ==================== ACTION HANDLER ====================
   const processAction = async (pageType, userEmail) => {
-    // Nếu auth chưa xác định, lưu tạm để xử lý sau
     if (!state.authStatus) {
       log("Auth not ready, queuing click...");
       state.pendingClicks.push({ pageType, userEmail, time: Date.now() });
-      // Đảm bảo auth được gọi (nếu chưa có promise)
       if (!state.authPromise) {
-        // Khởi tạo auth nhưng không cần đợi ở đây
         state.authPromise = checkAuth(userEmail)
           .then((auth) => {
             state.authStatus = auth;
-            // Xử lý các click đang chờ
             const pending = state.pendingClicks.splice(0);
             pending.forEach(({ pageType, userEmail }) => {
               processAction(pageType, userEmail);
@@ -532,13 +476,11 @@
       return;
     }
 
-    // Nếu auth không cho phép, bỏ qua
     if (!state.authStatus.allowed) {
       log("Action blocked: unauthorized", state.authStatus.reason);
       return;
     }
 
-    // Đã auth thành công, tiếp tục ghi log
     const page_end_time = nowISO();
     const record = makeRecord(pageType, userEmail, page_end_time);
 
@@ -623,6 +565,55 @@
     }
   };
 
+  // ==================== WIDGET VISIBILITY WATCHER ====================
+  // Đặt sau khi tất cả hàm phụ thuộc đã được định nghĩa
+  const WidgetVisibilityWatcher = (() => {
+    let lastDecision = null;
+
+    const shouldWidgetBeVisible = async () => {
+      const pageType = getPageType(location.href);
+      if (pageType === "unknown") return false;
+      const email = getEmail();
+      if (!email) return false;
+      const auth = await checkAuth(email);
+      return auth.allowed;
+    };
+
+    const applyVisibility = async () => {
+      const visible = await shouldWidgetBeVisible();
+      const newDecision = visible ? "visible" : "hidden";
+      if (newDecision !== lastDecision) {
+        lastDecision = newDecision;
+        WidgetManager.setVisible(visible);
+        if (visible) {
+          syncWidgetWithStats();
+        }
+      }
+    };
+
+    const watchURLChanges = () => {
+      const handle = () => applyVisibility();
+      window.addEventListener("popstate", handle);
+      window.addEventListener("hashchange", handle);
+
+      const originalPushState = history.pushState;
+      history.pushState = function (...args) {
+        originalPushState.apply(this, args);
+        handle();
+      };
+      const originalReplaceState = history.replaceState;
+      history.replaceState = function (...args) {
+        originalReplaceState.apply(this, args);
+        handle();
+      };
+    };
+
+    watchURLChanges();
+    applyVisibility();
+
+    return { applyVisibility };
+  })();
+
   // ==================== EVENT LISTENERS SETUP ====================
   const setupButtonListener = (pageType, email) => {
     const cfg = PAGE_CONFIG[pageType];
@@ -643,7 +634,7 @@
           return;
         }
         log("Action button clicked:", cfg.actionSelector || cfg.actionText);
-        processAction(pageType, email); // Dùng processAction thay vì handle trực tiếp
+        processAction(pageType, email);
       },
       true,
     );
@@ -766,7 +757,6 @@
         cleanup();
         state.isDestroyed = false;
 
-        // Reset các state liên quan đến page
         state.pageStartTime = null;
         state.lastScanValue = null;
         state.authStatus = null;
@@ -787,7 +777,6 @@
           setPageStartTimeIfNeeded(initialId);
         }
 
-        // Lấy email ngay, không cần chờ auth
         const email = getEmail();
         if (!email) {
           warn("No email found, initialization aborted");
@@ -795,15 +784,14 @@
         }
         state.currentEmail = email;
 
-        // Gắn listener NGAY LẬP TỨC trước khi auth
+        // Gắn listener ngay lập tức
         setupButtonListener(pageType, email);
         setupFieldListeners(pageType);
 
-        // Sau đó bắt đầu auth (không chặn listener)
+        // Khởi động auth không chặn
         state.authPromise = checkAuth(email)
           .then((auth) => {
             state.authStatus = auth;
-            // Xử lý các click đã xếp hàng (nếu có)
             const pending = state.pendingClicks.splice(0);
             pending.forEach(({ pageType, userEmail }) => {
               processAction(pageType, userEmail);
@@ -820,25 +808,23 @@
             error("Auth failed:", e);
           });
 
-        // Flush pending logs ngay
         await flushPending();
 
-        // Periodic flush
         state.flushIntervalId = setInterval(() => {
           if (!state.isDestroyed) {
             flushPending().catch((e) => warn("Periodic flush failed:", e));
           }
         }, CONFIG.FLUSH_INTERVAL_MS);
 
-        // Sync stats
         await syncWidgetWithStats();
+
         state.statsSyncIntervalId = setInterval(async () => {
           if (!state.isDestroyed) {
             await syncWidgetWithStats();
           }
         }, CONFIG.STATS_SYNC_INTERVAL_MS);
 
-        // MutationObserver: lắng nghe cả childList và characterData để bắt thay đổi text
+        // Observer lắng nghe cả childList và characterData
         state.observer = new MutationObserver(() => {
           setupButtonListener(pageType, email);
           setupFieldListeners(pageType);
@@ -847,24 +833,21 @@
         state.observer.observe(document.body, {
           childList: true,
           subtree: true,
-          characterData: true, // Bắt thay đổi text bên trong các node
+          characterData: true,
         });
 
-        // Flush pending logs trước khi unload để giảm mất mát
         window.addEventListener(
           "beforeunload",
           () => {
-            // Dùng sendBeacon nếu API hỗ trợ, nếu không thì flush bất đồng bộ (có thể bị hủy)
             const pending = getStore("qc_pending_logs", []);
             if (pending.length) {
-              // Chỉ thử gửi bất đồng bộ, không đảm bảo thành công nhưng còn hơn không
               GM_xmlhttpRequest({
                 method: "POST",
                 url: CONFIG.API_BASE_URL + CONFIG.LOG_ENDPOINT,
                 headers: { "Content-Type": "application/json" },
                 data: JSON.stringify(pending),
               });
-              setStore("qc_pending_logs", []); // Xóa sau khi cố gửi
+              setStore("qc_pending_logs", []);
             }
             cleanup();
           },

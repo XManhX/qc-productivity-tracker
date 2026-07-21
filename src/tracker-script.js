@@ -133,9 +133,6 @@
   // ==================== WIDGET ====================
   // __WIDGET_CODE__
 
-  // ==================== WATCHDOG ====================
-  // __WATCHDOG_CODE__
-
   // ==================== EMAIL EXTRACTION ====================
   const getEmail = () => {
     // Try to get from storage first (fresh data)

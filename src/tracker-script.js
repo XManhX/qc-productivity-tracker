@@ -13,7 +13,7 @@
     AUTH_RETRY_DELAY_MS: 1000,
     EMAIL_CACHE_MS: 5 * 60 * 1000,
     FLUSH_INTERVAL_MS: 60 * 1000,
-    INIT_DEBOUNCE_MS: 500, // dùng để debounce init
+    INIT_DEBOUNCE_MS: 500,
     REQUEST_TIMEOUT_MS: 10000,
     STATS_SYNC_INTERVAL_MS: 30000,
     API_CAPTURE_TIMEOUT_MS: 15000,
@@ -36,8 +36,7 @@
     authPromise: null,
     currentPageType: null,
     currentEmail: null,
-    // thêm để quản lý apiWaiters tập trung
-    apiWaiters: [],
+    apiWaiters: [], // quản lý tập trung
   };
 
   // ==================== UTILITIES ====================
@@ -88,11 +87,6 @@
   };
 
   // ==================== DAILY CLEANUP ====================
-  /**
-   * Xoá toàn bộ key của ngày cũ để giảm tải bộ nhớ.
-   * Chừa lại các key không có tiền tố ngày (như user_email).
-   * Cải tiến: kiểm tra GM_listValues tồn tại, xóa theo chunk.
-   */
   const cleanOldData = () => {
     if (typeof GM_listValues !== "function") {
       log("GM_listValues not available, skipping cleanup");
@@ -118,7 +112,6 @@
           keysToDelete.push(key);
         }
       }
-      // Xoá theo chunk để không chặn main thread
       const deleteChunk = (startIdx = 0, chunkSize = 50) => {
         const end = Math.min(startIdx + chunkSize, keysToDelete.length);
         for (let i = startIdx; i < end; i++) {
@@ -135,9 +128,8 @@
     }
   };
 
-  // ==================== DEDUP LOGIC (No Duplicate per Day) ====================
+  // ==================== DEDUP LOGIC ====================
   const DEDUP_KEY_PREFIX = "qc_dedup_";
-
   const buildDedupKey = (record) => {
     const date = todayKey();
     const normalized = [record.page, record.action, record.scan_value]
@@ -145,16 +137,9 @@
       .join("|");
     return DEDUP_KEY_PREFIX + date + "_" + normalized;
   };
-
-  const isRecordedToday = (record) => {
-    const key = buildDedupKey(record);
-    return getStore(key, null) !== null;
-  };
-
-  const markRecordedToday = (record) => {
-    const key = buildDedupKey(record);
-    setStore(key, true);
-  };
+  const isRecordedToday = (record) =>
+    getStore(buildDedupKey(record), null) !== null;
+  const markRecordedToday = (record) => setStore(buildDedupKey(record), true);
 
   // ==================== HTTP HELPERS ====================
   const gmRequest = (method, url, data = null, headers = {}) =>
@@ -299,8 +284,6 @@
   };
 
   // ==================== API INTERCEPTOR & WAITER ====================
-  // Cải tiến: apiWaiters nằm trong state, có hàm hủy khi cleanup.
-
   const cancelAllApiWaiters = () => {
     const waiters = state.apiWaiters;
     while (waiters.length) {
@@ -354,11 +337,8 @@
               const w = waiters[i];
               if (url.includes(w.urlPattern) && method === w.method) {
                 clearTimeout(w.timeoutId);
-                if (w.successCondition(data)) {
-                  w.resolve(data);
-                } else {
-                  w.reject(new Error("API failed condition"));
-                }
+                if (w.successCondition(data)) w.resolve(data);
+                else w.reject(new Error("API failed condition"));
                 waiters.splice(i, 1);
               }
             }
@@ -394,11 +374,8 @@
               xhr._qcMethod === w.method
             ) {
               clearTimeout(w.timeoutId);
-              if (w.successCondition(data)) {
-                w.resolve(data);
-              } else {
-                w.reject(new Error("API failed condition"));
-              }
+              if (w.successCondition(data)) w.resolve(data);
+              else w.reject(new Error("API failed condition"));
               waiters.splice(i, 1);
             }
           }
@@ -427,34 +404,25 @@
   };
 
   const shouldSkip = (record, pageType) => {
-    if (!record.scan_value || !record.page_start_time) {
-      log("Skipping: missing scan_value or page_start_time");
-      return true;
-    }
+    if (!record.scan_value || !record.page_start_time) return true;
     const required = PAGE_CONFIG[pageType]?.requiredFields || [];
-    if (required.some((f) => !record[f])) return true;
-    return false;
+    return required.some((f) => !record[f]);
   };
 
-  // ---------- PENDING LOGS ----------
   const getPendingLogs = () => getStore("qc_pending_logs", []);
   const setPendingLogs = (logs) => setStore("qc_pending_logs", logs);
-
   const addToPending = (record) => {
     const pending = getPendingLogs();
     pending.push(record);
     setPendingLogs(pending);
   };
-
   const removeFromPending = (record) => {
     const pending = getPendingLogs();
     const fp = createFingerprint(record);
     const filtered = pending.filter((r) => createFingerprint(r) !== fp);
     if (filtered.length !== pending.length) setPendingLogs(filtered);
   };
-
   const clearPending = () => setPendingLogs([]);
-
   const createFingerprint = (record) => {
     return [
       record.page,
@@ -572,10 +540,7 @@
   };
 
   const ensureAuth = (email) => {
-    if (state.authPromise) {
-      log("Reusing existing auth promise");
-      return state.authPromise;
-    }
+    if (state.authPromise) return state.authPromise;
     state.authPromise = checkAuth(email)
       .then((auth) => {
         const prevAllowed = state.authStatus?.allowed;
@@ -608,7 +573,6 @@
   const recordAndSend = async (pageType, userEmail, endTimeOverride) => {
     const record = makeRecord(pageType, userEmail, endTimeOverride);
     if (shouldSkip(record, pageType)) return;
-
     if (isRecordedToday(record)) {
       log("Duplicate in today's dedup set, skipping");
       return;
@@ -664,6 +628,36 @@
     return null;
   };
 
+  // Hàm đánh dấu tất cả nút phù hợp ngay khi vào trang
+  const markAllTrackedButtons = (pageType) => {
+    const cfg = PAGE_CONFIG[pageType];
+    if (!cfg) return;
+    const candidates = document.querySelectorAll(
+      'button, input[type="submit"], a[role="button"], div[role="button"]',
+    );
+    candidates.forEach((el) => {
+      if (el.disabled) return;
+      // Kiểm tra giống logic matchActionButton nhưng chỉ xét chính nó
+      if (cfg.actionSelector && el.matches(cfg.actionSelector)) {
+        el.dataset.qcTracked = "true";
+        log("✅ Pre-marked button (by selector):", el);
+        return;
+      }
+      if (cfg.actionText) {
+        const text = normalize(cfg.actionText).toLowerCase();
+        const elText = normalize(el.textContent).toLowerCase();
+        const match =
+          cfg.actionTextMatch === "contains"
+            ? elText.includes(text)
+            : elText === text;
+        if (match) {
+          el.dataset.qcTracked = "true";
+          log("✅ Pre-marked button (by text):", el);
+        }
+      }
+    });
+  };
+
   document.addEventListener(
     "click",
     async (e) => {
@@ -676,10 +670,10 @@
       const btn = matchActionButton(e.target, cfg);
       if (!btn || btn.disabled) return;
 
-      // Gắn cờ để dễ kiểm tra: thêm data attribute
+      // Gắn cờ khi click (hỗ trợ thêm nếu chưa có)
       btn.dataset.qcTracked = "true";
       log(
-        "✅ Action button tracked:",
+        "✅ Action button clicked:",
         cfg.actionSelector || cfg.actionText,
         btn,
       );
@@ -707,7 +701,7 @@
     true,
   );
 
-  // --- Input delegation cho scan_value (giữ nguyên) ---
+  // Input delegation giữ nguyên
   document.addEventListener(
     "input",
     (e) => {
@@ -737,7 +731,7 @@
     true,
   );
 
-  // ==================== NAVIGATION MONITOR (GIỮ NGUYÊN CODE GỐC) ====================
+  // ==================== NAVIGATION MONITOR (GIỮ NGUYÊN) ====================
   const NavigationMonitor = (() => {
     const callbacks = [];
     let installed = false;
@@ -771,7 +765,7 @@
     };
   })();
 
-  // ==================== WIDGET VISIBILITY WATCHER (GIỮ NGUYÊN CODE GỐC) ====================
+  // ==================== WIDGET VISIBILITY WATCHER (GIỮ NGUYÊN) ====================
   const WidgetVisibilityWatcher = (() => {
     let lastDecision = null;
     const shouldBeVisible = async () => {
@@ -814,12 +808,11 @@
     if (state.flushIntervalId) clearInterval(state.flushIntervalId);
     if (state.statsSyncIntervalId) clearInterval(state.statsSyncIntervalId);
     state.flushIntervalId = state.statsSyncIntervalId = null;
-    // Hủy toàn bộ apiWaiters đang chờ
     cancelAllApiWaiters();
     state.isDestroyed = true;
   };
 
-  // ==================== BEFOREUNLOAD (CẢI TIẾN: sendBeacon) ====================
+  // ==================== BEFOREUNLOAD (sendBeacon) ====================
   window.addEventListener("beforeunload", () => {
     const pending = getPendingLogs();
     if (pending.length) {
@@ -845,7 +838,7 @@
     cleanup();
   });
 
-  // ==================== INIT (CÓ DEBOUNCE NHẸ) ====================
+  // ==================== INIT ====================
   let debounceTimer = null;
   const debouncedInit = () => {
     if (debounceTimer) clearTimeout(debounceTimer);
@@ -884,6 +877,9 @@
           return;
         }
         state.currentEmail = email;
+
+        // Đánh dấu tất cả nút phù hợp trên trang
+        markAllTrackedButtons(pageType);
 
         ensureAuth(email)
           .then((auth) => {

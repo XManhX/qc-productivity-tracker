@@ -23,6 +23,7 @@ export const PAGE_CONFIG = {
   },
   rimassreceive: {
     pathIncludes: "/v2/returninbound/rimassreceive",
+    actionSelector: ".ssc-form-item-content button.ssc-btn-type-primary",
     containerSelector: ".ssc-form-item-content",
     actionText: "save",
     actionTextMatch: "contains",

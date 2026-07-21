@@ -735,13 +735,6 @@
         if (!email) {
           warn("No email found, initialization aborted");
           WidgetManager.setVisible(false);
-          if (typeof updateWidget === "function")
-            updateWidget({
-              qc: 0,
-              judgement: 0,
-              rimassreceive: 0,
-              lastUpdated: 0,
-            });
           return;
         }
 
@@ -804,30 +797,6 @@
 
         // Cleanup on page unload
         window.addEventListener("beforeunload", cleanup, { once: true });
-
-        // ========= THÊM NGAY TRƯỚC DÒNG log("Initialization complete for page:", pageType); =========
-        // Giữ widget luôn tồn tại kể cả khi SPA render lại body
-        const widgetGuard = new MutationObserver(() => {
-          const widget = document.getElementById("qc-tracker-floating-widget");
-          // Nếu đang ở trang được hỗ trợ và widget đã biến mất → tạo lại ngay
-          if (
-            !widget &&
-            getPageType(location.href) !== "unknown" &&
-            localStorage.getItem("widget_visible") !== "false"
-          ) {
-            if (typeof updateWidget === "function") {
-              updateWidget();
-            }
-          }
-        });
-        widgetGuard.observe(document.body, { childList: true, subtree: false });
-        // Dọn dẹp khi trang bị huỷ
-        window.addEventListener(
-          "beforeunload",
-          () => widgetGuard.disconnect(),
-          { once: true },
-        );
-        // =================================================================
 
         log("Initialization complete for page:", pageType);
       } catch (e) {

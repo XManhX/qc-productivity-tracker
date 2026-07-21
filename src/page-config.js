@@ -12,8 +12,8 @@ export const PAGE_CONFIG = {
   },
   judgement: {
     pathIncludes: "/v2/returninbound/judgement",
-    containerSelector: ".confirm-judged-btn",
-    actionText: "confirm judged",
+    containerSelector: ".ssc-message-box-footer-primary",
+    actionText: "confirm",
     actionTextMatch: "contains",
     requiredFields: ["scan_value"],
     fields: {

@@ -1,8 +1,8 @@
 export const PAGE_CONFIG = {
   qc: {
     pathIncludes: "/v2/returninbound/qc",
-    containerSelector: ".btn-confirm",
-    actionText: "Complete",
+    containerSelector: ".btn-confirm button.ssc-btn-type-primary",
+    actionText: "complete",
     actionTextMatch: "contains",
     requiredFields: ["scan_value"],
     fields: {
@@ -12,8 +12,8 @@ export const PAGE_CONFIG = {
   },
   judgement: {
     pathIncludes: "/v2/returninbound/judgement",
-    containerSelector: ".confirm-judged-btn",
-    actionText: "Confirm Judged",
+    containerSelector: ".confirm-judged-btn button.ssc-btn-type-primary",
+    actionText: "confirm judged",
     actionTextMatch: "contains",
     requiredFields: ["scan_value"],
     fields: {
@@ -23,8 +23,8 @@ export const PAGE_CONFIG = {
   },
   rimassreceive: {
     pathIncludes: "/v2/returninbound/rimassreceive",
-    containerSelector: ".ssc-form-item-content",
-    actionText: "Save",
+    containerSelector: ".ssc-form-item-content button.ssc-btn-type-primary",
+    actionText: "save",
     actionTextMatch: "contains",
     requiredFields: ["device_id", "scan_value"],
     fields: {

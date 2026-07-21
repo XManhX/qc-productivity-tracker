@@ -1,4 +1,10 @@
 {
+  "crons": [
+    {
+      "path": "/api/qc-productivity/send-idle-alert",
+      "schedule": "*/10 * * * *"
+    }
+  ],
   "cleanUrls": true,
   "headers": [
     {

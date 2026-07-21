@@ -738,23 +738,17 @@
           return;
         }
 
-        WidgetManager.setVisible(true);
-
         // Check authorization
         const auth = await checkAuth(email);
 
-        // Chỉ thay đổi visibility khi API trả về giá trị rõ ràng (true/false)
-        if (auth && typeof auth.widget_visible === "boolean") {
-          WidgetManager.setVisible(auth.widget_visible);
-        }
-        // Nếu auth không có widget_visible (do lỗi), giữ nguyên trạng thái hiện tại của widget
-
         if (!auth.allowed) {
           warn("User not authorized:", auth.reason);
-          // Nếu user bị cấm hoàn toàn, vẫn ẩn widget
           WidgetManager.setVisible(false);
           return;
         }
+
+        // Người dùng được phép → hiển thị widget
+        WidgetManager.setVisible(true);
 
         log("Authorization successful");
 

@@ -26,7 +26,7 @@
     pageStartTime: null,
     lastScanValue: null,
     lastUrl: location.href,
-    observer: null,
+    fieldObserver: null, // chỉ dùng cho field listeners
     initPromise: null,
     flushIntervalId: null,
     statsSyncIntervalId: null,
@@ -127,7 +127,7 @@
     throw lastError;
   };
 
-  // ==================== WIDGET (giữ nguyên) ====================
+  // ==================== WIDGET ====================
   // __WIDGET_CODE__
 
   if (typeof WidgetManager !== "undefined" && WidgetManager.init) {
@@ -258,36 +258,71 @@
     return result;
   };
 
-  // ==================== ACTION BUTTON DETECTION ====================
-  const findActionButton = (cfg) => {
-    if (cfg.actionSelector) {
-      return document.querySelector(cfg.actionSelector);
-    }
-
-    const container = cfg.containerSelector
-      ? document.querySelector(cfg.containerSelector)
-      : document;
-    if (!container) return null;
-
-    const text = normalize(cfg.actionText || "").toLowerCase();
-    if (!text) return null;
-
-    const candidates = container.querySelectorAll(
-      'button, input[type="submit"], a[role="button"], div[role="button"]',
-    );
-
-    const matchMode = cfg.actionTextMatch || "exact";
-
-    return (
-      Array.from(candidates).find((el) => {
-        const elText = normalize(el.textContent).toLowerCase();
-        if (matchMode === "contains") {
-          return elText.includes(text);
+  // ==================== DELEGATED CLICK HANDLER (thay thế setupButtonListener) ====================
+  /**
+   * Kiểm tra một phần tử có phải là nút hành động theo cấu hình trang hiện tại không.
+   * Duyệt lên cây DOM từ el, kiểm tra selector hoặc text khớp.
+   * Trả về element nếu tìm thấy, ngược lại null.
+   */
+  const matchActionButton = (el, cfg) => {
+    let current = el;
+    while (current && current !== document.body) {
+      // Chỉ xét các phần tử có thể là nút
+      if (
+        current.matches(
+          'button, input[type="submit"], a[role="button"], div[role="button"]',
+        )
+      ) {
+        // Ưu tiên actionSelector
+        if (cfg.actionSelector && current.matches(cfg.actionSelector)) {
+          return current;
         }
-        return elText === text;
-      }) || null
-    );
+        // Fallback text (chỉ khi có actionText)
+        const text = normalize(cfg.actionText || "").toLowerCase();
+        if (text) {
+          const elText = normalize(current.textContent).toLowerCase();
+          const matchMode = cfg.actionTextMatch || "exact";
+          if (
+            matchMode === "contains" ? elText.includes(text) : elText === text
+          ) {
+            return current;
+          }
+        }
+      }
+      current = current.parentElement;
+    }
+    return null;
   };
+
+  // Gắn một listener duy nhất cho toàn bộ document (chạy ngay khi script load)
+  document.addEventListener(
+    "click",
+    (e) => {
+      // Chỉ hoạt động nếu đã có page type và email (được set trong init)
+      const pageType = state.currentPageType;
+      const email = state.currentEmail;
+      if (!pageType || !email) return;
+
+      const cfg = PAGE_CONFIG[pageType];
+      if (!cfg) return;
+
+      const btn = matchActionButton(e.target, cfg);
+      if (!btn) return;
+
+      // Nếu nút bị disabled thì bỏ qua
+      if (btn.disabled) {
+        log("Delegated click: button is disabled, ignored");
+        return;
+      }
+
+      log(
+        "Delegated action button clicked:",
+        cfg.actionSelector || cfg.actionText,
+      );
+      processAction(pageType, email);
+    },
+    true, // capture phase để bắt trước các handler khác
+  );
 
   // ==================== RECORD MANAGEMENT ====================
   const makeRecord = (pageType, userEmail, page_end_time) => {
@@ -454,70 +489,6 @@
     }
   };
 
-  // ==================== ACTION HANDLER ====================
-  const processAction = async (pageType, userEmail) => {
-    if (!state.authStatus) {
-      log("Auth not ready, queuing click...");
-      state.pendingClicks.push({ pageType, userEmail, time: Date.now() });
-      if (!state.authPromise) {
-        state.authPromise = checkAuth(userEmail)
-          .then((auth) => {
-            state.authStatus = auth;
-            const pending = state.pendingClicks.splice(0);
-            pending.forEach(({ pageType, userEmail }) => {
-              processAction(pageType, userEmail);
-            });
-          })
-          .catch((e) => {
-            state.authStatus = { allowed: false, reason: "authz_error" };
-            state.pendingClicks = [];
-          });
-      }
-      return;
-    }
-
-    if (!state.authStatus.allowed) {
-      log("Action blocked: unauthorized", state.authStatus.reason);
-      return;
-    }
-
-    const page_end_time = nowISO();
-    const record = makeRecord(pageType, userEmail, page_end_time);
-
-    if (shouldSkip(record, pageType)) {
-      log("Record skipped due to validation");
-      return;
-    }
-
-    const fingerprint = createFingerprint(record);
-    if (isDuplicate(fingerprint)) {
-      return;
-    }
-
-    markFingerprint(fingerprint);
-
-    const ok = await sendRecord(record);
-    if (ok) {
-      const key = `stats_${todayKey()}`;
-      const stats = getStore(key, {
-        qc: 0,
-        judgement: 0,
-        rimassreceive: 0,
-      });
-
-      if (pageType === "qc") stats.qc = (stats.qc || 0) + 1;
-      else if (pageType === "judgement")
-        stats.judgement = (stats.judgement || 0) + 1;
-      else if (pageType === "rimassreceive")
-        stats.rimassreceive = (stats.rimassreceive || 0) + 1;
-      stats.lastUpdated = Date.now();
-      setStore(key, stats);
-
-      log("Action completed and recorded successfully");
-      await syncWidgetWithStats();
-    }
-  };
-
   // ==================== AUTHORIZATION ====================
   const checkAuth = async (email) => {
     if (!email || !isValidEmail(email)) {
@@ -565,8 +536,90 @@
     }
   };
 
+  // ==================== AUTH HELPER ====================
+  const handlePendingClicks = () => {
+    const pending = state.pendingClicks.splice(0);
+    pending.forEach(({ pageType, userEmail }) => {
+      processAction(pageType, userEmail);
+    });
+  };
+
+  const ensureAuth = (email) => {
+    if (state.authPromise) {
+      log("Reusing existing auth promise");
+      return state.authPromise;
+    }
+
+    state.authPromise = checkAuth(email)
+      .then((auth) => {
+        state.authStatus = auth;
+        state.authPromise = null;
+        handlePendingClicks();
+        WidgetVisibilityWatcher.applyVisibility();
+        return auth;
+      })
+      .catch((err) => {
+        state.authStatus = { allowed: false, reason: "authz_error" };
+        state.authPromise = null;
+        WidgetVisibilityWatcher.applyVisibility();
+        throw err;
+      });
+
+    return state.authPromise;
+  };
+
+  // ==================== ACTION HANDLER ====================
+  const processAction = async (pageType, userEmail) => {
+    if (!state.authStatus) {
+      log("Auth not ready, queuing click...");
+      state.pendingClicks.push({ pageType, userEmail, time: Date.now() });
+      ensureAuth(userEmail);
+      return;
+    }
+
+    if (!state.authStatus.allowed) {
+      log("Action blocked: unauthorized", state.authStatus.reason);
+      return;
+    }
+
+    const page_end_time = nowISO();
+    const record = makeRecord(pageType, userEmail, page_end_time);
+
+    if (shouldSkip(record, pageType)) {
+      log("Record skipped due to validation");
+      return;
+    }
+
+    const fingerprint = createFingerprint(record);
+    if (isDuplicate(fingerprint)) {
+      return;
+    }
+
+    markFingerprint(fingerprint);
+
+    const ok = await sendRecord(record);
+    if (ok) {
+      const key = `stats_${todayKey()}`;
+      const stats = getStore(key, {
+        qc: 0,
+        judgement: 0,
+        rimassreceive: 0,
+      });
+
+      if (pageType === "qc") stats.qc = (stats.qc || 0) + 1;
+      else if (pageType === "judgement")
+        stats.judgement = (stats.judgement || 0) + 1;
+      else if (pageType === "rimassreceive")
+        stats.rimassreceive = (stats.rimassreceive || 0) + 1;
+      stats.lastUpdated = Date.now();
+      setStore(key, stats);
+
+      log("Action completed and recorded successfully");
+      await syncWidgetWithStats();
+    }
+  };
+
   // ==================== WIDGET VISIBILITY WATCHER ====================
-  // Đặt sau khi tất cả hàm phụ thuộc đã được định nghĩa
   const WidgetVisibilityWatcher = (() => {
     let lastDecision = null;
 
@@ -575,7 +628,7 @@
       if (pageType === "unknown") return false;
       const email = getEmail();
       if (!email) return false;
-      const auth = await checkAuth(email);
+      const auth = await ensureAuth(email);
       return auth.allowed;
     };
 
@@ -614,34 +667,7 @@
     return { applyVisibility };
   })();
 
-  // ==================== EVENT LISTENERS SETUP ====================
-  const setupButtonListener = (pageType, email) => {
-    const cfg = PAGE_CONFIG[pageType];
-    if (!cfg) return;
-
-    const btn = findActionButton(cfg);
-    if (!btn) return;
-
-    if (btn.dataset.qcTrackerBound === "1") return;
-
-    btn.dataset.qcTrackerBound = "1";
-
-    btn.addEventListener(
-      "click",
-      () => {
-        if (btn.disabled) {
-          log("Button is disabled, click ignored");
-          return;
-        }
-        log("Action button clicked:", cfg.actionSelector || cfg.actionText);
-        processAction(pageType, email);
-      },
-      true,
-    );
-
-    log("Listener bound to:", btn);
-  };
-
+  // ==================== FIELD LISTENERS (giữ nguyên observer cho field) ====================
   const setupFieldListeners = (pageType) => {
     const cfg = PAGE_CONFIG[pageType];
     if (!cfg?.fields) return;
@@ -723,9 +749,9 @@
 
   // ==================== CLEANUP ====================
   const cleanup = () => {
-    if (state.observer) {
-      state.observer.disconnect();
-      state.observer = null;
+    if (state.fieldObserver) {
+      state.fieldObserver.disconnect();
+      state.fieldObserver = null;
     }
 
     if (state.flushIntervalId) {
@@ -765,6 +791,8 @@
 
         const pageType = getPageType(location.href);
         if (pageType === "unknown") {
+          state.currentPageType = null;
+          state.currentEmail = null;
           log("Unsupported page, initialization skipped");
           return;
         }
@@ -779,23 +807,18 @@
 
         const email = getEmail();
         if (!email) {
+          state.currentEmail = null;
           warn("No email found, initialization aborted");
           return;
         }
         state.currentEmail = email;
 
-        // Gắn listener ngay lập tức
-        setupButtonListener(pageType, email);
+        // Chỉ cần gắn field listeners (button đã được phủ bằng delegation)
         setupFieldListeners(pageType);
 
-        // Khởi động auth không chặn
-        state.authPromise = checkAuth(email)
+        // Auth
+        ensureAuth(email)
           .then((auth) => {
-            state.authStatus = auth;
-            const pending = state.pendingClicks.splice(0);
-            pending.forEach(({ pageType, userEmail }) => {
-              processAction(pageType, userEmail);
-            });
             if (!auth.allowed) {
               warn("User not authorized:", auth.reason);
             } else {
@@ -803,9 +826,8 @@
             }
           })
           .catch((e) => {
-            state.authStatus = { allowed: false, reason: "authz_error" };
-            state.pendingClicks = [];
             error("Auth failed:", e);
+            state.pendingClicks = [];
           });
 
         await flushPending();
@@ -824,13 +846,12 @@
           }
         }, CONFIG.STATS_SYNC_INTERVAL_MS);
 
-        // Observer lắng nghe cả childList và characterData
-        state.observer = new MutationObserver(() => {
-          setupButtonListener(pageType, email);
+        // Observer chỉ dành cho field (vì button đã delegation, không cần bind lại)
+        state.fieldObserver = new MutationObserver(() => {
           setupFieldListeners(pageType);
         });
 
-        state.observer.observe(document.body, {
+        state.fieldObserver.observe(document.body, {
           childList: true,
           subtree: true,
           characterData: true,

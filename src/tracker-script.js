@@ -846,7 +846,7 @@
     cancelAllApiWaiters();
 
     // Dọn dẹp navigation callback của WidgetVisibilityWatcher (nếu có)
-    WidgetVisibilityWatcher.destroy();
+    // WidgetVisibilityWatcher.destroy();
 
     // Không reset NavigationMonitor toàn bộ vì có thể ảnh hưởng đến các phần khác.
     state.isDestroyed = true;
@@ -920,6 +920,8 @@
           return;
         }
         state.currentEmail = email;
+
+        WidgetVisibilityWatcher.apply();
 
         // Auth không chặn
         ensureAuth(email)

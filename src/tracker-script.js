@@ -636,23 +636,26 @@
       'button, input[type="submit"], a[role="button"], div[role="button"]',
     );
     candidates.forEach((el) => {
-      if (el.disabled) return;
-      // Kiểm tra giống logic matchActionButton nhưng chỉ xét chính nó
+      // Bỏ kiểm tra disabled ở đây
+      let matched = false;
       if (cfg.actionSelector && el.matches(cfg.actionSelector)) {
-        el.dataset.qcTracked = "true";
-        log("✅ Pre-marked button (by selector):", el);
-        return;
-      }
-      if (cfg.actionText) {
+        matched = true;
+      } else if (cfg.actionText) {
         const text = normalize(cfg.actionText).toLowerCase();
         const elText = normalize(el.textContent).toLowerCase();
         const match =
           cfg.actionTextMatch === "contains"
             ? elText.includes(text)
             : elText === text;
-        if (match) {
-          el.dataset.qcTracked = "true";
-          log("✅ Pre-marked button (by text):", el);
+        if (match) matched = true;
+      }
+      if (matched) {
+        el.dataset.qcTracked = "true";
+        if (el.disabled) {
+          el.dataset.qcDisabled = "true";
+          log("✅ Pre-marked button (disabled):", el);
+        } else {
+          log("✅ Pre-marked button:", el);
         }
       }
     });
@@ -931,8 +934,12 @@
   // ==================== OPTIONAL: VISUAL HIGHLIGHT FOR TRACKED BUTTONS ====================
   if (typeof GM_addStyle !== "undefined") {
     GM_addStyle(`
-    [data-qc-tracked="true"] {
+    [data-qc-tracked="true"]:not([data-qc-disabled]) {
       outline: 2px solid #00cc66 !important;
+      outline-offset: 2px;
+    }
+    [data-qc-disabled="true"] {
+      outline: 2px solid #999999 !important;
       outline-offset: 2px;
     }
   `);

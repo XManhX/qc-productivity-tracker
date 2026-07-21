@@ -11,13 +11,12 @@
     AUTH_CACHE_MS: 5 * 60 * 1000,
     AUTH_RETRY_MAX: 2,
     AUTH_RETRY_DELAY_MS: 1000,
-    DUPLICATE_WINDOW_MS: 3000,
     EMAIL_CACHE_MS: 5 * 60 * 1000,
     FLUSH_INTERVAL_MS: 60 * 1000,
     INIT_DEBOUNCE_MS: 500,
     REQUEST_TIMEOUT_MS: 10000,
     STATS_SYNC_INTERVAL_MS: 30000,
-    API_CAPTURE_TIMEOUT_MS: 15000, // Thời gian chờ API response
+    API_CAPTURE_TIMEOUT_MS: 15000,
   };
 
   // ==================== PAGE CONFIG ====================
@@ -76,6 +75,77 @@
       GM_setValue(key, val);
     } catch (e) {
       warn("Failed to set store:", key, e);
+    }
+  };
+  const deleteStore = (key) => {
+    try {
+      GM_deleteValue(key);
+    } catch (e) {
+      warn("Failed to delete store:", key, e);
+    }
+  };
+
+  // ==================== DEDUP LOGIC (NEW - No Duplicate per Day) ====================
+  const DEDUP_KEY_PREFIX = "qc_dedup_";
+
+  /**
+   * Tạo key duy nhất cho mỗi cặp (ngày, page_type, action, scan_value)
+   */
+  const buildDedupKey = (date, pageType, action, scanValue) => {
+    const normalized = [pageType, action, scanValue]
+      .map((s) => normalize(String(s)).toLowerCase())
+      .join("|");
+    return DEDUP_KEY_PREFIX + date + "_" + normalized;
+  };
+
+  /**
+   * Kiểm tra xem cặp giá trị đã được ghi nhận trong ngày chưa
+   */
+  const isRecordedToday = (record) => {
+    const date = todayKey();
+    const key = buildDedupKey(
+      date,
+      record.page,
+      record.action,
+      record.scan_value,
+    );
+    return getStore(key, null) !== null;
+  };
+
+  /**
+   * Đánh dấu cặp giá trị đã được ghi nhận trong ngày (lưu vĩnh viễn key)
+   */
+  const markRecordedToday = (record) => {
+    const date = todayKey();
+    const key = buildDedupKey(
+      date,
+      record.page,
+      record.action,
+      record.scan_value,
+    );
+    setStore(key, true);
+  };
+
+  /**
+   * Xóa tất cả các key dedup của những ngày trước đó để giải phóng bộ nhớ
+   * Thực hiện khi khởi tạo, không làm chậm quá trình chính.
+   */
+  const cleanOldDedupKeys = () => {
+    const today = todayKey();
+    try {
+      const allKeys = GM_listValues();
+      const prefix = DEDUP_KEY_PREFIX;
+      for (const key of allKeys) {
+        if (key.startsWith(prefix)) {
+          // key dạng: qc_dedup_<date>_<fingerprint>
+          const datePart = key.substring(prefix.length, prefix.length + 10); // yyyy-mm-dd
+          if (datePart !== today) {
+            deleteStore(key);
+          }
+        }
+      }
+    } catch (e) {
+      warn("Error cleaning old dedup keys:", e);
     }
   };
 
@@ -347,6 +417,27 @@
     return false;
   };
 
+  // ---------- PENDING LOGS ----------
+  const getPendingLogs = () => getStore("qc_pending_logs", []);
+  const setPendingLogs = (logs) => setStore("qc_pending_logs", logs);
+
+  const addToPending = (record) => {
+    const pending = getPendingLogs();
+    // Không cần kiểm tra trùng trong pending vì dedup set đã ngăn từ trước
+    pending.push(record);
+    setPendingLogs(pending);
+  };
+
+  const removeFromPending = (record) => {
+    const pending = getPendingLogs();
+    const fp = createFingerprint(record); // fingerprint cũ để so khớp xóa
+    const filtered = pending.filter((r) => createFingerprint(r) !== fp);
+    if (filtered.length !== pending.length) setPendingLogs(filtered);
+  };
+
+  const clearPending = () => setPendingLogs([]);
+
+  // Tạo fingerprint cho mục đích quản lý pending (giữ nguyên như cũ)
   const createFingerprint = (record) => {
     return [
       record.page,
@@ -358,47 +449,6 @@
       .map((s) => normalize(String(s)).toLowerCase())
       .join("|");
   };
-
-  const isDuplicate = (fingerprint) => {
-    if (CONFIG.DUPLICATE_WINDOW_MS <= 0) return false;
-    const lastFinger = getStore("qc_last_fingerprint", "");
-    const lastTime = getStore("qc_last_fingerprint_time", 0);
-    if (
-      fingerprint === lastFinger &&
-      Date.now() - lastTime < CONFIG.DUPLICATE_WINDOW_MS
-    ) {
-      log("Duplicate detected, skipped");
-      return true;
-    }
-    return false;
-  };
-
-  const markFingerprint = (fingerprint) => {
-    setStore("qc_last_fingerprint", fingerprint);
-    setStore("qc_last_fingerprint_time", Date.now());
-  };
-
-  // ---------- PENDING LOGS ----------
-  const getPendingLogs = () => getStore("qc_pending_logs", []);
-  const setPendingLogs = (logs) => setStore("qc_pending_logs", logs);
-
-  const addToPending = (record) => {
-    const pending = getPendingLogs();
-    const fp = createFingerprint(record);
-    if (!pending.some((r) => createFingerprint(r) === fp)) {
-      pending.push(record);
-      setPendingLogs(pending);
-    }
-  };
-
-  const removeFromPending = (record) => {
-    const pending = getPendingLogs();
-    const fp = createFingerprint(record);
-    const filtered = pending.filter((r) => createFingerprint(r) !== fp);
-    if (filtered.length !== pending.length) setPendingLogs(filtered);
-  };
-
-  const clearPending = () => setPendingLogs([]);
 
   const sendRecord = async (record) => {
     try {
@@ -542,10 +592,15 @@
     const record = makeRecord(pageType, userEmail, endTimeOverride);
     if (shouldSkip(record, pageType)) return;
 
-    const fingerprint = createFingerprint(record);
-    if (isDuplicate(fingerprint)) return;
+    // DEDUP: kiểm tra xem cặp (page+action+scan_value) đã có trong ngày chưa
+    if (isRecordedToday(record)) {
+      log("Duplicate in today's dedup set, skipping");
+      return;
+    }
+    // Đánh dấu ngay lập tức để ngăn chặn mọi lần sau
+    markRecordedToday(record);
 
-    markFingerprint(fingerprint);
+    // Thêm vào hàng đợi để gửi
     addToPending(record);
 
     // Tăng thống kê cục bộ
@@ -628,7 +683,7 @@
         }
       }
 
-      // Thực hiện ghi nhận (có thể await recordAndSend nếu cần, nhưng không bắt buộc chặn UI)
+      // Thực hiện ghi nhận (hàm recordAndSend sẽ tự kiểm tra dedup)
       recordAndSend(pageType, email).catch((e) =>
         error("recordAndSend error:", e),
       );
@@ -778,6 +833,9 @@
         state.lastScanValue = null;
         state.authStatus = null;
         state.authPromise = null;
+
+        // Dọn dẹp dedup keys của ngày cũ để giải phóng bộ nhớ
+        cleanOldDedupKeys();
 
         const pageType = getPageType(location.href);
         if (pageType === "unknown") {

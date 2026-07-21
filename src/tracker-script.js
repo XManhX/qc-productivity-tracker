@@ -190,7 +190,7 @@
     return "";
   };
 
-  // ==================== FIELD EXTRACTION (for record building) ====================
+  // ==================== FIELD EXTRACTION ====================
   const getInputByKeywords = (keywords = []) => {
     for (const kw of keywords) {
       let input = null;
@@ -257,9 +257,7 @@
     return result;
   };
 
-  // ==================== DELEGATED EVENT HANDLERS (click & input) ====================
-
-  // --- Click delegation cho nút hành động ---
+  // ==================== DELEGATED EVENT HANDLERS ====================
   const matchActionButton = (el, cfg) => {
     let current = el;
     while (current && current !== document.body) {
@@ -314,7 +312,6 @@
     true,
   );
 
-  // --- Input delegation cho scan_value (cập nhật pageStartTime) ---
   document.addEventListener(
     "input",
     (e) => {
@@ -329,14 +326,12 @@
       const target = e.target;
       for (const kw of keywords) {
         if (kw.startsWith("#")) {
-          // ID selector: kiểm tra target hoặc tổ tiên có id khớp
           if (target.matches(kw) || target.closest(kw)) {
             const value = normalize(target.value);
             if (value) setPageStartTimeIfNeeded(value);
             return;
           }
         } else {
-          // data-for selector
           const container = target.closest(`[data-for="${kw}"]`);
           if (container && target.matches("input, textarea")) {
             const value = normalize(target.value);
@@ -561,7 +556,7 @@
     }
   };
 
-  // ==================== AUTH HELPER ====================
+  // ==================== AUTH HELPER (FIXED) ====================
   const handlePendingClicks = () => {
     const pending = state.pendingClicks.splice(0);
     pending.forEach(({ pageType, userEmail }) => {
@@ -577,16 +572,24 @@
 
     state.authPromise = checkAuth(email)
       .then((auth) => {
+        const prevAuth = state.authStatus;
         state.authStatus = auth;
         state.authPromise = null;
         handlePendingClicks();
-        WidgetVisibilityWatcher.applyVisibility();
+
+        // Chỉ cập nhật trực tiếp widget nếu trạng thái thay đổi, không gọi applyVisibility
+        if (!prevAuth || prevAuth.allowed !== auth.allowed) {
+          WidgetManager.setVisible(auth.allowed);
+          if (auth.allowed) {
+            syncWidgetWithStats(); // cập nhật số liệu khi được phép
+          }
+        }
         return auth;
       })
       .catch((err) => {
         state.authStatus = { allowed: false, reason: "authz_error" };
         state.authPromise = null;
-        WidgetVisibilityWatcher.applyVisibility();
+        WidgetManager.setVisible(false);
         throw err;
       });
 
@@ -734,7 +737,7 @@
     }
   };
 
-  // ==================== CLEANUP (chỉ còn intervals) ====================
+  // ==================== CLEANUP ====================
   const cleanup = () => {
     if (state.flushIntervalId) {
       clearInterval(state.flushIntervalId);

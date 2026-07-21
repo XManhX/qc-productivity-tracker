@@ -36,6 +36,8 @@
     authPromise: null,
     currentPageType: null,
     currentEmail: null,
+    isFlushing: false, // bảo vệ flush đồng thời
+    lastCleanDate: null, // để chỉ clean mỗi ngày một lần
   };
 
   // ==================== UTILITIES ====================
@@ -85,29 +87,24 @@
     }
   };
 
-  // ==================== DAILY CLEANUP ====================
-  /**
-   * Xoá toàn bộ key của ngày cũ để giảm tải bộ nhớ.
-   * Chừa lại các key không có tiền tố ngày (như user_email).
-   */
+  // ==================== DAILY CLEANUP (tối ưu) ====================
   const cleanOldData = () => {
     const today = todayKey();
+    if (state.lastCleanDate === today) return; // chỉ chạy 1 lần/ngày
+
     try {
       const allKeys = GM_listValues();
-      const datePattern = /^\d{4}-\d{2}-\d{2}$/; // dạng ngày trong key
+      const datePattern = /^\d{4}-\d{2}-\d{2}$/;
       for (const key of allKeys) {
-        // Các key đặc biệt không được xoá
         if (
           key.startsWith("user_email") ||
           key.startsWith("qc_authz_") ||
           key === "qc_pending_logs" ||
           key === "qc_last_fingerprint" ||
           key === "qc_last_fingerprint_time"
-        ) {
+        )
           continue;
-        }
-        // Xoá mọi key chứa ngày cũ (định dạng yyyy-mm-dd)
-        // Ví dụ: qc_dedup_2026-07-20_... hoặc stats_2026-07-20
+
         const parts = key.split("_");
         const datePart = parts.find((p) => datePattern.test(p));
         if (datePart && datePart !== today) {
@@ -115,12 +112,13 @@
           log("Deleted old key:", key);
         }
       }
+      state.lastCleanDate = today;
     } catch (e) {
       warn("Error during daily cleanup:", e);
     }
   };
 
-  // ==================== DEDUP LOGIC (No Duplicate per Day) ====================
+  // ==================== DEDUP LOGIC ====================
   const DEDUP_KEY_PREFIX = "qc_dedup_";
 
   const buildDedupKey = (record) => {
@@ -328,11 +326,8 @@
               const w = apiWaiters[i];
               if (url.includes(w.urlPattern) && method === w.method) {
                 clearTimeout(w.timeoutId);
-                if (w.successCondition(data)) {
-                  w.resolve(data);
-                } else {
-                  w.reject(new Error("API failed condition"));
-                }
+                if (w.successCondition(data)) w.resolve(data);
+                else w.reject(new Error("API failed condition"));
                 apiWaiters.splice(i, 1);
               }
             }
@@ -367,11 +362,8 @@
               xhr._qcMethod === w.method
             ) {
               clearTimeout(w.timeoutId);
-              if (w.successCondition(data)) {
-                w.resolve(data);
-              } else {
-                w.reject(new Error("API failed condition"));
-              }
+              if (w.successCondition(data)) w.resolve(data);
+              else w.reject(new Error("API failed condition"));
               apiWaiters.splice(i, 1);
             }
           }
@@ -405,28 +397,8 @@
       return true;
     }
     const required = PAGE_CONFIG[pageType]?.requiredFields || [];
-    if (required.some((f) => !record[f])) return true;
-    return false;
+    return required.some((f) => !record[f]);
   };
-
-  // ---------- PENDING LOGS ----------
-  const getPendingLogs = () => getStore("qc_pending_logs", []);
-  const setPendingLogs = (logs) => setStore("qc_pending_logs", logs);
-
-  const addToPending = (record) => {
-    const pending = getPendingLogs();
-    pending.push(record);
-    setPendingLogs(pending);
-  };
-
-  const removeFromPending = (record) => {
-    const pending = getPendingLogs();
-    const fp = createFingerprint(record);
-    const filtered = pending.filter((r) => createFingerprint(r) !== fp);
-    if (filtered.length !== pending.length) setPendingLogs(filtered);
-  };
-
-  const clearPending = () => setPendingLogs([]);
 
   const createFingerprint = (record) => {
     return [
@@ -440,6 +412,31 @@
       .join("|");
   };
 
+  // ---------- PENDING LOGS ----------
+  const getPendingLogs = () => getStore("qc_pending_logs", []);
+  const setPendingLogs = (logs) => setStore("qc_pending_logs", logs);
+
+  const addToPending = (record) => {
+    const pending = getPendingLogs();
+    // Kiểm tra trùng trong chính hàng đợi hiện tại (cùng phiên)
+    const fp = createFingerprint(record);
+    if (pending.some((r) => createFingerprint(r) === fp)) {
+      log("Record already in pending queue, skipping");
+      return;
+    }
+    pending.push(record);
+    setPendingLogs(pending);
+  };
+
+  const removeFromPending = (record) => {
+    const pending = getPendingLogs();
+    const fp = createFingerprint(record);
+    const filtered = pending.filter((r) => createFingerprint(r) !== fp);
+    if (filtered.length !== pending.length) setPendingLogs(filtered);
+  };
+
+  const clearPending = () => setPendingLogs([]);
+
   const sendRecord = async (record) => {
     try {
       await gmRequest(
@@ -450,17 +447,28 @@
       removeFromPending(record);
       return true;
     } catch (e) {
-      warn("Send record failed, queued:", e.message);
+      warn("Send record failed, kept in queue:", e.message);
       return false;
     }
   };
 
   const flushPending = async () => {
-    const pending = getPendingLogs();
-    if (!pending.length) return;
-    log(`Flushing ${pending.length} pending logs`);
-    for (const record of pending.slice()) {
-      await sendRecord(record);
+    if (state.isFlushing) return; // tránh chạy đồng thời
+    state.isFlushing = true;
+    try {
+      const pending = getPendingLogs();
+      if (!pending.length) return;
+      log(`Flushing ${pending.length} pending logs`);
+      let anySuccess = false;
+      for (const record of pending.slice()) {
+        const ok = await sendRecord(record);
+        if (ok) anySuccess = true;
+      }
+      if (anySuccess) {
+        await syncWidgetWithStats(); // cập nhật widget sau khi gửi thật
+      }
+    } finally {
+      state.isFlushing = false;
     }
   };
 
@@ -555,7 +563,7 @@
         state.authStatus = auth;
         state.authPromise = null;
         if (auth.allowed) {
-          flushPending();
+          flushPending(); // gửi tất cả pending khi được phép
           WidgetManager.setVisible(true);
           syncWidgetWithStats();
         } else {
@@ -577,20 +585,19 @@
     return state.authPromise;
   };
 
-  // ==================== ACTION PROCESSOR ====================
-  const recordAndSend = async (pageType, userEmail, endTimeOverride) => {
+  // ==================== ACTION PROCESSOR (đã loại bỏ gửi trực tiếp) ====================
+  const recordAndSend = (pageType, userEmail, endTimeOverride) => {
     const record = makeRecord(pageType, userEmail, endTimeOverride);
     if (shouldSkip(record, pageType)) return;
 
-    // Chống trùng trong ngày: kiểm tra dedup key
+    // Chống trùng theo ngày (storage)
     if (isRecordedToday(record)) {
       log("Duplicate in today's dedup set, skipping");
       return;
     }
-    // Đánh dấu ngay để khoá vĩnh viễn trong ngày
     markRecordedToday(record);
 
-    // Thêm vào hàng đợi gửi
+    // Thêm vào hàng đợi (đã có chống trùng trong phiên)
     addToPending(record);
 
     // Tăng thống kê cục bộ
@@ -607,12 +614,8 @@
     stats.lastUpdated = Date.now();
     setStore(statsKey, stats);
 
-    if (state.authStatus?.allowed) {
-      await sendRecord(record);
-      await syncWidgetWithStats();
-    } else if (!state.authStatus) {
-      ensureAuth(userEmail); // sẽ tự động flush khi auth thành công
-    }
+    // Không còn gọi sendRecord hay ensureAuth ở đây.
+    // Việc gửi sẽ do flushPending (định kỳ) hoặc khi auth thành công đảm nhiệm.
   };
 
   // ==================== DELEGATED CLICK HANDLER ====================
@@ -656,7 +659,6 @@
 
       log("Action button clicked:", cfg.actionSelector || cfg.actionText);
 
-      // Chờ API capture nếu được cấu hình
       if (cfg.apiCapture) {
         try {
           await addApiWaiter(
@@ -669,18 +671,16 @@
           log("API capture succeeded, recording action");
         } catch (err) {
           warn("API capture failed:", err.message);
-          return; // Không ghi nhận nếu API thất bại
+          return;
         }
       }
 
-      recordAndSend(pageType, email).catch((e) =>
-        error("recordAndSend error:", e),
-      );
+      recordAndSend(pageType, email);
     },
     true,
   );
 
-  // --- Input delegation cho scan_value (giữ nguyên) ---
+  // --- Input delegation cho scan_value ---
   document.addEventListener(
     "input",
     (e) => {
@@ -823,7 +823,6 @@
         state.authStatus = null;
         state.authPromise = null;
 
-        // Dọn dẹp toàn bộ dữ liệu cũ của các ngày trước đó
         cleanOldData();
 
         const pageType = getPageType(location.href);
@@ -841,7 +840,7 @@
         }
         state.currentEmail = email;
 
-        // Bắt đầu auth không chặn
+        // Fire-and-forget xác thực, không chặn init
         ensureAuth(email)
           .then((auth) => {
             if (!auth.allowed) warn("User not authorized:", auth.reason);

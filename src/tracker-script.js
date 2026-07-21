@@ -16,7 +16,7 @@
     FLUSH_INTERVAL_MS: 60 * 1000,
     INIT_DEBOUNCE_MS: 500,
     REQUEST_TIMEOUT_MS: 10000,
-    STATS_SYNC_INTERVAL_MS: 30000, // NEW: cập nhật widget định kỳ
+    STATS_SYNC_INTERVAL_MS: 30000,
   };
 
   const PAGE_CONFIG = __PAGE_CONFIG__ || {};
@@ -31,7 +31,7 @@
     flushIntervalId: null,
     statsSyncIntervalId: null,
     isDestroyed: false,
-    pendingReinitUrl: null, // URL cần khởi tạo lại sau khi init hiện tại kết thúc
+    pendingReinitUrl: null,
   };
 
   // ==================== UTILITY FUNCTIONS ====================
@@ -45,14 +45,6 @@
 
   const isValidEmail = (email) => {
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
-  };
-
-  const debounce = (fn, delay) => {
-    let timeoutId;
-    return (...args) => {
-      clearTimeout(timeoutId);
-      timeoutId = setTimeout(() => fn(...args), delay);
-    };
   };
 
   // ==================== PAGE DETECTION ====================
@@ -142,20 +134,15 @@
     );
   }
 
-  // ==================== WIDGET VISIBILITY WATCHER (Self-contained) ====================
+  // ==================== WIDGET VISIBILITY WATCHER ====================
   const WidgetVisibilityWatcher = (() => {
-    let lastDecision = null; // 'visible' | 'hidden'
+    let lastDecision = null;
 
     const shouldWidgetBeVisible = async () => {
-      // 1. Kiểm tra page type
       const pageType = getPageType(location.href);
       if (pageType === "unknown") return false;
-
-      // 2. Kiểm tra email
       const email = getEmail();
       if (!email) return false;
-
-      // 3. Kiểm tra authorization (dùng cache, tránh gọi API mỗi lần)
       const auth = await checkAuth(email);
       return auth.allowed;
     };
@@ -167,19 +154,16 @@
         lastDecision = newDecision;
         WidgetManager.setVisible(visible);
         if (visible) {
-          // Khi hiện, đồng bộ stats ngay (không cần đợi interval)
           syncWidgetWithStats();
         }
       }
     };
 
-    // Theo dõi URL thay đổi
     const watchURLChanges = () => {
       const handle = () => applyVisibility();
       window.addEventListener("popstate", handle);
       window.addEventListener("hashchange", handle);
 
-      // Patch history API
       const originalPushState = history.pushState;
       history.pushState = function (...args) {
         originalPushState.apply(this, args);
@@ -192,9 +176,7 @@
       };
     };
 
-    // Khởi động watcher ngay
     watchURLChanges();
-    // Gọi lần đầu
     applyVisibility();
 
     return { applyVisibility };
@@ -202,7 +184,6 @@
 
   // ==================== EMAIL EXTRACTION ====================
   const getEmail = () => {
-    // Try to get from storage first (fresh data)
     try {
       const keys = [
         "user_email",
@@ -238,7 +219,6 @@
       warn("Error reading storage:", e);
     }
 
-    // Fallback to cached value with expiry check
     const cachedEmail = getStore("user_email", "");
     const cacheTimestamp = getStore("user_email_timestamp", 0);
 
@@ -277,7 +257,7 @@
 
       if (input) {
         const value = normalize(input.value);
-        if (value) return value; // Return first non-empty value
+        if (value) return value;
       }
     }
     return "";
@@ -305,7 +285,6 @@
       result[field] = getInputByKeywords(keywords);
     });
 
-    // If scan_value not found in inputs, try URL as fallback
     if (!result.scan_value) {
       const idFromUrl = getIdFromUrl(pageType);
       if (idFromUrl) {
@@ -330,7 +309,7 @@
       return document.querySelector(cfg.actionSelector);
     }
 
-    // 2. Fallback: tìm theo text, giới hạn trong container nếu có
+    // 2. Fallback: tìm theo text trong container, hỗ trợ nhiều loại nút
     const container = cfg.containerSelector
       ? document.querySelector(cfg.containerSelector)
       : document;
@@ -339,10 +318,14 @@
     const text = normalize(cfg.actionText || "").toLowerCase();
     if (!text) return null;
 
-    const buttons = container.querySelectorAll("button");
+    // Mở rộng selector bao gồm button, input[type=submit], a[role=button], div[role=button]
+    const candidates = container.querySelectorAll(
+      'button, input[type="submit"], a[role="button"], div[role="button"]',
+    );
+
     return (
-      Array.from(buttons).find(
-        (btn) => normalize(btn.innerText).toLowerCase() === text,
+      Array.from(candidates).find(
+        (el) => normalize(el.textContent).toLowerCase() === text,
       ) || null
     );
   };
@@ -366,19 +349,16 @@
   };
 
   const shouldSkip = (record, pageType) => {
-    // Must have scan_value
     if (!record.scan_value) {
       log("Skipping: missing scan_value");
       return true;
     }
 
-    // Must have page_start_time
     if (!record.page_start_time) {
       log("Skipping: missing page_start_time");
       return true;
     }
 
-    // Check other required fields
     const required = PAGE_CONFIG[pageType]?.requiredFields || [];
     if (required.some((f) => !record[f])) {
       log("Skipping: missing required fields");
@@ -432,7 +412,6 @@
       warn("Failed to send log, queuing:", e.message);
       const pending = getStore("qc_pending_logs", []);
       pending.push(record);
-      // Limit queue size to prevent memory issues
       if (pending.length > 100) {
         warn("Pending logs queue exceeded 100, removing oldest");
         pending.shift();
@@ -468,7 +447,6 @@
   };
 
   // ==================== STATS FROM SERVER ====================
-  // NEW: fetch thống kê từ API backend
   const fetchStatsFromServer = async () => {
     const operator = getEmail();
     if (!operator) return null;
@@ -489,7 +467,6 @@
           rimassreceive: Number(resp.data.rimassreceive) || 0,
           lastUpdated: Date.now(),
         };
-        // Cập nhật local store để fallback khi offline
         setStore(`stats_${todayKey()}`, stats);
         return stats;
       }
@@ -501,8 +478,6 @@
   };
 
   // ==================== WIDGET UPDATE HELPER ====================
-
-  // NEW: cập nhật widget với dữ liệu từ server hoặc fallback local
   const syncWidgetWithStats = async () => {
     const serverStats = await fetchStatsFromServer();
     if (serverStats) {
@@ -544,7 +519,6 @@
         rimassreceive: 0,
       });
 
-      // Tăng số tương ứng với pageType
       if (pageType === "qc") stats.qc = (stats.qc || 0) + 1;
       else if (pageType === "judgement")
         stats.judgement = (stats.judgement || 0) + 1;
@@ -554,7 +528,6 @@
       setStore(key, stats);
 
       log("Action completed and recorded successfully");
-      // NEW: sau khi gửi thành công, đồng bộ lại widget từ server
       await syncWidgetWithStats();
     }
   };
@@ -568,7 +541,6 @@
     const cacheKey = `qc_authz_${email}`;
     const cached = getStore(cacheKey, null);
 
-    // Return cached value if still valid
     if (cached?.expireAt && Date.now() < cached.expireAt && cached.value) {
       log("Auth from cache:", cached.value);
       return cached.value;
@@ -599,7 +571,6 @@
       return value;
     } catch (e) {
       warn("Authorization failed after retries:", e.message);
-      // Fallback to cached value even if expired
       if (cached?.value) {
         log("Using expired auth cache as fallback");
         return cached.value;
@@ -616,39 +587,26 @@
     const btn = findActionButton(cfg);
     if (!btn) return;
 
-    // Nếu đã gắn listener rồi thì bỏ qua
+    // Tránh gắn trùng
     if (btn.dataset.qcTrackerBound === "1") return;
 
-    const bindClick = () => {
-      btn.dataset.qcTrackerBound = "1";
-      btn.addEventListener(
-        "click",
-        () => {
-          log("Action button clicked:", cfg.actionSelector || cfg.actionText);
-          handleActionComplete(pageType, email);
-        },
-        true,
-      );
-      log("Listener bound to:", btn);
-    };
+    // Luôn gắn listener ngay, kiểm tra disabled bên trong handler
+    btn.dataset.qcTrackerBound = "1";
 
-    // Nếu đang enable → gắn ngay
-    if (!btn.disabled) {
-      bindClick();
-    } else {
-      // Đợi đến khi hết disabled
-      log("Button is disabled, observing...");
-      const observer = new MutationObserver(() => {
-        if (!btn.disabled) {
-          observer.disconnect();
-          bindClick();
+    btn.addEventListener(
+      "click",
+      () => {
+        if (btn.disabled) {
+          log("Button is disabled, click ignored");
+          return;
         }
-      });
-      observer.observe(btn, {
-        attributes: true,
-        attributeFilter: ["disabled"],
-      });
-    }
+        log("Action button clicked:", cfg.actionSelector || cfg.actionText);
+        handleActionComplete(pageType, email);
+      },
+      true,
+    );
+
+    log("Listener bound to:", btn);
   };
 
   const setupFieldListeners = (pageType) => {
@@ -693,12 +651,10 @@
       if (location.href !== state.lastUrl) {
         state.lastUrl = location.href;
         log("SPA navigation detected, re-initializing...");
-        // Gọi init ngay lập tức, không debounce
         init();
       }
     };
 
-    // Patch History API
     const originalPushState = history.pushState;
     const originalReplaceState = history.replaceState;
     history.pushState = function (...args) {
@@ -721,7 +677,6 @@
       return;
     }
 
-    // Listen for stats changes for today only
     const statsKey = `stats_${todayKey()}`;
     try {
       GM_addValueChangeListener(statsKey, (name, oldValue, newValue) => {
@@ -746,7 +701,6 @@
     }
 
     if (state.statsSyncIntervalId) {
-      // NEW
       clearInterval(state.statsSyncIntervalId);
       state.statsSyncIntervalId = null;
     }
@@ -756,7 +710,6 @@
 
   // ==================== INITIALIZATION ====================
   const init = async () => {
-    // Nếu có init đang chạy, lưu URL hiện tại để chạy lại sau khi xong
     if (state.initPromise) {
       log("Init already in progress, scheduling re-init for current URL");
       state.pendingReinitUrl = location.href;
@@ -766,17 +719,14 @@
     state.initPromise = (async () => {
       try {
         log("Starting initialization for:", location.href);
-        state.pendingReinitUrl = null; // reset trước khi bắt đầu
+        state.pendingReinitUrl = null;
 
-        // Cleanup previous observers
         cleanup();
         state.isDestroyed = false;
 
-        // Reset page-specific state
         state.pageStartTime = null;
         state.lastScanValue = null;
 
-        // Detect page type
         const pageType = getPageType(location.href);
         if (pageType === "unknown") {
           log("Unsupported page, initialization skipped");
@@ -785,22 +735,18 @@
 
         log("Page type detected:", pageType);
 
-        // Set initial scan_value from URL if available
         const initialId = getIdFromUrl(pageType);
         if (initialId) {
           setPageStartTimeIfNeeded(initialId);
         }
 
-        // Get user email
         const email = getEmail();
         if (!email) {
           warn("No email found, initialization aborted");
           return;
         }
 
-        // Check authorization
         const auth = await checkAuth(email);
-
         if (!auth.allowed) {
           warn("User not authorized:", auth.reason);
           return;
@@ -808,44 +754,37 @@
 
         log("Authorization successful");
 
-        // Flush any pending logs from previous sessions
         await flushPending();
 
-        // Start periodic flush
         state.flushIntervalId = setInterval(() => {
           if (!state.isDestroyed) {
             flushPending().catch((e) => warn("Periodic flush failed:", e));
           }
         }, CONFIG.FLUSH_INTERVAL_MS);
 
-        // Đồng bộ widget ngay sau khi xác thực thành công
         await syncWidgetWithStats();
 
-        // Định kỳ đồng bộ widget từ server
         state.statsSyncIntervalId = setInterval(async () => {
           if (!state.isDestroyed) {
             await syncWidgetWithStats();
           }
         }, CONFIG.STATS_SYNC_INTERVAL_MS);
 
-        // Setup button and field listeners
+        // Gắn listener cho nút và field ngay khi khởi tạo
         setupButtonListener(pageType, email);
         setupFieldListeners(pageType);
 
-        // Setup MutationObserver for dynamic content
-        state.observer = new MutationObserver(
-          debounce(() => {
-            setupButtonListener(pageType, email);
-            setupFieldListeners(pageType);
-          }, 300),
-        );
+        // Observer không dùng debounce, phản ứng ngay khi DOM thay đổi
+        state.observer = new MutationObserver(() => {
+          setupButtonListener(pageType, email);
+          setupFieldListeners(pageType);
+        });
 
         state.observer.observe(document.body, {
           childList: true,
           subtree: true,
         });
 
-        // Cleanup on page unload
         window.addEventListener("beforeunload", cleanup, { once: true });
 
         log("Initialization complete for page:", pageType);
@@ -854,18 +793,14 @@
       } finally {
         state.initPromise = null;
 
-        // === PHẦN SỬA QUAN TRỌNG ===
-        // Nếu trong lúc init đang chạy có URL khác được yêu cầu, luôn chạy lại init cho URL đó
         if (state.pendingReinitUrl) {
           const nextUrl = state.pendingReinitUrl;
-          state.pendingReinitUrl = null; // xóa pending ngay
+          state.pendingReinitUrl = null;
 
-          // Cập nhật lastUrl để SPA monitoring không trigger lại không cần thiết
           if (nextUrl !== state.lastUrl) {
             state.lastUrl = nextUrl;
           }
 
-          // Gọi lại init bất đồng bộ (đảm bảo state.initPromise đã = null)
           setTimeout(() => init(), 0);
         }
       }
@@ -883,13 +818,9 @@
     return;
   }
 
-  // Setup SPA navigation monitoring
   setupSPAMonitoring();
-
-  // Setup storage change listener
   setupStorageListener();
 
-  // Start initialization
   init()
     .then(() => {
       log("Tracker started successfully");

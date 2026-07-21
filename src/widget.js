@@ -207,7 +207,7 @@ const WidgetManager = (function () {
         updateDisplay(currentStats);
       }
     });
-    guardObserver.observe(document.body, { childList: true, subtree: false });
+    guardObserver.observe(document.body, { childList: true, subtree: true });
   };
 
   const stopGuard = () => {

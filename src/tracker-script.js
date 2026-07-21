@@ -663,36 +663,73 @@
     return null;
   };
 
-  // Đánh dấu tất cả nút phù hợp ngay khi vào trang
+  // ==================== BUTTON MARKING WITH MUTATION OBSERVER ====================
+  let buttonObserver = null; // lưu observer để hủy khi cần
+
+  const markSingleButton = (el, cfg) => {
+    let matched = false;
+    if (cfg.actionSelector && el.matches(cfg.actionSelector)) {
+      matched = true;
+    } else if (cfg.actionText) {
+      const text = normalize(cfg.actionText).toLowerCase();
+      const elText = normalize(el.textContent).toLowerCase();
+      const match =
+        cfg.actionTextMatch === "contains"
+          ? elText.includes(text)
+          : elText === text;
+      if (match) matched = true;
+    }
+    if (matched) {
+      el.dataset.qcTracked = "true";
+      if (el.disabled) {
+        el.dataset.qcDisabled = "true";
+        log("✅ Pre-marked button (disabled):", el);
+      } else {
+        log("✅ Pre-marked button:", el);
+      }
+    }
+  };
+
   const markAllTrackedButtons = (pageType) => {
     const cfg = PAGE_CONFIG[pageType];
     if (!cfg) return;
+
+    // Hủy observer cũ nếu có (đảm bảo khi re-init không bị trùng lặp)
+    if (buttonObserver) {
+      buttonObserver.disconnect();
+      buttonObserver = null;
+    }
+
+    // Quét ngay các nút hiện có
     const candidates = document.querySelectorAll(
       'button, input[type="submit"], a[role="button"], div[role="button"]',
     );
-    candidates.forEach((el) => {
-      let matched = false;
-      if (cfg.actionSelector && el.matches(cfg.actionSelector)) {
-        matched = true;
-      } else if (cfg.actionText) {
-        const text = normalize(cfg.actionText).toLowerCase();
-        const elText = normalize(el.textContent).toLowerCase();
-        const match =
-          cfg.actionTextMatch === "contains"
-            ? elText.includes(text)
-            : elText === text;
-        if (match) matched = true;
-      }
-      if (matched) {
-        el.dataset.qcTracked = "true";
-        if (el.disabled) {
-          el.dataset.qcDisabled = "true";
-          log("✅ Pre-marked button (disabled):", el);
-        } else {
-          log("✅ Pre-marked button:", el);
+    candidates.forEach((el) => markSingleButton(el, cfg));
+
+    // Nếu chưa tìm thấy nút nào, thiết lập observer để chờ React render
+    if (!document.querySelector("[data-qc-tracked]")) {
+      log("No buttons found yet, setting up MutationObserver for:", pageType);
+      buttonObserver = new MutationObserver((mutations) => {
+        // Mỗi khi có thay đổi DOM, quét các nút mới
+        const newCandidates = document.querySelectorAll(
+          'button, input[type="submit"], a[role="button"], div[role="button"]',
+        );
+        let found = false;
+        newCandidates.forEach((el) => {
+          if (!el.dataset.qcTracked) {
+            markSingleButton(el, cfg);
+            if (el.dataset.qcTracked) found = true;
+          }
+        });
+        // Nếu đã tìm thấy ít nhất một nút, có thể ngừng observer (hoặc để tiếp tục theo dõi thêm)
+        if (found) {
+          log("Buttons found, disconnecting observer");
+          buttonObserver.disconnect();
+          buttonObserver = null;
         }
-      }
-    });
+      });
+      buttonObserver.observe(document.body, { childList: true, subtree: true });
+    }
   };
 
   document.addEventListener(
@@ -847,6 +884,11 @@
     state.flushIntervalId = state.statsSyncIntervalId = null;
     cancelAllApiWaiters();
     state.isDestroyed = true;
+
+    if (buttonObserver) {
+      buttonObserver.disconnect();
+      buttonObserver = null;
+    }
   };
 
   // ==================== BEFOREUNLOAD (sendBeacon) ====================

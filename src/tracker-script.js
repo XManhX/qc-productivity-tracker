@@ -1011,7 +1011,7 @@
   if (typeof GM_addStyle !== "undefined") {
     GM_addStyle(`
       [data-qc-tracked="true"]:not([data-qc-disabled]) {
-        outline: 2px solid #00cc66 !important;
+        outline: 2px solid #EE4D2D !important;
         outline-offset: 2px;
       }
       [data-qc-disabled="true"] {

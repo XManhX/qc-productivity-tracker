@@ -437,38 +437,20 @@
   };
 
   // ==================== WIDGET UPDATE HELPER ====================
-  // ==================== WIDGET VISIBILITY CONTROL ====================
-  const setWidgetVisible = (visible) => {
-    localStorage.setItem("widget_visible", visible ? "true" : "false");
-
-    if (visible) {
-      // Gọi updateWidget để tạo mới hoặc cập nhật widget NGAY LẬP TỨC
-      if (typeof updateWidget === "function") {
-        updateWidget();
-      }
-    } else {
-      // Xóa widget khỏi DOM trực tiếp
-      const widget = document.getElementById("qc-tracker-floating-widget");
-      if (widget) widget.remove();
-    }
-  };
 
   // NEW: cập nhật widget với dữ liệu từ server hoặc fallback local
   const syncWidgetWithStats = async () => {
-    if (typeof updateWidget !== "function") return;
     const serverStats = await fetchStatsFromServer();
-
     if (serverStats) {
-      updateWidget(serverStats);
+      WidgetManager.updateStats(serverStats);
     } else {
-      // Fallback local
       const localStats = getStore(`stats_${todayKey()}`, {
         qc: 0,
         judgement: 0,
         rimassreceive: 0,
         lastUpdated: 0,
       });
-      updateWidget(localStats);
+      WidgetManager.updateStats(localStats);
     }
   };
 
@@ -685,9 +667,7 @@
     try {
       GM_addValueChangeListener(statsKey, (name, oldValue, newValue) => {
         log("Storage changed:", name, "updating widget...");
-        if (typeof updateWidget === "function") {
-          updateWidget(newValue);
-        }
+        WidgetManager.updateStats(newValue);
       });
     } catch (e) {
       warn("Failed to setup storage listener:", e);
@@ -741,7 +721,7 @@
         const pageType = getPageType(location.href);
         if (pageType === "unknown") {
           log("Unsupported page, initialization skipped");
-          setWidgetVisible(false);
+          WidgetManager.setVisible(false);
           return;
         }
 
@@ -757,7 +737,7 @@
         const email = getEmail();
         if (!email) {
           warn("No email found, initialization aborted");
-          setWidgetVisible(false);
+          WidgetManager.setVisible(false);
           if (typeof updateWidget === "function")
             updateWidget({
               qc: 0,
@@ -768,33 +748,25 @@
           return;
         }
 
-        setWidgetVisible(true);
+        WidgetManager.setVisible(true);
 
         // Check authorization
         const auth = await checkAuth(email);
 
         // Chỉ thay đổi visibility khi API trả về giá trị rõ ràng (true/false)
         if (auth && typeof auth.widget_visible === "boolean") {
-          setWidgetVisible(auth.widget_visible);
+          WidgetManager.setVisible(auth.widget_visible);
         }
         // Nếu auth không có widget_visible (do lỗi), giữ nguyên trạng thái hiện tại của widget
 
         if (!auth.allowed) {
           warn("User not authorized:", auth.reason);
           // Nếu user bị cấm hoàn toàn, vẫn ẩn widget
-          setWidgetVisible(false);
+          WidgetManager.setVisible(false);
           return;
         }
 
         log("Authorization successful");
-
-        // Nếu widget đã bị xóa khỏi DOM (do SPA chuyển trang), tạo lại
-        // if (
-        //   typeof initWidget === "function" &&
-        //   !document.getElementById("qc-widget-container")
-        // ) {
-        //   initWidget();
-        // }
 
         // Flush any pending logs from previous sessions
         await flushPending();

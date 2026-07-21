@@ -17,7 +17,7 @@
     REQUEST_TIMEOUT_MS: 10000,
     STATS_SYNC_INTERVAL_MS: 30000,
     API_CAPTURE_TIMEOUT_MS: 15000,
-    STATS_THROTTLE_MS: 5000, // thời gian tối thiểu giữa các lần sync stats
+    STATS_THROTTLE_MS: 5000,
   };
 
   // ==================== PAGE CONFIG ====================
@@ -38,8 +38,8 @@
     currentPageType: null,
     currentEmail: null,
     apiWaiters: [],
-    statsPromise: null, // promise đang fetch stats (tránh gọi trùng)
-    lastStatsSyncTime: 0, // timestamp lần cuối sync thành công
+    statsPromise: null,
+    lastStatsSyncTime: 0,
   };
 
   // ==================== UTILITIES ====================
@@ -494,35 +494,26 @@
   };
 
   const syncWidgetWithStats = async () => {
-    // Tránh cập nhật khi script đã bị hủy
     if (state.isDestroyed) return;
-
-    // Nếu đã có một promise đang fetch, dùng lại promise đó
     if (state.statsPromise) {
       log("Stats fetch already in progress, reusing promise");
       return state.statsPromise;
     }
-
-    // Throttle: chỉ fetch nếu đã qua STATS_THROTTLE_MS
     if (Date.now() - state.lastStatsSyncTime < CONFIG.STATS_THROTTLE_MS) {
       log("Stats sync throttled, skipping");
       return;
     }
-
     state.statsPromise = (async () => {
       try {
         const serverStats = await fetchStatsFromServer();
-        // Kiểm tra lại trạng thái sau khi fetch (có thể đã cleanup)
         if (state.isDestroyed) return;
-
         const fallbackStats = getStore(`stats_${todayKey()}`, {
           qc: 0,
           judgement: 0,
           rimassreceive: 0,
           lastUpdated: 0,
         });
-        const finalStats = serverStats || fallbackStats;
-        WidgetManager.updateStats(finalStats);
+        WidgetManager.updateStats(serverStats || fallbackStats);
         state.lastStatsSyncTime = Date.now();
       } catch (e) {
         warn("syncWidgetWithStats error:", e);
@@ -530,7 +521,6 @@
         state.statsPromise = null;
       }
     })();
-
     return state.statsPromise;
   };
 
@@ -614,7 +604,6 @@
     markRecordedToday(record);
     addToPending(record);
 
-    // Tăng stats cục bộ
     const statsKey = `stats_${todayKey()}`;
     const stats = getStore(statsKey, {
       qc: 0,
@@ -664,7 +653,7 @@
   };
 
   // ==================== BUTTON MARKING WITH MUTATION OBSERVER ====================
-  let buttonObserver = null; // lưu observer để hủy khi cần
+  let buttonObserver = null;
 
   const markSingleButton = (el, cfg) => {
     let matched = false;
@@ -694,23 +683,19 @@
     const cfg = PAGE_CONFIG[pageType];
     if (!cfg) return;
 
-    // Hủy observer cũ nếu có (đảm bảo khi re-init không bị trùng lặp)
     if (buttonObserver) {
       buttonObserver.disconnect();
       buttonObserver = null;
     }
 
-    // Quét ngay các nút hiện có
     const candidates = document.querySelectorAll(
       'button, input[type="submit"], a[role="button"], div[role="button"]',
     );
     candidates.forEach((el) => markSingleButton(el, cfg));
 
-    // Nếu chưa tìm thấy nút nào, thiết lập observer để chờ React render
     if (!document.querySelector("[data-qc-tracked]")) {
       log("No buttons found yet, setting up MutationObserver for:", pageType);
       buttonObserver = new MutationObserver((mutations) => {
-        // Mỗi khi có thay đổi DOM, quét các nút mới
         const newCandidates = document.querySelectorAll(
           'button, input[type="submit"], a[role="button"], div[role="button"]',
         );
@@ -721,7 +706,6 @@
             if (el.dataset.qcTracked) found = true;
           }
         });
-        // Nếu đã tìm thấy ít nhất một nút, có thể ngừng observer (hoặc để tiếp tục theo dõi thêm)
         if (found) {
           log("Buttons found, disconnecting observer");
           buttonObserver.disconnect();
@@ -744,7 +728,6 @@
       const btn = matchActionButton(e.target, cfg);
       if (!btn || btn.disabled) return;
 
-      // Đánh dấu nút đã được click
       btn.dataset.qcTracked = "true";
       log(
         "✅ Action button clicked:",
@@ -775,7 +758,7 @@
     true,
   );
 
-  // Input delegation cho scan_value (giữ nguyên)
+  // Input delegation cho scan_value
   document.addEventListener(
     "input",
     (e) => {
@@ -839,6 +822,19 @@
     };
   })();
 
+  // ==================== IMMEDIATE STATE UPDATE ON NAVIGATION ====================
+  const updatePageInfo = () => {
+    const pageType = getPageType(location.href);
+    const email = getEmail();
+    state.currentPageType = pageType !== "unknown" ? pageType : null;
+    state.currentEmail = email || null;
+    log("Page info updated:", state.currentPageType, state.currentEmail);
+  };
+  // Đăng ký callback này đầu tiên để đảm bảo state được cập nhật sớm nhất
+  NavigationMonitor.onNavigate(updatePageInfo);
+  // Cũng gọi ngay lúc khởi tạo
+  updatePageInfo();
+
   // ==================== WIDGET VISIBILITY WATCHER ====================
   const WidgetVisibilityWatcher = (() => {
     let lastDecision = null;
@@ -891,7 +887,7 @@
     }
   };
 
-  // ==================== BEFOREUNLOAD (sendBeacon) ====================
+  // ==================== BEFOREUNLOAD ====================
   window.addEventListener("beforeunload", () => {
     const pending = getPendingLogs();
     if (pending.length) {
@@ -917,7 +913,7 @@
     cleanup();
   });
 
-  // ==================== INIT (có debounce) ====================
+  // ==================== INIT (DEBOUNCED) ====================
   let debounceTimer = null;
   const debouncedInit = () => {
     if (debounceTimer) clearTimeout(debounceTimer);
@@ -942,14 +938,17 @@
 
         cleanOldData();
 
-        const pageType = getPageType(location.href);
+        // Lấy pageType và email từ state đã được updatePageInfo cập nhật trước đó,
+        // nhưng để an toàn vẫn gọi lại (nếu chưa có)
+        const pageType = state.currentPageType || getPageType(location.href);
         if (pageType === "unknown") {
-          state.currentPageType = state.currentEmail = null;
+          state.currentPageType = null;
+          state.currentEmail = null;
           return;
         }
         state.currentPageType = pageType;
 
-        const email = getEmail();
+        const email = state.currentEmail || getEmail();
         if (!email) {
           state.currentEmail = null;
           warn("No email found");
@@ -957,7 +956,6 @@
         }
         state.currentEmail = email;
 
-        // Đánh dấu tất cả nút được theo dõi trên trang
         markAllTrackedButtons(pageType);
 
         ensureAuth(email)
@@ -995,29 +993,39 @@
     return state.initPromise;
   };
 
+  // Đăng ký callback cho debouncedInit (đã có updatePageInfo chạy trước đó)
   NavigationMonitor.onNavigate(() => {
     if (location.href !== state.lastUrl) {
       state.lastUrl = location.href;
-      log("Navigation detected, re-init");
+      log("Navigation detected, scheduling re-init");
       debouncedInit();
     }
   });
 
+  // Khởi động lần đầu
   init()
     .then(() => log("Tracker started"))
     .catch((e) => error("Startup error:", e));
 
-  // ==================== VISUAL HIGHLIGHT FOR TRACKED BUTTONS ====================
-  if (typeof GM_addStyle !== "undefined") {
-    GM_addStyle(`
-      [data-qc-tracked="true"]:not([data-qc-disabled]) {
-        outline: 2px solid #EE4D2D !important;
-        outline-offset: 2px;
-      }
-      [data-qc-disabled="true"] {
-        outline: 2px solid #999999 !important;
-        outline-offset: 2px;
-      }
-    `);
-  }
+  // ==================== VISUAL HIGHLIGHT (FALLBACK) ====================
+  (function applyStyle(css) {
+    if (typeof GM_addStyle !== "undefined") {
+      GM_addStyle(css);
+      log("Styles applied via GM_addStyle");
+      return;
+    }
+    const style = document.createElement("style");
+    style.textContent = css;
+    document.head.appendChild(style);
+    log("Styles applied via DOM fallback");
+  })(`
+    [data-qc-tracked="true"]:not([data-qc-disabled]) {
+      outline: 2px solid #EE4D2D !important;
+      outline-offset: 2px;
+    }
+    [data-qc-disabled="true"] {
+      outline: 2px solid #999999 !important;
+      outline-offset: 2px;
+    }
+  `);
 })();

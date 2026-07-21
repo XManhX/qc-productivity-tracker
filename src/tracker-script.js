@@ -17,6 +17,7 @@
     REQUEST_TIMEOUT_MS: 10000,
     STATS_SYNC_INTERVAL_MS: 30000,
     API_CAPTURE_TIMEOUT_MS: 15000,
+    STATS_THROTTLE_MS: 5000, // thời gian tối thiểu giữa các lần sync stats
   };
 
   // ==================== PAGE CONFIG ====================
@@ -36,7 +37,9 @@
     authPromise: null,
     currentPageType: null,
     currentEmail: null,
-    apiWaiters: [], // quản lý tập trung
+    apiWaiters: [],
+    statsPromise: null, // promise đang fetch stats (tránh gọi trùng)
+    lastStatsSyncTime: 0, // timestamp lần cuối sync thành công
   };
 
   // ==================== UTILITIES ====================
@@ -459,7 +462,7 @@
     }
   };
 
-  // ==================== STATS ====================
+  // ==================== STATS (OPTIMIZED) ====================
   const fetchStatsFromServer = async () => {
     const operator = getEmail();
     if (!operator) return null;
@@ -491,16 +494,44 @@
   };
 
   const syncWidgetWithStats = async () => {
-    const serverStats = await fetchStatsFromServer();
-    WidgetManager.updateStats(
-      serverStats ||
-        getStore(`stats_${todayKey()}`, {
+    // Tránh cập nhật khi script đã bị hủy
+    if (state.isDestroyed) return;
+
+    // Nếu đã có một promise đang fetch, dùng lại promise đó
+    if (state.statsPromise) {
+      log("Stats fetch already in progress, reusing promise");
+      return state.statsPromise;
+    }
+
+    // Throttle: chỉ fetch nếu đã qua STATS_THROTTLE_MS
+    if (Date.now() - state.lastStatsSyncTime < CONFIG.STATS_THROTTLE_MS) {
+      log("Stats sync throttled, skipping");
+      return;
+    }
+
+    state.statsPromise = (async () => {
+      try {
+        const serverStats = await fetchStatsFromServer();
+        // Kiểm tra lại trạng thái sau khi fetch (có thể đã cleanup)
+        if (state.isDestroyed) return;
+
+        const fallbackStats = getStore(`stats_${todayKey()}`, {
           qc: 0,
           judgement: 0,
           rimassreceive: 0,
           lastUpdated: 0,
-        }),
-    );
+        });
+        const finalStats = serverStats || fallbackStats;
+        WidgetManager.updateStats(finalStats);
+        state.lastStatsSyncTime = Date.now();
+      } catch (e) {
+        warn("syncWidgetWithStats error:", e);
+      } finally {
+        state.statsPromise = null;
+      }
+    })();
+
+    return state.statsPromise;
   };
 
   // ==================== AUTH ====================
@@ -540,7 +571,10 @@
   };
 
   const ensureAuth = (email) => {
-    if (state.authPromise) return state.authPromise;
+    if (state.authPromise) {
+      log("Reusing existing auth promise");
+      return state.authPromise;
+    }
     state.authPromise = checkAuth(email)
       .then((auth) => {
         const prevAllowed = state.authStatus?.allowed;
@@ -580,6 +614,7 @@
     markRecordedToday(record);
     addToPending(record);
 
+    // Tăng stats cục bộ
     const statsKey = `stats_${todayKey()}`;
     const stats = getStore(statsKey, {
       qc: 0,
@@ -601,7 +636,7 @@
     }
   };
 
-  // ==================== DELEGATED CLICK HANDLER ====================
+  // ==================== BUTTON TRACKING & MARKING ====================
   const matchActionButton = (el, cfg) => {
     let current = el;
     while (current && current !== document.body) {
@@ -628,7 +663,7 @@
     return null;
   };
 
-  // Hàm đánh dấu tất cả nút phù hợp ngay khi vào trang
+  // Đánh dấu tất cả nút phù hợp ngay khi vào trang
   const markAllTrackedButtons = (pageType) => {
     const cfg = PAGE_CONFIG[pageType];
     if (!cfg) return;
@@ -636,7 +671,6 @@
       'button, input[type="submit"], a[role="button"], div[role="button"]',
     );
     candidates.forEach((el) => {
-      // Bỏ kiểm tra disabled ở đây
       let matched = false;
       if (cfg.actionSelector && el.matches(cfg.actionSelector)) {
         matched = true;
@@ -673,7 +707,7 @@
       const btn = matchActionButton(e.target, cfg);
       if (!btn || btn.disabled) return;
 
-      // Gắn cờ khi click (hỗ trợ thêm nếu chưa có)
+      // Đánh dấu nút đã được click
       btn.dataset.qcTracked = "true";
       log(
         "✅ Action button clicked:",
@@ -704,7 +738,7 @@
     true,
   );
 
-  // Input delegation giữ nguyên
+  // Input delegation cho scan_value (giữ nguyên)
   document.addEventListener(
     "input",
     (e) => {
@@ -734,7 +768,7 @@
     true,
   );
 
-  // ==================== NAVIGATION MONITOR (GIỮ NGUYÊN) ====================
+  // ==================== NAVIGATION MONITOR ====================
   const NavigationMonitor = (() => {
     const callbacks = [];
     let installed = false;
@@ -768,7 +802,7 @@
     };
   })();
 
-  // ==================== WIDGET VISIBILITY WATCHER (GIỮ NGUYÊN) ====================
+  // ==================== WIDGET VISIBILITY WATCHER ====================
   const WidgetVisibilityWatcher = (() => {
     let lastDecision = null;
     const shouldBeVisible = async () => {
@@ -841,7 +875,7 @@
     cleanup();
   });
 
-  // ==================== INIT ====================
+  // ==================== INIT (có debounce) ====================
   let debounceTimer = null;
   const debouncedInit = () => {
     if (debounceTimer) clearTimeout(debounceTimer);
@@ -881,7 +915,7 @@
         }
         state.currentEmail = email;
 
-        // Đánh dấu tất cả nút phù hợp trên trang
+        // Đánh dấu tất cả nút được theo dõi trên trang
         markAllTrackedButtons(pageType);
 
         ensureAuth(email)
@@ -931,17 +965,17 @@
     .then(() => log("Tracker started"))
     .catch((e) => error("Startup error:", e));
 
-  // ==================== OPTIONAL: VISUAL HIGHLIGHT FOR TRACKED BUTTONS ====================
+  // ==================== VISUAL HIGHLIGHT FOR TRACKED BUTTONS ====================
   if (typeof GM_addStyle !== "undefined") {
     GM_addStyle(`
-    [data-qc-tracked="true"]:not([data-qc-disabled]) {
-      outline: 2px solid #00cc66 !important;
-      outline-offset: 2px;
-    }
-    [data-qc-disabled="true"] {
-      outline: 2px solid #999999 !important;
-      outline-offset: 2px;
-    }
-  `);
+      [data-qc-tracked="true"]:not([data-qc-disabled]) {
+        outline: 2px solid #00cc66 !important;
+        outline-offset: 2px;
+      }
+      [data-qc-disabled="true"] {
+        outline: 2px solid #999999 !important;
+        outline-offset: 2px;
+      }
+    `);
   }
 })();

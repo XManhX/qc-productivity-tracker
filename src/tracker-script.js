@@ -142,6 +142,64 @@
     );
   }
 
+  // ==================== WIDGET VISIBILITY WATCHER (Self-contained) ====================
+  const WidgetVisibilityWatcher = (() => {
+    let lastDecision = null; // 'visible' | 'hidden'
+
+    const shouldWidgetBeVisible = async () => {
+      // 1. Kiểm tra page type
+      const pageType = getPageType(location.href);
+      if (pageType === "unknown") return false;
+
+      // 2. Kiểm tra email
+      const email = getEmail();
+      if (!email) return false;
+
+      // 3. Kiểm tra authorization (dùng cache, tránh gọi API mỗi lần)
+      const auth = await checkAuth(email);
+      return auth.allowed;
+    };
+
+    const applyVisibility = async () => {
+      const visible = await shouldWidgetBeVisible();
+      const newDecision = visible ? "visible" : "hidden";
+      if (newDecision !== lastDecision) {
+        lastDecision = newDecision;
+        WidgetManager.setVisible(visible);
+        if (visible) {
+          // Khi hiện, đồng bộ stats ngay (không cần đợi interval)
+          syncWidgetWithStats();
+        }
+      }
+    };
+
+    // Theo dõi URL thay đổi
+    const watchURLChanges = () => {
+      const handle = () => applyVisibility();
+      window.addEventListener("popstate", handle);
+      window.addEventListener("hashchange", handle);
+
+      // Patch history API
+      const originalPushState = history.pushState;
+      history.pushState = function (...args) {
+        originalPushState.apply(this, args);
+        handle();
+      };
+      const originalReplaceState = history.replaceState;
+      history.replaceState = function (...args) {
+        originalReplaceState.apply(this, args);
+        handle();
+      };
+    };
+
+    // Khởi động watcher ngay
+    watchURLChanges();
+    // Gọi lần đầu
+    applyVisibility();
+
+    return { applyVisibility };
+  })();
+
   // ==================== EMAIL EXTRACTION ====================
   const getEmail = () => {
     // Try to get from storage first (fresh data)
@@ -722,7 +780,6 @@
         const pageType = getPageType(location.href);
         if (pageType === "unknown") {
           log("Unsupported page, initialization skipped");
-          WidgetManager.setVisible(false);
           return;
         }
 
@@ -738,7 +795,6 @@
         const email = getEmail();
         if (!email) {
           warn("No email found, initialization aborted");
-          WidgetManager.setVisible(false);
           return;
         }
 
@@ -747,12 +803,8 @@
 
         if (!auth.allowed) {
           warn("User not authorized:", auth.reason);
-          WidgetManager.setVisible(false);
           return;
         }
-
-        // Người dùng được phép → hiển thị widget
-        WidgetManager.setVisible(true);
 
         log("Authorization successful");
 

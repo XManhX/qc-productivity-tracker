@@ -11,7 +11,7 @@
     AUTH_CACHE_MS: 5 * 60 * 1000,
     AUTH_RETRY_MAX: 2,
     AUTH_RETRY_DELAY_MS: 1000,
-    DUPLICATE_WINDOW_MS: 3000,
+    DUPLICATE_WINDOW_MS: 3000, // Đặt 0 để tắt hoàn toàn chống duplicate
     EMAIL_CACHE_MS: 5 * 60 * 1000,
     FLUSH_INTERVAL_MS: 60 * 1000,
     INIT_DEBOUNCE_MS: 500,
@@ -32,6 +32,12 @@
     statsSyncIntervalId: null,
     isDestroyed: false,
     pendingReinitUrl: null,
+    // Mới: trạng thái auth để listener có thể dùng ngay
+    authStatus: null, // { allowed, reason, ... } | null = chưa xác định
+    authPromise: null, // Promise đang chờ auth
+    pendingClicks: [], // Lưu click khi auth chưa sẵn sàng
+    currentPageType: null,
+    currentEmail: null,
   };
 
   // ==================== UTILITY FUNCTIONS ====================
@@ -125,7 +131,6 @@
   // ==================== WIDGET ====================
   // __WIDGET_CODE__
 
-  // Khởi tạo WidgetManager với store functions
   if (typeof WidgetManager !== "undefined" && WidgetManager.init) {
     WidgetManager.init(getStore, setStore);
   } else {
@@ -309,7 +314,7 @@
       return document.querySelector(cfg.actionSelector);
     }
 
-    // 2. Fallback: tìm theo text trong container, hỗ trợ nhiều loại nút
+    // 2. Fallback: tìm theo text trong container
     const container = cfg.containerSelector
       ? document.querySelector(cfg.containerSelector)
       : document;
@@ -318,15 +323,21 @@
     const text = normalize(cfg.actionText || "").toLowerCase();
     if (!text) return null;
 
-    // Mở rộng selector bao gồm button, input[type=submit], a[role=button], div[role=button]
     const candidates = container.querySelectorAll(
       'button, input[type="submit"], a[role="button"], div[role="button"]',
     );
 
+    // Hỗ trợ match mode từ config: "exact" (mặc định) hoặc "contains"
+    const matchMode = cfg.actionTextMatch || "exact";
+
     return (
-      Array.from(candidates).find(
-        (el) => normalize(el.textContent).toLowerCase() === text,
-      ) || null
+      Array.from(candidates).find((el) => {
+        const elText = normalize(el.textContent).toLowerCase();
+        if (matchMode === "contains") {
+          return elText.includes(text);
+        }
+        return elText === text; // exact
+      }) || null
     );
   };
 
@@ -381,6 +392,8 @@
   };
 
   const isDuplicate = (fingerprint) => {
+    if (CONFIG.DUPLICATE_WINDOW_MS <= 0) return false; // Tính năng tắt
+
     const lastFinger = getStore("qc_last_fingerprint", "");
     const lastTime = getStore("qc_last_fingerprint_time", 0);
 
@@ -493,8 +506,39 @@
     }
   };
 
-  // ==================== ACTION HANDLER ====================
-  const handleActionComplete = async (pageType, userEmail) => {
+  // ==================== ACTION HANDLER (có xử lý auth chưa sẵn sàng) ====================
+  const processAction = async (pageType, userEmail) => {
+    // Nếu auth chưa xác định, lưu tạm để xử lý sau
+    if (!state.authStatus) {
+      log("Auth not ready, queuing click...");
+      state.pendingClicks.push({ pageType, userEmail, time: Date.now() });
+      // Đảm bảo auth được gọi (nếu chưa có promise)
+      if (!state.authPromise) {
+        // Khởi tạo auth nhưng không cần đợi ở đây
+        state.authPromise = checkAuth(userEmail)
+          .then((auth) => {
+            state.authStatus = auth;
+            // Xử lý các click đang chờ
+            const pending = state.pendingClicks.splice(0);
+            pending.forEach(({ pageType, userEmail }) => {
+              processAction(pageType, userEmail);
+            });
+          })
+          .catch((e) => {
+            state.authStatus = { allowed: false, reason: "authz_error" };
+            state.pendingClicks = [];
+          });
+      }
+      return;
+    }
+
+    // Nếu auth không cho phép, bỏ qua
+    if (!state.authStatus.allowed) {
+      log("Action blocked: unauthorized", state.authStatus.reason);
+      return;
+    }
+
+    // Đã auth thành công, tiếp tục ghi log
     const page_end_time = nowISO();
     const record = makeRecord(pageType, userEmail, page_end_time);
 
@@ -587,10 +631,8 @@
     const btn = findActionButton(cfg);
     if (!btn) return;
 
-    // Tránh gắn trùng
     if (btn.dataset.qcTrackerBound === "1") return;
 
-    // Luôn gắn listener ngay, kiểm tra disabled bên trong handler
     btn.dataset.qcTrackerBound = "1";
 
     btn.addEventListener(
@@ -601,7 +643,7 @@
           return;
         }
         log("Action button clicked:", cfg.actionSelector || cfg.actionText);
-        handleActionComplete(pageType, email);
+        processAction(pageType, email); // Dùng processAction thay vì handle trực tiếp
       },
       true,
     );
@@ -724,8 +766,12 @@
         cleanup();
         state.isDestroyed = false;
 
+        // Reset các state liên quan đến page
         state.pageStartTime = null;
         state.lastScanValue = null;
+        state.authStatus = null;
+        state.authPromise = null;
+        state.pendingClicks = [];
 
         const pageType = getPageType(location.href);
         if (pageType === "unknown") {
@@ -734,47 +780,65 @@
         }
 
         log("Page type detected:", pageType);
+        state.currentPageType = pageType;
 
         const initialId = getIdFromUrl(pageType);
         if (initialId) {
           setPageStartTimeIfNeeded(initialId);
         }
 
+        // Lấy email ngay, không cần chờ auth
         const email = getEmail();
         if (!email) {
           warn("No email found, initialization aborted");
           return;
         }
+        state.currentEmail = email;
 
-        const auth = await checkAuth(email);
-        if (!auth.allowed) {
-          warn("User not authorized:", auth.reason);
-          return;
-        }
+        // Gắn listener NGAY LẬP TỨC trước khi auth
+        setupButtonListener(pageType, email);
+        setupFieldListeners(pageType);
 
-        log("Authorization successful");
+        // Sau đó bắt đầu auth (không chặn listener)
+        state.authPromise = checkAuth(email)
+          .then((auth) => {
+            state.authStatus = auth;
+            // Xử lý các click đã xếp hàng (nếu có)
+            const pending = state.pendingClicks.splice(0);
+            pending.forEach(({ pageType, userEmail }) => {
+              processAction(pageType, userEmail);
+            });
+            if (!auth.allowed) {
+              warn("User not authorized:", auth.reason);
+            } else {
+              log("Authorization successful");
+            }
+          })
+          .catch((e) => {
+            state.authStatus = { allowed: false, reason: "authz_error" };
+            state.pendingClicks = [];
+            error("Auth failed:", e);
+          });
 
+        // Flush pending logs ngay
         await flushPending();
 
+        // Periodic flush
         state.flushIntervalId = setInterval(() => {
           if (!state.isDestroyed) {
             flushPending().catch((e) => warn("Periodic flush failed:", e));
           }
         }, CONFIG.FLUSH_INTERVAL_MS);
 
+        // Sync stats
         await syncWidgetWithStats();
-
         state.statsSyncIntervalId = setInterval(async () => {
           if (!state.isDestroyed) {
             await syncWidgetWithStats();
           }
         }, CONFIG.STATS_SYNC_INTERVAL_MS);
 
-        // Gắn listener cho nút và field ngay khi khởi tạo
-        setupButtonListener(pageType, email);
-        setupFieldListeners(pageType);
-
-        // Observer không dùng debounce, phản ứng ngay khi DOM thay đổi
+        // MutationObserver: lắng nghe cả childList và characterData để bắt thay đổi text
         state.observer = new MutationObserver(() => {
           setupButtonListener(pageType, email);
           setupFieldListeners(pageType);
@@ -783,9 +847,29 @@
         state.observer.observe(document.body, {
           childList: true,
           subtree: true,
+          characterData: true, // Bắt thay đổi text bên trong các node
         });
 
-        window.addEventListener("beforeunload", cleanup, { once: true });
+        // Flush pending logs trước khi unload để giảm mất mát
+        window.addEventListener(
+          "beforeunload",
+          () => {
+            // Dùng sendBeacon nếu API hỗ trợ, nếu không thì flush bất đồng bộ (có thể bị hủy)
+            const pending = getStore("qc_pending_logs", []);
+            if (pending.length) {
+              // Chỉ thử gửi bất đồng bộ, không đảm bảo thành công nhưng còn hơn không
+              GM_xmlhttpRequest({
+                method: "POST",
+                url: CONFIG.API_BASE_URL + CONFIG.LOG_ENDPOINT,
+                headers: { "Content-Type": "application/json" },
+                data: JSON.stringify(pending),
+              });
+              setStore("qc_pending_logs", []); // Xóa sau khi cố gửi
+            }
+            cleanup();
+          },
+          { once: true },
+        );
 
         log("Initialization complete for page:", pageType);
       } catch (e) {

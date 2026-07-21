@@ -26,7 +26,7 @@
     pageStartTime: null,
     lastScanValue: null,
     lastUrl: location.href,
-    fieldObserver: null, // chỉ dùng cho field listeners
+    fieldObserver: null,
     initPromise: null,
     flushIntervalId: null,
     statsSyncIntervalId: null,
@@ -258,26 +258,18 @@
     return result;
   };
 
-  // ==================== DELEGATED CLICK HANDLER (thay thế setupButtonListener) ====================
-  /**
-   * Kiểm tra một phần tử có phải là nút hành động theo cấu hình trang hiện tại không.
-   * Duyệt lên cây DOM từ el, kiểm tra selector hoặc text khớp.
-   * Trả về element nếu tìm thấy, ngược lại null.
-   */
+  // ==================== DELEGATED CLICK HANDLER ====================
   const matchActionButton = (el, cfg) => {
     let current = el;
     while (current && current !== document.body) {
-      // Chỉ xét các phần tử có thể là nút
       if (
         current.matches(
           'button, input[type="submit"], a[role="button"], div[role="button"]',
         )
       ) {
-        // Ưu tiên actionSelector
         if (cfg.actionSelector && current.matches(cfg.actionSelector)) {
           return current;
         }
-        // Fallback text (chỉ khi có actionText)
         const text = normalize(cfg.actionText || "").toLowerCase();
         if (text) {
           const elText = normalize(current.textContent).toLowerCase();
@@ -294,11 +286,9 @@
     return null;
   };
 
-  // Gắn một listener duy nhất cho toàn bộ document (chạy ngay khi script load)
   document.addEventListener(
     "click",
     (e) => {
-      // Chỉ hoạt động nếu đã có page type và email (được set trong init)
       const pageType = state.currentPageType;
       const email = state.currentEmail;
       if (!pageType || !email) return;
@@ -309,7 +299,6 @@
       const btn = matchActionButton(e.target, cfg);
       if (!btn) return;
 
-      // Nếu nút bị disabled thì bỏ qua
       if (btn.disabled) {
         log("Delegated click: button is disabled, ignored");
         return;
@@ -321,7 +310,7 @@
       );
       processAction(pageType, email);
     },
-    true, // capture phase để bắt trước các handler khác
+    true,
   );
 
   // ==================== RECORD MANAGEMENT ====================
@@ -619,6 +608,47 @@
     }
   };
 
+  // ==================== UNIFIED URL MONITOR ====================
+  const NavigationMonitor = (() => {
+    const callbacks = [];
+    let installed = false;
+
+    const notify = () => {
+      callbacks.forEach((fn) => {
+        try {
+          fn();
+        } catch (e) {
+          warn("Navigation callback error:", e);
+        }
+      });
+    };
+
+    const install = () => {
+      if (installed) return;
+      installed = true;
+
+      const origPush = history.pushState;
+      history.pushState = function (...args) {
+        origPush.apply(this, args);
+        notify();
+      };
+      const origReplace = history.replaceState;
+      history.replaceState = function (...args) {
+        origReplace.apply(this, args);
+        notify();
+      };
+      window.addEventListener("popstate", notify);
+      window.addEventListener("hashchange", notify);
+    };
+
+    return {
+      onNavigate(callback) {
+        callbacks.push(callback);
+        install(); // safe to call multiple times, installs only once
+      },
+    };
+  })();
+
   // ==================== WIDGET VISIBILITY WATCHER ====================
   const WidgetVisibilityWatcher = (() => {
     let lastDecision = null;
@@ -644,30 +674,16 @@
       }
     };
 
-    const watchURLChanges = () => {
-      const handle = () => applyVisibility();
-      window.addEventListener("popstate", handle);
-      window.addEventListener("hashchange", handle);
+    // Đăng ký callback để tự động cập nhật khi URL thay đổi
+    NavigationMonitor.onNavigate(applyVisibility);
 
-      const originalPushState = history.pushState;
-      history.pushState = function (...args) {
-        originalPushState.apply(this, args);
-        handle();
-      };
-      const originalReplaceState = history.replaceState;
-      history.replaceState = function (...args) {
-        originalReplaceState.apply(this, args);
-        handle();
-      };
-    };
-
-    watchURLChanges();
+    // Lần đầu tiên
     applyVisibility();
 
     return { applyVisibility };
   })();
 
-  // ==================== FIELD LISTENERS (giữ nguyên observer cho field) ====================
+  // ==================== FIELD LISTENERS ====================
   const setupFieldListeners = (pageType) => {
     const cfg = PAGE_CONFIG[pageType];
     if (!cfg?.fields) return;
@@ -702,31 +718,6 @@
         }
       }
     });
-  };
-
-  // ==================== SPA NAVIGATION DETECTION ====================
-  const setupSPAMonitoring = () => {
-    const handleUrlChange = () => {
-      if (location.href !== state.lastUrl) {
-        state.lastUrl = location.href;
-        log("SPA navigation detected, re-initializing...");
-        init();
-      }
-    };
-
-    const originalPushState = history.pushState;
-    const originalReplaceState = history.replaceState;
-    history.pushState = function (...args) {
-      originalPushState.apply(this, args);
-      handleUrlChange();
-    };
-    history.replaceState = function (...args) {
-      originalReplaceState.apply(this, args);
-      handleUrlChange();
-    };
-
-    window.addEventListener("popstate", handleUrlChange);
-    window.addEventListener("hashchange", handleUrlChange);
   };
 
   // ==================== STORAGE CHANGE LISTENER ====================
@@ -813,10 +804,8 @@
         }
         state.currentEmail = email;
 
-        // Chỉ cần gắn field listeners (button đã được phủ bằng delegation)
         setupFieldListeners(pageType);
 
-        // Auth
         ensureAuth(email)
           .then((auth) => {
             if (!auth.allowed) {
@@ -846,7 +835,6 @@
           }
         }, CONFIG.STATS_SYNC_INTERVAL_MS);
 
-        // Observer chỉ dành cho field (vì button đã delegation, không cần bind lại)
         state.fieldObserver = new MutationObserver(() => {
           setupFieldListeners(pageType);
         });
@@ -856,24 +844,6 @@
           subtree: true,
           characterData: true,
         });
-
-        window.addEventListener(
-          "beforeunload",
-          () => {
-            const pending = getStore("qc_pending_logs", []);
-            if (pending.length) {
-              GM_xmlhttpRequest({
-                method: "POST",
-                url: CONFIG.API_BASE_URL + CONFIG.LOG_ENDPOINT,
-                headers: { "Content-Type": "application/json" },
-                data: JSON.stringify(pending),
-              });
-              setStore("qc_pending_logs", []);
-            }
-            cleanup();
-          },
-          { once: true },
-        );
 
         log("Initialization complete for page:", pageType);
       } catch (e) {
@@ -897,6 +867,26 @@
     return state.initPromise;
   };
 
+  // ==================== BEFOREUNLOAD (single listener) ====================
+  window.addEventListener("beforeunload", () => {
+    const pending = getStore("qc_pending_logs", []);
+    if (pending.length) {
+      // Gửi đồng bộ nếu có thể, vì beforeunload không đảm bảo async
+      try {
+        GM_xmlhttpRequest({
+          method: "POST",
+          url: CONFIG.API_BASE_URL + CONFIG.LOG_ENDPOINT,
+          headers: { "Content-Type": "application/json" },
+          data: JSON.stringify(pending),
+        });
+      } catch (e) {
+        // bỏ qua lỗi khi gửi khẩn cấp
+      }
+      setStore("qc_pending_logs", []);
+    }
+    cleanup();
+  });
+
   // ==================== MAIN ENTRY POINT ====================
   if (
     typeof GM_xmlhttpRequest === "undefined" ||
@@ -906,7 +896,15 @@
     return;
   }
 
-  setupSPAMonitoring();
+  // Đăng ký init vào NavigationMonitor (thay vì ghi đè history riêng)
+  NavigationMonitor.onNavigate(() => {
+    if (location.href !== state.lastUrl) {
+      state.lastUrl = location.href;
+      log("Navigation detected, re-initializing...");
+      init();
+    }
+  });
+
   setupStorageListener();
 
   init()

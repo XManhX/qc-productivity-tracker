@@ -26,7 +26,6 @@
     pageStartTime: null,
     lastScanValue: null,
     lastUrl: location.href,
-    fieldObserver: null,
     initPromise: null,
     flushIntervalId: null,
     statsSyncIntervalId: null,
@@ -191,7 +190,7 @@
     return "";
   };
 
-  // ==================== FIELD EXTRACTION ====================
+  // ==================== FIELD EXTRACTION (for record building) ====================
   const getInputByKeywords = (keywords = []) => {
     for (const kw of keywords) {
       let input = null;
@@ -258,7 +257,9 @@
     return result;
   };
 
-  // ==================== DELEGATED CLICK HANDLER ====================
+  // ==================== DELEGATED EVENT HANDLERS (click & input) ====================
+
+  // --- Click delegation cho nút hành động ---
   const matchActionButton = (el, cfg) => {
     let current = el;
     while (current && current !== document.body) {
@@ -309,6 +310,41 @@
         cfg.actionSelector || cfg.actionText,
       );
       processAction(pageType, email);
+    },
+    true,
+  );
+
+  // --- Input delegation cho scan_value (cập nhật pageStartTime) ---
+  document.addEventListener(
+    "input",
+    (e) => {
+      const pageType = state.currentPageType;
+      if (!pageType) return;
+      const cfg = PAGE_CONFIG[pageType];
+      if (!cfg?.fields?.scan_value) return;
+
+      const keywords = cfg.fields.scan_value;
+      if (!keywords) return;
+
+      const target = e.target;
+      for (const kw of keywords) {
+        if (kw.startsWith("#")) {
+          // ID selector: kiểm tra target hoặc tổ tiên có id khớp
+          if (target.matches(kw) || target.closest(kw)) {
+            const value = normalize(target.value);
+            if (value) setPageStartTimeIfNeeded(value);
+            return;
+          }
+        } else {
+          // data-for selector
+          const container = target.closest(`[data-for="${kw}"]`);
+          if (container && target.matches("input, textarea")) {
+            const value = normalize(target.value);
+            if (value) setPageStartTimeIfNeeded(value);
+            return;
+          }
+        }
+      }
     },
     true,
   );
@@ -608,7 +644,7 @@
     }
   };
 
-  // ==================== UNIFIED URL MONITOR ====================
+  // ==================== UNIFIED NAVIGATION MONITOR ====================
   const NavigationMonitor = (() => {
     const callbacks = [];
     let installed = false;
@@ -644,7 +680,7 @@
     return {
       onNavigate(callback) {
         callbacks.push(callback);
-        install(); // safe to call multiple times, installs only once
+        install();
       },
     };
   })();
@@ -674,51 +710,11 @@
       }
     };
 
-    // Đăng ký callback để tự động cập nhật khi URL thay đổi
     NavigationMonitor.onNavigate(applyVisibility);
-
-    // Lần đầu tiên
     applyVisibility();
 
     return { applyVisibility };
   })();
-
-  // ==================== FIELD LISTENERS ====================
-  const setupFieldListeners = (pageType) => {
-    const cfg = PAGE_CONFIG[pageType];
-    if (!cfg?.fields) return;
-
-    Object.entries(cfg.fields).forEach(([field, keywords]) => {
-      for (const kw of keywords) {
-        let input = null;
-
-        if (kw.startsWith("#")) {
-          const target = document.querySelector(kw);
-          if (target) {
-            input =
-              target.tagName === "INPUT" || target.tagName === "TEXTAREA"
-                ? target
-                : target.querySelector("input, textarea");
-          }
-        } else {
-          const parent = document.querySelector(`[data-for="${kw}"]`);
-          if (parent) {
-            input = parent.querySelector("input, textarea");
-          }
-        }
-
-        if (input && !input.dataset.qcFieldBound) {
-          input.dataset.qcFieldBound = "1";
-          input.addEventListener("input", () => {
-            const value = normalize(input.value);
-            if (value && field === "scan_value") {
-              setPageStartTimeIfNeeded(value);
-            }
-          });
-        }
-      }
-    });
-  };
 
   // ==================== STORAGE CHANGE LISTENER ====================
   const setupStorageListener = () => {
@@ -738,13 +734,8 @@
     }
   };
 
-  // ==================== CLEANUP ====================
+  // ==================== CLEANUP (chỉ còn intervals) ====================
   const cleanup = () => {
-    if (state.fieldObserver) {
-      state.fieldObserver.disconnect();
-      state.fieldObserver = null;
-    }
-
     if (state.flushIntervalId) {
       clearInterval(state.flushIntervalId);
       state.flushIntervalId = null;
@@ -804,8 +795,7 @@
         }
         state.currentEmail = email;
 
-        setupFieldListeners(pageType);
-
+        // Authorization (non‑blocking)
         ensureAuth(email)
           .then((auth) => {
             if (!auth.allowed) {
@@ -835,16 +825,6 @@
           }
         }, CONFIG.STATS_SYNC_INTERVAL_MS);
 
-        state.fieldObserver = new MutationObserver(() => {
-          setupFieldListeners(pageType);
-        });
-
-        state.fieldObserver.observe(document.body, {
-          childList: true,
-          subtree: true,
-          characterData: true,
-        });
-
         log("Initialization complete for page:", pageType);
       } catch (e) {
         error("Fatal initialization error:", e);
@@ -867,11 +847,10 @@
     return state.initPromise;
   };
 
-  // ==================== BEFOREUNLOAD (single listener) ====================
+  // ==================== BEFOREUNLOAD (one time) ====================
   window.addEventListener("beforeunload", () => {
     const pending = getStore("qc_pending_logs", []);
     if (pending.length) {
-      // Gửi đồng bộ nếu có thể, vì beforeunload không đảm bảo async
       try {
         GM_xmlhttpRequest({
           method: "POST",
@@ -880,7 +859,7 @@
           data: JSON.stringify(pending),
         });
       } catch (e) {
-        // bỏ qua lỗi khi gửi khẩn cấp
+        // bỏ qua lỗi gửi khẩn cấp
       }
       setStore("qc_pending_logs", []);
     }
@@ -896,7 +875,6 @@
     return;
   }
 
-  // Đăng ký init vào NavigationMonitor (thay vì ghi đè history riêng)
   NavigationMonitor.onNavigate(() => {
     if (location.href !== state.lastUrl) {
       state.lastUrl = location.href;

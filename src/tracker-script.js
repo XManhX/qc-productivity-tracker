@@ -19,7 +19,7 @@
     API_CAPTURE_TIMEOUT_MS: 15000,
     STATS_THROTTLE_MS: 5000,
     // Thời gian chờ tối đa cho button observer nếu không tìm thấy nút
-    BUTTON_OBSERVE_TIMEOUT_MS: 10000,
+    BUTTON_OBSERVE_TIMEOUT_MS: 5000,
   };
 
   // ==================== PAGE CONFIG ====================

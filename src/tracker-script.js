@@ -40,7 +40,6 @@
     apiWaiters: [],
     statsPromise: null,
     lastStatsSyncTime: 0,
-    // Lưu tham chiếu listener để cleanup
     _listeners: {
       click: null,
       input: null,
@@ -784,7 +783,7 @@
     }
   };
 
-  // ==================== EVENT LISTENERS (có thể cleanup) ====================
+  // ==================== EVENT HANDLERS ====================
   const clickHandler = async (e) => {
     const pageType = state.currentPageType;
     const email = state.currentEmail;
@@ -870,16 +869,6 @@
   };
 
   const unloadHandler = () => cleanup();
-
-  // Đăng ký listener và lưu tham chiếu
-  document.addEventListener("click", clickHandler, true);
-  document.addEventListener("input", inputHandler, true);
-  window.addEventListener("beforeunload", beforeUnloadHandler);
-  window.addEventListener("unload", unloadHandler);
-  state._listeners.click = clickHandler;
-  state._listeners.input = inputHandler;
-  state._listeners.beforeunload = beforeUnloadHandler;
-  state._listeners.unload = unloadHandler;
 
   // ==================== NAVIGATION MONITOR ====================
   const NavigationMonitor = (() => {
@@ -979,7 +968,6 @@
       buttonObserver = null;
     }
 
-    // Gỡ bỏ event listener để tránh memory leak
     if (state._listeners.click) {
       document.removeEventListener("click", state._listeners.click, true);
       state._listeners.click = null;
@@ -1021,7 +1009,7 @@
         state.authStatus = null;
         state.authPromise = null;
 
-        // Đăng ký lại listener sau khi cleanup đã gỡ bỏ
+        // Đăng ký lại các listener (lần đầu hoặc sau cleanup)
         document.addEventListener("click", clickHandler, true);
         document.addEventListener("input", inputHandler, true);
         window.addEventListener("beforeunload", beforeUnloadHandler);

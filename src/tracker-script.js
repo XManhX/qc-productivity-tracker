@@ -40,6 +40,13 @@
     apiWaiters: [],
     statsPromise: null,
     lastStatsSyncTime: 0,
+    // Lưu tham chiếu listener để cleanup
+    _listeners: {
+      click: null,
+      input: null,
+      beforeunload: null,
+      unload: null,
+    },
   };
 
   // ==================== UTILITIES ====================
@@ -777,76 +784,102 @@
     }
   };
 
-  document.addEventListener(
-    "click",
-    async (e) => {
-      const pageType = state.currentPageType;
-      const email = state.currentEmail;
-      if (!pageType || !email) return;
-      const cfg = PAGE_CONFIG[pageType];
-      if (!cfg) return;
+  // ==================== EVENT LISTENERS (có thể cleanup) ====================
+  const clickHandler = async (e) => {
+    const pageType = state.currentPageType;
+    const email = state.currentEmail;
+    if (!pageType || !email) return;
+    const cfg = PAGE_CONFIG[pageType];
+    if (!cfg) return;
 
-      const btn = matchActionButton(e.target, cfg);
-      if (!btn || btn.disabled) return;
+    const btn = matchActionButton(e.target, cfg);
+    if (!btn || btn.disabled) return;
 
-      btn.dataset.qcTracked = "true";
-      log(
-        "✅ Action button clicked:",
-        cfg.actionSelector || cfg.actionText,
-        btn,
-      );
+    btn.dataset.qcTracked = "true";
+    log("✅ Action button clicked:", cfg.actionSelector || cfg.actionText, btn);
 
-      if (cfg.apiCapture) {
-        try {
-          await addApiWaiter(
-            cfg.apiCapture.urlPattern,
-            cfg.apiCapture.method,
-            CONFIG.API_CAPTURE_TIMEOUT_MS,
-            cfg.apiCapture.successCondition ||
-              ((data) => data && data.retcode === 0),
-          );
-          log("API capture succeeded, recording action");
-        } catch (err) {
-          warn("API capture failed:", err.message);
+    if (cfg.apiCapture) {
+      try {
+        await addApiWaiter(
+          cfg.apiCapture.urlPattern,
+          cfg.apiCapture.method,
+          CONFIG.API_CAPTURE_TIMEOUT_MS,
+          cfg.apiCapture.successCondition ||
+            ((data) => data && data.retcode === 0),
+        );
+        log("API capture succeeded, recording action");
+      } catch (err) {
+        warn("API capture failed:", err.message);
+        return;
+      }
+    }
+
+    recordAndSend(pageType, email).catch((e) =>
+      error("recordAndSend error:", e),
+    );
+  };
+
+  const inputHandler = (e) => {
+    const pageType = state.currentPageType;
+    if (!pageType) return;
+    const cfg = PAGE_CONFIG[pageType];
+    if (!cfg?.fields?.scan_value) return;
+    const keywords = cfg.fields.scan_value;
+    const target = e.target;
+    for (const kw of keywords) {
+      if (kw.startsWith("#")) {
+        if (target.matches(kw) || target.closest(kw)) {
+          const val = normalize(target.value);
+          if (val) setPageStartTimeIfNeeded(val);
+          return;
+        }
+      } else {
+        const container = target.closest(`[data-for="${kw}"]`);
+        if (container && target.matches("input,textarea")) {
+          const val = normalize(target.value);
+          if (val) setPageStartTimeIfNeeded(val);
           return;
         }
       }
+    }
+  };
 
-      recordAndSend(pageType, email).catch((e) =>
-        error("recordAndSend error:", e),
-      );
-    },
-    true,
-  );
-
-  document.addEventListener(
-    "input",
-    (e) => {
-      const pageType = state.currentPageType;
-      if (!pageType) return;
-      const cfg = PAGE_CONFIG[pageType];
-      if (!cfg?.fields?.scan_value) return;
-      const keywords = cfg.fields.scan_value;
-      const target = e.target;
-      for (const kw of keywords) {
-        if (kw.startsWith("#")) {
-          if (target.matches(kw) || target.closest(kw)) {
-            const val = normalize(target.value);
-            if (val) setPageStartTimeIfNeeded(val);
-            return;
-          }
-        } else {
-          const container = target.closest(`[data-for="${kw}"]`);
-          if (container && target.matches("input,textarea")) {
-            const val = normalize(target.value);
-            if (val) setPageStartTimeIfNeeded(val);
-            return;
-          }
-        }
+  const beforeUnloadHandler = () => {
+    const pending = getPendingLogs();
+    if (pending.length) {
+      const payload = JSON.stringify(pending);
+      const url = CONFIG.API_BASE_URL + CONFIG.LOG_ENDPOINT;
+      if (navigator.sendBeacon) {
+        navigator.sendBeacon(
+          url,
+          new Blob([payload], { type: "application/json" }),
+        );
+      } else {
+        try {
+          GM_xmlhttpRequest({
+            method: "POST",
+            url,
+            headers: { "Content-Type": "application/json" },
+            data: payload,
+          });
+        } catch (e) {}
       }
-    },
-    true,
-  );
+      setPendingLogs([]);
+    }
+    cleanup();
+  };
+
+  const unloadHandler = () => cleanup();
+
+  // Đăng ký listener và lưu tham chiếu
+  document.addEventListener("click", clickHandler, true);
+  document.addEventListener("input", inputHandler, true);
+  window.addEventListener("beforeunload", beforeUnloadHandler);
+  window.addEventListener("unload", unloadHandler);
+  state._listeners.click = clickHandler;
+  state._listeners.input = inputHandler;
+  state._listeners.beforeunload = beforeUnloadHandler;
+  state._listeners.unload = unloadHandler;
 
   // ==================== NAVIGATION MONITOR ====================
   const NavigationMonitor = (() => {
@@ -897,7 +930,6 @@
   const WidgetVisibilityWatcher = (() => {
     let lastDecision = null;
     const apply = async () => {
-      // Sử dụng trực tiếp state.authStatus nếu đã có, tránh gọi ensureAuth không cần thiết
       let allowed;
       if (state.authStatus) {
         allowed = state.authStatus.allowed;
@@ -946,34 +978,25 @@
       buttonObserver.disconnect();
       buttonObserver = null;
     }
-  };
 
-  // ==================== BEFOREUNLOAD & UNLOAD ====================
-  window.addEventListener("beforeunload", () => {
-    const pending = getPendingLogs();
-    if (pending.length) {
-      const payload = JSON.stringify(pending);
-      const url = CONFIG.API_BASE_URL + CONFIG.LOG_ENDPOINT;
-      if (navigator.sendBeacon) {
-        navigator.sendBeacon(
-          url,
-          new Blob([payload], { type: "application/json" }),
-        );
-      } else {
-        try {
-          GM_xmlhttpRequest({
-            method: "POST",
-            url,
-            headers: { "Content-Type": "application/json" },
-            data: payload,
-          });
-        } catch (e) {}
-      }
-      setPendingLogs([]);
+    // Gỡ bỏ event listener để tránh memory leak
+    if (state._listeners.click) {
+      document.removeEventListener("click", state._listeners.click, true);
+      state._listeners.click = null;
     }
-    cleanup();
-  });
-  window.addEventListener("unload", cleanup);
+    if (state._listeners.input) {
+      document.removeEventListener("input", state._listeners.input, true);
+      state._listeners.input = null;
+    }
+    if (state._listeners.beforeunload) {
+      window.removeEventListener("beforeunload", state._listeners.beforeunload);
+      state._listeners.beforeunload = null;
+    }
+    if (state._listeners.unload) {
+      window.removeEventListener("unload", state._listeners.unload);
+      state._listeners.unload = null;
+    }
+  };
 
   // ==================== INIT (DEBOUNCED) ====================
   let debounceTimer = null;
@@ -997,6 +1020,16 @@
         state.lastScanValue = null;
         state.authStatus = null;
         state.authPromise = null;
+
+        // Đăng ký lại listener sau khi cleanup đã gỡ bỏ
+        document.addEventListener("click", clickHandler, true);
+        document.addEventListener("input", inputHandler, true);
+        window.addEventListener("beforeunload", beforeUnloadHandler);
+        window.addEventListener("unload", unloadHandler);
+        state._listeners.click = clickHandler;
+        state._listeners.input = inputHandler;
+        state._listeners.beforeunload = beforeUnloadHandler;
+        state._listeners.unload = unloadHandler;
 
         cleanOldData();
 

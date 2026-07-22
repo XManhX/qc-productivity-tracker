@@ -45,6 +45,12 @@ export default async function handler(req, res) {
 
   // ===================== POST =====================
   if (method === "POST") {
+    // Kiểm tra quyền admin: có thể kiểm tra Authorization header với secret đặc biệt
+    const authHeader = req.headers.authorization;
+    if (authHeader !== `Bearer ${process.env.ADMIN_API_SECRET}`) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+
     const { email, name, role_key, import: importUsers } = req.body || {};
 
     // Import hàng loạt
@@ -155,6 +161,12 @@ export default async function handler(req, res) {
 
   // ===================== PUT =====================
   if (method === "PUT") {
+    // Kiểm tra quyền admin: có thể kiểm tra Authorization header với secret đặc biệt
+    const authHeader = req.headers.authorization;
+    if (authHeader !== `Bearer ${process.env.ADMIN_API_SECRET}`) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+
     const { id, name, email, is_active, widget_visible, role_key } =
       req.body || {};
     if (!id) return res.status(400).json({ message: "Missing id" });
@@ -190,6 +202,12 @@ export default async function handler(req, res) {
 
   // ===================== DELETE =====================
   if (method === "DELETE") {
+    // Kiểm tra quyền admin: có thể kiểm tra Authorization header với secret đặc biệt
+    const authHeader = req.headers.authorization;
+    if (authHeader !== `Bearer ${process.env.ADMIN_API_SECRET}`) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+
     const { id } = req.query;
     const { error } = await supabase.from("qc_users").delete().eq("id", id);
     if (error) return res.status(500).json({ error: error.message });

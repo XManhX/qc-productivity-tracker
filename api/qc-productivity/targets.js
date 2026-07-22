@@ -52,6 +52,12 @@ export default async function handler(req, res) {
 
     // ─── PUT: Cập nhật / tạo mới target ─────────────────
     if (method === "PUT") {
+      // Kiểm tra quyền admin: có thể kiểm tra Authorization header với secret đặc biệt
+      const authHeader = req.headers.authorization;
+      if (authHeader !== `Bearer ${process.env.ADMIN_API_SECRET}`) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+
       const { role_id, low_threshold, medium_threshold } = req.body || {};
       if (!role_id) {
         return res.status(400).json({ message: "Thiếu role_id" });

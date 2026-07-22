@@ -46,6 +46,7 @@
       beforeunload: null,
       unload: null,
     },
+    _sendingFingerprints: new Set(),
   };
 
   // ==================== UTILITIES ====================
@@ -471,6 +472,13 @@
   };
 
   const sendRecord = async (record) => {
+    const fp = createFingerprint(record);
+    if (state._sendingFingerprints.has(fp)) {
+      warn("Record is already being sent, skipping duplicate send:", fp);
+      return false;
+    }
+    state._sendingFingerprints.add(fp);
+
     try {
       await gmRequest(
         "POST",
@@ -481,6 +489,8 @@
     } catch (e) {
       warn("Send record failed:", e.message);
       return false;
+    } finally {
+      state._sendingFingerprints.delete(fp);
     }
   };
 
@@ -493,6 +503,14 @@
       const record = pending[i];
       const sent = await sendRecord(record);
       if (!sent) {
+        // Nếu thất bại vì đang được gửi bởi nơi khác, bỏ qua và tiếp tục
+        const fp = createFingerprint(record);
+        if (state._sendingFingerprints.has(fp)) {
+          // Đang được gửi, bỏ qua record này và xét record tiếp theo
+          i++;
+          continue;
+        }
+
         warn("Flush interrupted, remaining records will be retried later");
         break;
       }

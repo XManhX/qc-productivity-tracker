@@ -718,30 +718,29 @@
   const markAllTrackedButtons = (pageType) => {
     const cfg = PAGE_CONFIG[pageType];
     if (!cfg) return;
+
+    // Dọn observer cũ nếu có
     if (buttonObserver) {
       buttonObserver.disconnect();
       buttonObserver = null;
     }
+
+    // Đánh dấu các nút hiện có
     const candidates = document.querySelectorAll(
       'button, input[type="submit"], a[role="button"], div[role="button"]',
     );
     candidates.forEach((el) => markSingleButton(el, cfg));
-    if (!document.querySelector("[data-qc-tracked]")) {
-      buttonObserver = new MutationObserver((mutations) => {
-        let found = false;
-        for (const mut of mutations) {
-          for (const node of mut.addedNodes) {
-            processNodeForButtons(node, cfg);
-            if (node.querySelector?.("[data-qc-tracked]")) found = true;
-          }
+
+    // Tạo observer mới, KHÔNG TỰ DISCONNECT
+    buttonObserver = new MutationObserver((mutations) => {
+      for (const mut of mutations) {
+        for (const node of mut.addedNodes) {
+          processNodeForButtons(node, cfg);
         }
-        if (found) {
-          buttonObserver.disconnect();
-          buttonObserver = null;
-        }
-      });
-      buttonObserver.observe(document.body, { childList: true, subtree: true });
-    }
+      }
+    });
+    buttonObserver.observe(document.body, { childList: true, subtree: true });
+    log("Button observer started for page:", pageType);
   };
 
   // ==================== EVENT HANDLERS ====================
@@ -820,7 +819,7 @@
           });
         } catch {}
       }
-      // Không xóa pending logs để đảm bảo an toàn dữ liệu.
+      // Không xoá pending để đảm bảo an toàn dữ liệu.
     }
     cleanup();
   };

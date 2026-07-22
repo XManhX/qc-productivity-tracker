@@ -1,6 +1,6 @@
 {
   "name": "qc-productivity-tracker",
-  "version": "1.0.15",
+  "version": "1.0.16",
   "description": "Tampermonkey tracker for QC productivity on WMS return inbound flows",
   "type": "module",
   "private": true,

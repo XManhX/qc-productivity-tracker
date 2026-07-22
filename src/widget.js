@@ -213,7 +213,7 @@ const WidgetManager = (function () {
         createWidget();
         startGuard();
       } else {
-        stopGuard(); // dừng guard trước để tránh tạo lại widget khi xóa
+        stopGuard();
         removeWidget();
       }
     },

@@ -47,6 +47,7 @@
       unload: null,
     },
     _sendingFingerprints: new Set(),
+    initGeneration: 0, // tăng dần mỗi lần init
   };
 
   // ==================== UTILITIES ====================
@@ -98,43 +99,31 @@
 
   // ==================== DAILY CLEANUP ====================
   const cleanOldData = () => {
-    if (typeof GM_listValues !== "function") {
-      log("GM_listValues not available, skipping cleanup");
-      return;
-    }
+    if (typeof GM_listValues !== "function") return;
     const today = todayKey();
     try {
       const allKeys = GM_listValues();
       const datePattern = /^\d{4}-\d{2}-\d{2}$/;
-      const keysToDelete = [];
-      for (const key of allKeys) {
+      const keysToDelete = allKeys.filter((key) => {
         if (
           key.startsWith("user_email") ||
           key.startsWith("qc_authz_") ||
-          key === "qc_pending_logs" ||
-          key === "qc_last_fingerprint" ||
-          key === "qc_last_fingerprint_time"
+          key === "qc_pending_logs"
         )
-          continue;
+          return false;
         const parts = key.split("_");
         const datePart = parts.find((p) => datePattern.test(p));
-        if (datePart && datePart !== today) {
-          keysToDelete.push(key);
-        }
-      }
+        return datePart && datePart !== today;
+      });
       const deleteChunk = (startIdx = 0, chunkSize = 50) => {
         const end = Math.min(startIdx + chunkSize, keysToDelete.length);
-        for (let i = startIdx; i < end; i++) {
-          deleteStore(keysToDelete[i]);
-          log("Deleted old key:", keysToDelete[i]);
-        }
-        if (end < keysToDelete.length) {
+        for (let i = startIdx; i < end; i++) deleteStore(keysToDelete[i]);
+        if (end < keysToDelete.length)
           setTimeout(() => deleteChunk(end, chunkSize), 0);
-        }
       };
       if (keysToDelete.length) deleteChunk(0);
     } catch (e) {
-      warn("Error during daily cleanup:", e);
+      warn("Daily cleanup error:", e);
     }
   };
 
@@ -162,7 +151,7 @@
         timeout: CONFIG.REQUEST_TIMEOUT_MS,
         onload: (resp) => {
           if (resp.status < 200 || resp.status >= 300)
-            return reject(new Error(`HTTP ${resp.status}: ${resp.statusText}`));
+            return reject(new Error(`HTTP ${resp.status}`));
           try {
             resolve({
               status: resp.status,
@@ -172,8 +161,8 @@
             reject(new Error("Invalid JSON response"));
           }
         },
-        onerror: (err) => reject(new Error(`Network error: ${err}`)),
-        ontimeout: () => reject(new Error("Request timeout")),
+        onerror: (err) => reject(new Error("Network error")),
+        ontimeout: () => reject(new Error("Timeout")),
       });
     });
 
@@ -184,10 +173,7 @@
         return await fn();
       } catch (e) {
         lastError = e;
-        if (i < maxRetries) {
-          log(`Retry ${i + 1}/${maxRetries} after ${delayMs}ms`);
-          await new Promise((r) => setTimeout(r, delayMs));
-        }
+        if (i < maxRetries) await new Promise((r) => setTimeout(r, delayMs));
       }
     }
     throw lastError;
@@ -195,25 +181,13 @@
 
   // ==================== WIDGET ====================
   // __WIDGET_CODE__
-  // BẢO MẬT: WidgetManager phải dùng textContent (không innerHTML) khi hiển thị dữ liệu từ API.
   const widgetReady =
     typeof WidgetManager !== "undefined" && WidgetManager.init;
-  if (widgetReady) {
-    WidgetManager.init(getStore, setStore);
-  } else {
-    console.error("[QC Tracker] WidgetManager not found");
-  }
+  if (widgetReady) WidgetManager.init(getStore, setStore);
+  else console.error("[QC Tracker] WidgetManager not found");
 
-  const widgetSetVisible = (visible) => {
-    if (widgetReady && typeof WidgetManager.setVisible === "function") {
-      WidgetManager.setVisible(visible);
-    }
-  };
-  const widgetUpdateStats = (stats) => {
-    if (widgetReady && typeof WidgetManager.updateStats === "function") {
-      WidgetManager.updateStats(stats);
-    }
-  };
+  const widgetSetVisible = (v) => widgetReady && WidgetManager.setVisible(v);
+  const widgetUpdateStats = (s) => widgetReady && WidgetManager.updateStats(s);
 
   // ==================== EMAIL ====================
   const getEmail = () => {
@@ -223,10 +197,8 @@
       cached &&
       isValidEmail(cached) &&
       Date.now() - ts < CONFIG.EMAIL_CACHE_MS
-    ) {
+    )
       return cached;
-    }
-
     try {
       const keys = [
         "user_email",
@@ -253,7 +225,7 @@
         }
       }
     } catch (e) {
-      warn("Error reading storage:", e);
+      warn("Email read error:", e);
     }
     return cached || "";
   };
@@ -284,7 +256,6 @@
     if (scanValue && scanValue !== state.lastScanValue) {
       state.lastScanValue = scanValue;
       state.pageStartTime = nowISO();
-      log("Page start time set:", state.pageStartTime);
     }
   };
 
@@ -309,11 +280,10 @@
 
   // ==================== API INTERCEPTOR ====================
   const cancelAllApiWaiters = () => {
-    const waiters = state.apiWaiters;
-    while (waiters.length) {
-      const w = waiters.pop();
+    while (state.apiWaiters.length) {
+      const w = state.apiWaiters.pop();
       clearTimeout(w.timeoutId);
-      w.reject(new Error("Tracker destroyed or re-initialized"));
+      w.reject(new Error("Destroyed"));
     }
   };
 
@@ -337,7 +307,7 @@
   };
 
   if (!window.__qcFetchOverridden) {
-    const originalFetch = window.fetch;
+    const origFetch = window.fetch;
     window.fetch = function (input, init) {
       const url =
         typeof input === "string"
@@ -348,26 +318,23 @@
       const method = (
         init?.method || (input instanceof Request ? input.method : "GET")
       ).toUpperCase();
-
-      const interestedWaiters = state.apiWaiters.filter(
+      const interested = state.apiWaiters.filter(
         (w) => url.includes(w.urlPattern) && method === w.method,
       );
-
-      const fetchPromise = originalFetch.call(this, input, init);
-
-      if (interestedWaiters.length > 0) {
-        fetchPromise
-          .then((response) => {
-            if (!response.ok) return;
-            response
+      const promise = origFetch.call(this, input, init);
+      if (interested.length) {
+        promise
+          .then((resp) => {
+            if (!resp.ok) return;
+            resp
               .clone()
               .json()
               .then((data) => {
-                for (let i = interestedWaiters.length - 1; i >= 0; i--) {
-                  const w = interestedWaiters[i];
+                for (let i = interested.length - 1; i >= 0; i--) {
+                  const w = interested[i];
                   clearTimeout(w.timeoutId);
                   if (w.successCondition(data)) w.resolve(data);
-                  else w.reject(new Error("API failed condition"));
+                  else w.reject(new Error("Condition failed"));
                   const idx = state.apiWaiters.indexOf(w);
                   if (idx > -1) state.apiWaiters.splice(idx, 1);
                 }
@@ -376,23 +343,23 @@
           })
           .catch(() => {});
       }
-      return fetchPromise;
+      return promise;
     };
     window.__qcFetchOverridden = true;
   }
 
   if (!window.__qcXHROverridden) {
     const XHRProto = XMLHttpRequest.prototype;
-    const originalOpen = XHRProto.open;
-    const originalSend = XHRProto.send;
+    const origOpen = XHRProto.open;
+    const origSend = XHRProto.send;
     XHRProto.open = function (method, url, ...rest) {
       this._qcMethod = method.toUpperCase();
       this._qcUrl = url;
-      return originalOpen.call(this, method, url, ...rest);
+      return origOpen.call(this, method, url, ...rest);
     };
     XHRProto.send = function (body) {
       const xhr = this;
-      const originalReady = xhr.onreadystatechange;
+      const origReady = xhr.onreadystatechange;
       xhr.onreadystatechange = function () {
         if (xhr.readyState === 4) {
           const interested = state.apiWaiters.filter(
@@ -401,23 +368,23 @@
               xhr._qcUrl.includes(w.urlPattern) &&
               xhr._qcMethod === w.method,
           );
-          if (interested.length > 0) {
+          if (interested.length) {
             try {
               const data = JSON.parse(xhr.responseText);
               for (let i = interested.length - 1; i >= 0; i--) {
                 const w = interested[i];
                 clearTimeout(w.timeoutId);
                 if (w.successCondition(data)) w.resolve(data);
-                else w.reject(new Error("API failed condition"));
+                else w.reject(new Error("Condition failed"));
                 const idx = state.apiWaiters.indexOf(w);
                 if (idx > -1) state.apiWaiters.splice(idx, 1);
               }
-            } catch (e) {}
+            } catch {}
           }
         }
-        if (originalReady) originalReady.apply(this, arguments);
+        if (origReady) origReady.apply(this, arguments);
       };
-      return originalSend.call(this, body);
+      return origSend.call(this, body);
     };
     window.__qcXHROverridden = true;
   }
@@ -449,8 +416,8 @@
   const getPendingLogs = () => getStore("qc_pending_logs", []);
   const setPendingLogs = (logs) => setStore("qc_pending_logs", logs);
 
-  const createFingerprint = (record) => {
-    return [
+  const createFingerprint = (record) =>
+    [
       record.page,
       record.action,
       record.operator,
@@ -459,12 +426,10 @@
     ]
       .map((s) => normalize(String(s)).toLowerCase())
       .join("|");
-  };
 
   const addToPending = (record) => {
     const pending = getPendingLogs();
     const fp = createFingerprint(record);
-    // Chặn trùng lặp ngay trong hàng đợi
     if (pending.some((r) => createFingerprint(r) === fp)) {
       log("Duplicate fingerprint in pending queue, skipping:", fp);
       return;
@@ -487,7 +452,6 @@
       return false;
     }
     state._sendingFingerprints.add(fp);
-
     try {
       await gmRequest(
         "POST",
@@ -503,20 +467,26 @@
     }
   };
 
-  const flushPending = async () => {
+  const flushPending = async (generation) => {
+    if (generation !== undefined && generation !== state.initGeneration) {
+      log("flushPending cancelled (old generation)");
+      return;
+    }
     let pending = getPendingLogs();
     if (!pending.length) return;
     log(`Flushing ${pending.length} pending logs`);
-
     for (let i = 0; i < pending.length; i++) {
+      // Kiểm tra lại generation mỗi vòng lặp để thoát sớm nếu có re‑init
+      if (generation !== undefined && generation !== state.initGeneration) {
+        log("flushPending interrupted by new init");
+        break;
+      }
       const record = pending[i];
       const sent = await sendRecord(record);
       if (sent) {
         removeFromPendingById(record.id);
         pending = getPendingLogs();
-        i--; // lùi lại sau khi xóa
-      } else {
-        // tiếp tục thử record khác, không dừng hẳn
+        i--;
       }
     }
   };
@@ -545,37 +515,38 @@
         setStore(`stats_${todayKey()}`, stats);
         return stats;
       }
-      return null;
     } catch (e) {
-      warn("fetchStatsFromServer failed:", e.message);
-      return null;
+      warn("fetchStats error:", e);
     }
+    return null;
   };
 
-  const syncWidgetWithStats = async () => {
+  const syncWidgetWithStats = async (generation) => {
     if (state.isDestroyed) return;
-    if (state.statsPromise) {
-      log("Stats fetch already in progress, reusing promise");
-      return state.statsPromise;
-    }
-    if (Date.now() - state.lastStatsSyncTime < CONFIG.STATS_THROTTLE_MS) {
-      log("Stats sync throttled, skipping");
+    if (generation !== undefined && generation !== state.initGeneration) {
+      log("syncWidgetWithStats cancelled (old generation)");
       return;
     }
+    if (state.statsPromise) return state.statsPromise;
+    if (Date.now() - state.lastStatsSyncTime < CONFIG.STATS_THROTTLE_MS) return;
+
     state.statsPromise = (async () => {
       try {
         const serverStats = await fetchStatsFromServer();
+        // Kiểm tra lại generation sau khi fetch
+        if (generation !== undefined && generation !== state.initGeneration)
+          return;
         if (state.isDestroyed) return;
-        const fallbackStats = getStore(`stats_${todayKey()}`, {
+        const fallback = getStore(`stats_${todayKey()}`, {
           qc: 0,
           judgement: 0,
           rimassreceive: 0,
           lastUpdated: 0,
         });
-        widgetUpdateStats(serverStats || fallbackStats);
+        widgetUpdateStats(serverStats || fallback);
         state.lastStatsSyncTime = Date.now();
       } catch (e) {
-        warn("syncWidgetWithStats error:", e);
+        warn("syncStats error:", e);
       } finally {
         state.statsPromise = null;
       }
@@ -589,10 +560,8 @@
       return { allowed: false, reason: "invalid_email" };
     const cacheKey = `qc_authz_${email}`;
     const cached = getStore(cacheKey, null);
-    if (cached?.expireAt && Date.now() < cached.expireAt && cached.value) {
-      log("Auth from cache:", cached.value);
+    if (cached?.expireAt && Date.now() < cached.expireAt && cached.value)
       return cached.value;
-    }
     try {
       const resp = await retryRequest(
         () =>
@@ -614,46 +583,58 @@
       });
       return value;
     } catch (e) {
-      warn("Auth error:", e.message);
+      warn("Auth error:", e);
       return cached?.value || { allowed: false, reason: "authz_error" };
     }
   };
 
-  const ensureAuth = (email) => {
-    if (state.authPromise) {
-      log("Reusing existing auth promise");
-      return state.authPromise;
+  const ensureAuth = async (email, generation) => {
+    // Nếu đã có promise đang chạy nhưng khác generation thì hủy bỏ bằng cách tạo promise mới?
+    // Thực tế, ta sẽ không reuse state.authPromise nếu generation khác, nhưng để đơn giản,
+    // mỗi lần gọi ensureAuth với generation mới sẽ thay thế promise cũ.
+    if (
+      state.authPromise &&
+      generation !== undefined &&
+      generation !== state.initGeneration
+    ) {
+      // Hủy promise cũ bằng cách cho phép tạo mới
     }
-    state.authPromise = checkAuth(email)
-      .then((auth) => {
+    state.authPromise = (async () => {
+      try {
+        const auth = await checkAuth(email);
+        // Kiểm tra generation sau khi auth xong
+        if (generation !== undefined && generation !== state.initGeneration) {
+          log("ensureAuth result ignored (old generation)");
+          return auth; // vẫn trả về nhưng không cập nhật state
+        }
         const prevAllowed = state.authStatus?.allowed;
         state.authStatus = auth;
         state.authPromise = null;
 
         if (auth.allowed) {
           widgetSetVisible(true);
-          syncWidgetWithStats();
+          // syncWidgetWithStats nên được gọi với generation hiện tại để tránh conflict
+          syncWidgetWithStats(generation);
         } else {
-          if (auth.reason !== "authz_error") {
-            clearPending();
-          }
+          if (auth.reason !== "authz_error") clearPending();
           widgetSetVisible(false);
         }
         if (prevAllowed !== auth.allowed) {
           WidgetVisibilityWatcher.apply();
         }
         return auth;
-      })
-      .catch((err) => {
-        const prevAllowed = state.authStatus?.allowed;
+      } catch (err) {
+        if (generation !== undefined && generation !== state.initGeneration) {
+          // bỏ qua lỗi
+          return { allowed: false, reason: "authz_error" };
+        }
         state.authStatus = { allowed: false, reason: "authz_error" };
         state.authPromise = null;
         widgetSetVisible(false);
-        if (prevAllowed !== false) {
-          WidgetVisibilityWatcher.apply();
-        }
+        WidgetVisibilityWatcher.apply();
         throw err;
-      });
+      }
+    })();
     return state.authPromise;
   };
 
@@ -666,8 +647,7 @@
       return;
     }
     markRecordedToday(record);
-
-    addToPending(record); // kiểm tra trùng trong pending đã có ở trên
+    addToPending(record);
 
     const statsKey = `stats_${todayKey()}`;
     const stats = getStore(statsKey, {
@@ -683,14 +663,16 @@
     setStore(statsKey, stats);
 
     if (state.authStatus === null) {
-      ensureAuth(userEmail);
+      // Gọi ensureAuth với generation hiện tại
+      ensureAuth(userEmail, state.initGeneration);
     }
     if (state.authStatus?.allowed) {
       const sent = await sendRecord(record);
       if (sent) {
         removeFromPendingById(record.id);
       }
-      await syncWidgetWithStats();
+      // sync sau khi gửi, dùng generation hiện tại
+      syncWidgetWithStats(state.initGeneration);
     } else {
       log("Record queued, waiting for auth");
     }
@@ -723,79 +705,68 @@
     return null;
   };
 
-  // ==================== BUTTON MARKING ====================
   let buttonObserver = null;
 
   const markSingleButton = (el, cfg) => {
     let matched = false;
-    if (cfg.actionSelector && el.matches(cfg.actionSelector)) {
-      matched = true;
-    } else if (cfg.actionText) {
+    if (cfg.actionSelector && el.matches(cfg.actionSelector)) matched = true;
+    else if (cfg.actionText) {
       const text = normalize(cfg.actionText).toLowerCase();
       const elText = normalize(el.textContent).toLowerCase();
-      const match =
+      matched =
         cfg.actionTextMatch === "contains"
           ? elText.includes(text)
           : elText === text;
-      if (match) matched = true;
     }
     if (matched) {
       el.dataset.qcTracked = "true";
-      if (el.disabled) {
-        el.dataset.qcDisabled = "true";
-        log("✅ Pre-marked button (disabled):", el);
-      } else {
-        log("✅ Pre-marked button:", el);
-      }
+      if (el.disabled) el.dataset.qcDisabled = "true";
     }
   };
 
   const processNodeForButtons = (node, cfg) => {
-    if (node.nodeType !== Node.ELEMENT_NODE) return;
-    if (node.dataset?.qcTracked !== undefined) return;
+    if (
+      node.nodeType !== Node.ELEMENT_NODE ||
+      node.dataset?.qcTracked !== undefined
+    )
+      return;
     if (
       node.matches(
         'button, input[type="submit"], a[role="button"], div[role="button"]',
       )
     ) {
-      if (!node.dataset.qcTracked) {
-        markSingleButton(node, cfg);
-      }
+      if (!node.dataset.qcTracked) markSingleButton(node, cfg);
     }
-    const children = node.querySelectorAll(
-      'button, input[type="submit"], a[role="button"], div[role="button"]',
-    );
-    children.forEach((child) => {
-      if (!child.dataset.qcTracked) markSingleButton(child, cfg);
-    });
+    node
+      .querySelectorAll(
+        'button, input[type="submit"], a[role="button"], div[role="button"]',
+      )
+      .forEach((child) => {
+        if (!child.dataset.qcTracked) markSingleButton(child, cfg);
+      });
   };
 
   const markAllTrackedButtons = (pageType) => {
     const cfg = PAGE_CONFIG[pageType];
     if (!cfg) return;
-
     if (buttonObserver) {
       buttonObserver.disconnect();
       buttonObserver = null;
     }
-
     const candidates = document.querySelectorAll(
       'button, input[type="submit"], a[role="button"], div[role="button"]',
     );
     candidates.forEach((el) => markSingleButton(el, cfg));
-
     if (!document.querySelector("[data-qc-tracked]")) {
-      log("No buttons found yet, setting up MutationObserver for:", pageType);
       buttonObserver = new MutationObserver((mutations) => {
         let found = false;
-        for (const mutation of mutations) {
-          for (const node of mutation.addedNodes) {
+        for (const mut of mutations) {
+          for (const node of mut.addedNodes) {
             processNodeForButtons(node, cfg);
             if (node.querySelector?.("[data-qc-tracked]")) found = true;
           }
         }
         if (found) {
-          log("Buttons found, disconnecting observer");
           buttonObserver.disconnect();
           buttonObserver = null;
         }
@@ -806,18 +777,15 @@
 
   // ==================== EVENT HANDLERS ====================
   const clickHandler = async (e) => {
+    if (state.isDestroyed) return;
     const pageType = state.currentPageType;
     const email = state.currentEmail;
     if (!pageType || !email) return;
     const cfg = PAGE_CONFIG[pageType];
     if (!cfg) return;
-
     const btn = matchActionButton(e.target, cfg);
     if (!btn || btn.disabled) return;
-
     btn.dataset.qcTracked = "true";
-    log("✅ Action button clicked:", cfg.actionSelector || cfg.actionText, btn);
-
     if (cfg.apiCapture) {
       try {
         await addApiWaiter(
@@ -827,19 +795,18 @@
           cfg.apiCapture.successCondition ||
             ((data) => data && data.retcode === 0),
         );
-        log("API capture succeeded, recording action");
       } catch (err) {
         warn("API capture failed:", err.message);
         return;
       }
     }
-
     recordAndSend(pageType, email).catch((e) =>
       error("recordAndSend error:", e),
     );
   };
 
   const inputHandler = (e) => {
+    if (state.isDestroyed) return;
     const pageType = state.currentPageType;
     if (!pageType) return;
     const cfg = PAGE_CONFIG[pageType];
@@ -882,7 +849,7 @@
             headers: { "Content-Type": "application/json" },
             data: payload,
           });
-        } catch (e) {}
+        } catch {}
       }
       setPendingLogs([]);
     }
@@ -904,8 +871,8 @@
         }
       });
     return {
-      onNavigate(callback) {
-        callbacks.push(callback);
+      onNavigate(cb) {
+        if (!callbacks.includes(cb)) callbacks.push(cb);
         if (!installed) {
           installed = true;
           const origPush = history.pushState;
@@ -941,19 +908,18 @@
     let lastDecision = null;
     const apply = async () => {
       let allowed;
-      if (state.authStatus) {
-        allowed = state.authStatus.allowed;
-      } else {
+      if (state.authStatus) allowed = state.authStatus.allowed;
+      else {
         const email = state.currentEmail;
         if (!email) return;
-        const auth = await ensureAuth(email);
+        const auth = await ensureAuth(email, state.initGeneration);
         allowed = auth.allowed;
       }
       const decision = allowed ? "visible" : "hidden";
       if (decision !== lastDecision) {
         lastDecision = decision;
         widgetSetVisible(allowed);
-        if (allowed) syncWidgetWithStats();
+        if (allowed) syncWidgetWithStats(state.initGeneration);
       }
     };
     NavigationMonitor.onNavigate(apply);
@@ -963,14 +929,14 @@
 
   // ==================== STORAGE LISTENER ====================
   if (typeof GM_addValueChangeListener === "function") {
-    const statsKey = `stats_${todayKey()}`;
     try {
-      GM_addValueChangeListener(statsKey, (name, oldVal, newVal) => {
-        if (newVal !== undefined) {
-          log("Stats updated via storage, updating widget");
-          widgetUpdateStats(newVal);
-        }
-      });
+      GM_addValueChangeListener(
+        `stats_${todayKey()}`,
+        (name, oldVal, newVal) => {
+          if (newVal !== undefined && !state.isDestroyed)
+            widgetUpdateStats(newVal);
+        },
+      );
     } catch (e) {
       warn("Storage listener error", e);
     }
@@ -990,8 +956,7 @@
       buttonObserver = null;
     }
 
-    // Dọn dẹp widget triệt để
-    widgetSetVisible(false); // ẩn widget, dừng guard, xóa DOM
+    widgetSetVisible(false); // dừng guard, xóa widget
 
     if (state._listeners.click) {
       document.removeEventListener("click", state._listeners.click, true);
@@ -1036,11 +1001,13 @@
       state.pendingReinitUrl = location.href;
       return state.initPromise;
     }
+    // Tăng generation, tạo snapshot
+    const generation = ++state.initGeneration;
     state.initPromise = (async () => {
       try {
-        log("Init for:", location.href);
+        log("Init for:", location.href, "generation:", generation);
         state.pendingReinitUrl = null;
-        cleanup();
+        cleanup(); // dọn dẹp phiên cũ, bao gồm widget
         state.isDestroyed = false;
         state.pageStartTime = null;
         state.lastScanValue = null;
@@ -1075,34 +1042,44 @@
         }
         state.currentEmail = email;
 
-        // Khôi phục trạng thái từ DOM
         refreshPageState();
-
         markAllTrackedButtons(pageType);
 
         try {
-          const auth = await ensureAuth(email);
+          const auth = await ensureAuth(email, generation);
+          // Kiểm tra lại generation trước khi flush
+          if (generation !== state.initGeneration) {
+            log("Init auth result ignored, generation changed");
+            return;
+          }
           if (auth.allowed) {
             log("Authorization successful");
-            await flushPending();
+            await flushPending(generation);
           } else {
             warn("User not authorized:", auth.reason);
           }
         } catch (e) {
+          if (generation !== state.initGeneration) return;
           error("Auth failed:", e);
         }
 
+        if (generation !== state.initGeneration) return; // dừng nếu có init mới hơn
+
         state.flushIntervalId = setInterval(() => {
-          if (!state.isDestroyed && state.authStatus?.allowed)
-            flushPending().catch(warn);
+          if (!state.isDestroyed && state.authStatus?.allowed) {
+            // Dùng generation hiện tại để flush
+            flushPending(state.initGeneration).catch(warn);
+          }
         }, CONFIG.FLUSH_INTERVAL_MS);
 
-        await syncWidgetWithStats();
+        await syncWidgetWithStats(generation);
+        if (generation !== state.initGeneration) return;
+
         state.statsSyncIntervalId = setInterval(() => {
-          if (!state.isDestroyed) syncWidgetWithStats();
+          if (!state.isDestroyed) syncWidgetWithStats(state.initGeneration);
         }, CONFIG.STATS_SYNC_INTERVAL_MS);
 
-        log("Init complete for:", pageType);
+        log("Init complete for:", pageType, "generation:", generation);
       } catch (e) {
         error("Fatal init error:", e);
       } finally {
@@ -1131,17 +1108,7 @@
     .catch((e) => error("Startup error:", e));
 
   // ==================== VISUAL HIGHLIGHT ====================
-  (function applyStyle(css) {
-    if (typeof GM_addStyle !== "undefined") {
-      GM_addStyle(css);
-      log("Styles applied via GM_addStyle");
-      return;
-    }
-    const style = document.createElement("style");
-    style.textContent = css;
-    document.head.appendChild(style);
-    log("Styles applied via DOM fallback");
-  })(`
+  const style = `
     [data-qc-tracked="true"]:not([data-qc-disabled]) {
       outline: 2px solid #EE4D2D !important;
       outline-offset: 2px;
@@ -1150,5 +1117,11 @@
       outline: 2px solid #999999 !important;
       outline-offset: 2px;
     }
-  `);
+  `;
+  if (typeof GM_addStyle !== "undefined") GM_addStyle(style);
+  else {
+    const styleEl = document.createElement("style");
+    styleEl.textContent = style;
+    document.head.appendChild(styleEl);
+  }
 })();

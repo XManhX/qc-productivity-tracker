@@ -171,7 +171,7 @@ const WidgetManager = (function () {
   };
 
   const startGuard = () => {
-    stopGuard();
+    stopGuard(); // dọn guard cũ trước
     guardObserver = new MutationObserver(() => {
       if (shouldBeVisible) {
         if (!widgetEl || !document.body.contains(widgetEl)) {
@@ -187,7 +187,7 @@ const WidgetManager = (function () {
           createWidget();
         }
       }
-    }, 2000); // giảm tần suất polling
+    }, 2000);
   };
 
   const stopGuard = () => {
@@ -213,8 +213,8 @@ const WidgetManager = (function () {
         createWidget();
         startGuard();
       } else {
+        stopGuard(); // dừng guard trước để tránh tạo lại widget khi xóa
         removeWidget();
-        stopGuard();
       }
     },
     updateStats(stats) {

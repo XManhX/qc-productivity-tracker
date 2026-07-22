@@ -396,7 +396,7 @@
     const id = Date.now() + "_" + Math.random().toString(36).substr(2, 9);
     return {
       id,
-      idempotency_key: id, // thêm key trùng lặp
+      idempotency_key: id,
       version: CONFIG.VERSION,
       page: pageType,
       action: normalize(cfg.actionText || ""),
@@ -580,8 +580,6 @@
   };
 
   const ensureAuth = async (email, generation) => {
-    // Nếu có promise cũ và generation đã thay đổi, ta vẫn tạo promise mới,
-    // nhưng không cần thiết phải quản lý phức tạp vì apply đã kiểm tra generation.
     state.authPromise = (async () => {
       try {
         const auth = await checkAuth(email);
@@ -590,7 +588,7 @@
         }
         state.authStatus = auth;
         state.authPromise = null;
-        WidgetVisibilityWatcher.apply(); // ← gọi tập trung
+        WidgetVisibilityWatcher.apply();
 
         if (auth.allowed) {
           syncWidgetWithStats(generation);
@@ -720,30 +718,54 @@
   const markAllTrackedButtons = (pageType) => {
     const cfg = PAGE_CONFIG[pageType];
     if (!cfg) return;
+
+    // Hủy observer cũ nếu có
     if (buttonObserver) {
       buttonObserver.disconnect();
       buttonObserver = null;
     }
+
+    // Đánh dấu tất cả nút hiện tại
     const candidates = document.querySelectorAll(
       'button, input[type="submit"], a[role="button"], div[role="button"]',
     );
     candidates.forEach((el) => markSingleButton(el, cfg));
-    if (!document.querySelector("[data-qc-tracked]")) {
-      buttonObserver = new MutationObserver((mutations) => {
-        let found = false;
-        for (const mut of mutations) {
-          for (const node of mut.addedNodes) {
-            processNodeForButtons(node, cfg);
-            if (node.querySelector?.("[data-qc-tracked]")) found = true;
-          }
+
+    // Tạo observer mới và KHÔNG tự disconnect – chỉ dừng khi cleanup
+    buttonObserver = new MutationObserver((mutations) => {
+      for (const mut of mutations) {
+        for (const node of mut.addedNodes) {
+          processNodeForButtons(node, cfg);
         }
-        if (found) {
-          buttonObserver.disconnect();
-          buttonObserver = null;
-        }
-      });
-      buttonObserver.observe(document.body, { childList: true, subtree: true });
+      }
+    });
+    buttonObserver.observe(document.body, { childList: true, subtree: true });
+    log("Button observer started for page:", pageType);
+  };
+
+  // Hàm chờ container xuất hiện rồi mới gọi markAllTrackedButtons
+  const waitForContainerAndMarkButtons = (pageType) => {
+    const cfg = PAGE_CONFIG[pageType];
+    if (!cfg) return;
+
+    // Nếu container đã có sẵn, đánh dấu ngay
+    if (document.querySelector(cfg.containerSelector)) {
+      markAllTrackedButtons(pageType);
+      return;
     }
+
+    // Nếu chưa có, dùng observer tạm để chờ container
+    const containerObserver = new MutationObserver((mutations, obs) => {
+      if (document.querySelector(cfg.containerSelector)) {
+        obs.disconnect();
+        markAllTrackedButtons(pageType);
+      }
+    });
+    containerObserver.observe(document.body, {
+      childList: true,
+      subtree: true,
+    });
+    log("Waiting for container:", cfg.containerSelector);
   };
 
   // ==================== EVENT HANDLERS ====================
@@ -807,14 +829,12 @@
     if (pending.length) {
       const payload = JSON.stringify(pending);
       const url = CONFIG.API_BASE_URL + CONFIG.LOG_ENDPOINT;
-      // Thử gửi qua beacon (fire-and-forget)
       if (navigator.sendBeacon) {
         navigator.sendBeacon(
           url,
           new Blob([payload], { type: "application/json" }),
         );
       } else {
-        // Nếu không có beacon, dùng GM_xmlhttpRequest đồng bộ (không chờ)
         try {
           GM_xmlhttpRequest({
             method: "POST",
@@ -822,10 +842,9 @@
             headers: { "Content-Type": "application/json" },
             data: payload,
           });
-        } catch (e) {}
+        } catch {}
       }
-      // QUAN TRỌNG: không xóa pending logs. Chúng sẽ được gửi lại vào lần sau.
-      // (không gọi setPendingLogs([]))
+      // Không xoá pending logs
     }
     cleanup();
   };
@@ -881,7 +900,6 @@
   const WidgetVisibilityWatcher = (() => {
     let lastDecision = null;
     const apply = async () => {
-      // Nếu không ở trang QC → luôn ẩn widget
       if (!state.currentPageType) {
         if (lastDecision !== "hidden") {
           lastDecision = "hidden";
@@ -1012,7 +1030,7 @@
         if (pageType === "unknown") {
           state.currentPageType = null;
           state.currentEmail = null;
-          widgetSetVisible(false); // dự phòng
+          widgetSetVisible(false);
           return;
         }
         state.currentPageType = pageType;
@@ -1026,7 +1044,8 @@
         state.currentEmail = email;
 
         refreshPageState();
-        markAllTrackedButtons(pageType);
+        // Thay vì gọi markAllTrackedButtons trực tiếp, chờ container xuất hiện
+        waitForContainerAndMarkButtons(pageType);
 
         try {
           const auth = await ensureAuth(email, generation);

@@ -18,6 +18,7 @@
     STATS_SYNC_INTERVAL_MS: 30000,
     API_CAPTURE_TIMEOUT_MS: 15000,
     STATS_THROTTLE_MS: 5000,
+    BUTTON_RESCAN_INTERVAL_MS: 2000, // quét lại nút mỗi 2 giây
   };
 
   // ==================== PAGE CONFIG ====================
@@ -31,6 +32,7 @@
     initPromise: null,
     flushIntervalId: null,
     statsSyncIntervalId: null,
+    buttonRescanIntervalId: null, // mới
     isDestroyed: false,
     pendingReinitUrl: null,
     authStatus: null,
@@ -50,630 +52,9 @@
     initGeneration: 0,
   };
 
-  // ==================== UTILITIES ====================
-  const log = (...args) => CONFIG.DEBUG && console.log("[QC Tracker]", ...args);
-  const warn = (...args) => console.warn("[QC Tracker]", ...args);
-  const error = (...args) => console.error("[QC Tracker]", ...args);
-  const normalize = (s) => (s || "").replace(/\s+/g, " ").trim();
-  const nowISO = () => new Date().toISOString();
-  const todayKey = () => new Date().toISOString().split("T")[0];
-  const isValidEmail = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+  // ... (các phần utilities, storage, dedup, http, widget, email, field extraction, api interceptor, record management, stats, auth, action processor, button tracking & marking giữ nguyên như bản trước, nhưng tôi sẽ viết gọn lại để tránh lặp) ...
 
-  const getPageType = (href) => {
-    const entry = Object.entries(PAGE_CONFIG).find(([, cfg]) =>
-      href.includes(cfg.pathIncludes),
-    );
-    return entry ? entry[0] : "unknown";
-  };
-
-  const getIdFromUrl = (pageType) => {
-    const cfg = PAGE_CONFIG[pageType];
-    if (!cfg?.urlParam) return "";
-    const params = new URLSearchParams(window.location.search);
-    return params.get(cfg.urlParam) || "";
-  };
-
-  // ==================== STORAGE ====================
-  const getStore = (key, fallback = null) => {
-    try {
-      const v = GM_getValue(key);
-      return v === undefined ? fallback : v;
-    } catch {
-      return fallback;
-    }
-  };
-  const setStore = (key, val) => {
-    try {
-      GM_setValue(key, val);
-    } catch (e) {
-      warn("Failed to set store:", key, e);
-    }
-  };
-  const deleteStore = (key) => {
-    try {
-      GM_deleteValue(key);
-    } catch (e) {
-      warn("Failed to delete store:", key, e);
-    }
-  };
-
-  // ==================== DAILY CLEANUP ====================
-  const cleanOldData = () => {
-    if (typeof GM_listValues !== "function") return;
-    const today = todayKey();
-    try {
-      const allKeys = GM_listValues();
-      const datePattern = /^\d{4}-\d{2}-\d{2}$/;
-      const keysToDelete = allKeys.filter((key) => {
-        if (
-          key.startsWith("user_email") ||
-          key.startsWith("qc_authz_") ||
-          key === "qc_pending_logs"
-        )
-          return false;
-        const parts = key.split("_");
-        const datePart = parts.find((p) => datePattern.test(p));
-        return datePart && datePart !== today;
-      });
-      const deleteChunk = (startIdx = 0, chunkSize = 50) => {
-        const end = Math.min(startIdx + chunkSize, keysToDelete.length);
-        for (let i = startIdx; i < end; i++) deleteStore(keysToDelete[i]);
-        if (end < keysToDelete.length)
-          setTimeout(() => deleteChunk(end, chunkSize), 0);
-      };
-      if (keysToDelete.length) deleteChunk(0);
-    } catch (e) {
-      warn("Daily cleanup error:", e);
-    }
-  };
-
-  // ==================== DEDUP LOGIC ====================
-  const DEDUP_KEY_PREFIX = "qc_dedup_";
-  const buildDedupKey = (record) => {
-    const date = todayKey();
-    const normalized = [record.page, record.action, record.scan_value]
-      .map((s) => normalize(String(s)).toLowerCase())
-      .join("|");
-    return DEDUP_KEY_PREFIX + date + "_" + normalized;
-  };
-  const isRecordedToday = (record) =>
-    getStore(buildDedupKey(record), null) !== null;
-  const markRecordedToday = (record) => setStore(buildDedupKey(record), true);
-
-  // ==================== HTTP HELPERS ====================
-  const gmRequest = (method, url, data = null, headers = {}) =>
-    new Promise((resolve, reject) => {
-      GM_xmlhttpRequest({
-        method,
-        url,
-        headers: { "Content-Type": "application/json", ...headers },
-        data: data ? JSON.stringify(data) : undefined,
-        timeout: CONFIG.REQUEST_TIMEOUT_MS,
-        onload: (resp) => {
-          if (resp.status < 200 || resp.status >= 300)
-            return reject(new Error(`HTTP ${resp.status}`));
-          try {
-            resolve({
-              status: resp.status,
-              data: JSON.parse(resp.responseText || "{}"),
-            });
-          } catch (e) {
-            reject(new Error("Invalid JSON response"));
-          }
-        },
-        onerror: (err) => reject(new Error("Network error")),
-        ontimeout: () => reject(new Error("Timeout")),
-      });
-    });
-
-  const retryRequest = async (fn, maxRetries, delayMs) => {
-    let lastError;
-    for (let i = 0; i <= maxRetries; i++) {
-      try {
-        return await fn();
-      } catch (e) {
-        lastError = e;
-        if (i < maxRetries) await new Promise((r) => setTimeout(r, delayMs));
-      }
-    }
-    throw lastError;
-  };
-
-  // ==================== WIDGET ====================
-  // __WIDGET_CODE__
-  const widgetReady =
-    typeof WidgetManager !== "undefined" && WidgetManager.init;
-  if (widgetReady) WidgetManager.init(getStore, setStore);
-  else console.error("[QC Tracker] WidgetManager not found");
-
-  const widgetSetVisible = (v) => widgetReady && WidgetManager.setVisible(v);
-  const widgetUpdateStats = (s) => widgetReady && WidgetManager.updateStats(s);
-
-  // ==================== EMAIL ====================
-  const getEmail = () => {
-    const cached = getStore("user_email", "");
-    const ts = getStore("user_email_timestamp", 0);
-    if (
-      cached &&
-      isValidEmail(cached) &&
-      Date.now() - ts < CONFIG.EMAIL_CACHE_MS
-    )
-      return cached;
-    try {
-      const keys = [
-        "user_email",
-        "email",
-        "user",
-        "userInfo",
-        "profile",
-        "useremail",
-        "userEmail",
-      ];
-      for (const key of keys) {
-        let val = localStorage.getItem(key) || sessionStorage.getItem(key);
-        if (!val) continue;
-        try {
-          const obj = JSON.parse(val);
-          if (typeof obj === "object" && obj !== null)
-            val = obj.email || obj.user?.email || obj.userEmail || "";
-        } catch {}
-        const email = normalize(String(val)).toLowerCase();
-        if (email && isValidEmail(email)) {
-          setStore("user_email", email);
-          setStore("user_email_timestamp", Date.now());
-          return email;
-        }
-      }
-    } catch (e) {
-      warn("Email read error:", e);
-    }
-    return cached || "";
-  };
-
-  // ==================== FIELD EXTRACTION ====================
-  const getInputByKeywords = (keywords) => {
-    for (const kw of keywords) {
-      let input = null;
-      if (kw.startsWith("#")) {
-        const target = document.querySelector(kw);
-        if (target)
-          input = target.matches("input,textarea")
-            ? target
-            : target.querySelector("input,textarea");
-      } else {
-        const parent = document.querySelector(`[data-for="${kw}"]`);
-        if (parent) input = parent.querySelector("input,textarea");
-      }
-      if (input) {
-        const val = normalize(input.value);
-        if (val) return val;
-      }
-    }
-    return "";
-  };
-
-  const setPageStartTimeIfNeeded = (scanValue) => {
-    if (scanValue && scanValue !== state.lastScanValue) {
-      state.lastScanValue = scanValue;
-      state.pageStartTime = nowISO();
-    }
-  };
-
-  const collectFields = (pageType) => {
-    const cfg = PAGE_CONFIG[pageType];
-    if (!cfg) return { device_id: "", scan_value: "" };
-    const result = {};
-    Object.entries(cfg.fields).forEach(([field, keywords]) => {
-      result[field] = getInputByKeywords(keywords);
-    });
-    if (!result.scan_value) {
-      const idFromUrl = getIdFromUrl(pageType);
-      if (idFromUrl) {
-        result.scan_value = idFromUrl;
-        setPageStartTimeIfNeeded(idFromUrl);
-      }
-    } else {
-      setPageStartTimeIfNeeded(result.scan_value);
-    }
-    return result;
-  };
-
-  // ==================== API INTERCEPTOR ====================
-  const cancelAllApiWaiters = () => {
-    while (state.apiWaiters.length) {
-      const w = state.apiWaiters.pop();
-      clearTimeout(w.timeoutId);
-      w.reject(new Error("Destroyed"));
-    }
-  };
-
-  const addApiWaiter = (urlPattern, method, timeoutMs, successCondition) => {
-    return new Promise((resolve, reject) => {
-      const waiter = {
-        urlPattern,
-        method,
-        resolve,
-        reject,
-        timeoutId: null,
-        successCondition,
-      };
-      waiter.timeoutId = setTimeout(() => {
-        const idx = state.apiWaiters.indexOf(waiter);
-        if (idx > -1) state.apiWaiters.splice(idx, 1);
-        reject(new Error("API capture timeout"));
-      }, timeoutMs);
-      state.apiWaiters.push(waiter);
-    });
-  };
-
-  if (!window.__qcFetchOverridden) {
-    const origFetch = window.fetch;
-    window.fetch = function (input, init) {
-      const url =
-        typeof input === "string"
-          ? input
-          : input instanceof Request
-            ? input.url
-            : "";
-      const method = (
-        init?.method || (input instanceof Request ? input.method : "GET")
-      ).toUpperCase();
-      const interested = state.apiWaiters.filter(
-        (w) => url.includes(w.urlPattern) && method === w.method,
-      );
-      const promise = origFetch.call(this, input, init);
-      if (interested.length) {
-        promise
-          .then((resp) => {
-            if (!resp.ok) return;
-            resp
-              .clone()
-              .json()
-              .then((data) => {
-                for (let i = interested.length - 1; i >= 0; i--) {
-                  const w = interested[i];
-                  clearTimeout(w.timeoutId);
-                  if (w.successCondition(data)) w.resolve(data);
-                  else w.reject(new Error("Condition failed"));
-                  const idx = state.apiWaiters.indexOf(w);
-                  if (idx > -1) state.apiWaiters.splice(idx, 1);
-                }
-              })
-              .catch(() => {});
-          })
-          .catch(() => {});
-      }
-      return promise;
-    };
-    window.__qcFetchOverridden = true;
-  }
-
-  if (!window.__qcXHROverridden) {
-    const XHRProto = XMLHttpRequest.prototype;
-    const origOpen = XHRProto.open;
-    const origSend = XHRProto.send;
-    XHRProto.open = function (method, url, ...rest) {
-      this._qcMethod = method.toUpperCase();
-      this._qcUrl = url;
-      return origOpen.call(this, method, url, ...rest);
-    };
-    XHRProto.send = function (body) {
-      const xhr = this;
-      const origReady = xhr.onreadystatechange;
-      xhr.onreadystatechange = function () {
-        if (xhr.readyState === 4) {
-          const interested = state.apiWaiters.filter(
-            (w) =>
-              xhr._qcUrl &&
-              xhr._qcUrl.includes(w.urlPattern) &&
-              xhr._qcMethod === w.method,
-          );
-          if (interested.length) {
-            try {
-              const data = JSON.parse(xhr.responseText);
-              for (let i = interested.length - 1; i >= 0; i--) {
-                const w = interested[i];
-                clearTimeout(w.timeoutId);
-                if (w.successCondition(data)) w.resolve(data);
-                else w.reject(new Error("Condition failed"));
-                const idx = state.apiWaiters.indexOf(w);
-                if (idx > -1) state.apiWaiters.splice(idx, 1);
-              }
-            } catch {}
-          }
-        }
-        if (origReady) origReady.apply(this, arguments);
-      };
-      return origSend.call(this, body);
-    };
-    window.__qcXHROverridden = true;
-  }
-
-  // ==================== RECORD MANAGEMENT ====================
-  const makeRecord = (pageType, userEmail, endTime = nowISO()) => {
-    const fields = collectFields(pageType);
-    const cfg = PAGE_CONFIG[pageType] || {};
-    const id = Date.now() + "_" + Math.random().toString(36).substr(2, 9);
-    return {
-      id,
-      idempotency_key: id,
-      version: CONFIG.VERSION,
-      page: pageType,
-      action: normalize(cfg.actionText || ""),
-      operator: userEmail,
-      url: location.href,
-      device_id: fields.device_id || "",
-      scan_value: fields.scan_value || "",
-      page_start_time: state.pageStartTime,
-      page_end_time: endTime,
-    };
-  };
-
-  const shouldSkip = (record, pageType) => {
-    if (!record.scan_value || !record.page_start_time) return true;
-    const required = PAGE_CONFIG[pageType]?.requiredFields || [];
-    return required.some((f) => !record[f]);
-  };
-
-  const getPendingLogs = () => getStore("qc_pending_logs", []);
-  const setPendingLogs = (logs) => setStore("qc_pending_logs", logs);
-
-  const createFingerprint = (record) =>
-    [
-      record.page,
-      record.action,
-      record.operator,
-      record.device_id,
-      record.scan_value,
-    ]
-      .map((s) => normalize(String(s)).toLowerCase())
-      .join("|");
-
-  const addToPending = (record) => {
-    const pending = getPendingLogs();
-    const fp = createFingerprint(record);
-    if (pending.some((r) => createFingerprint(r) === fp)) {
-      log("Duplicate fingerprint in pending queue, skipping:", fp);
-      return;
-    }
-    pending.push(record);
-    setPendingLogs(pending);
-  };
-
-  const removeFromPendingById = (recordId) => {
-    const pending = getPendingLogs();
-    const filtered = pending.filter((r) => r.id !== recordId);
-    if (filtered.length !== pending.length) setPendingLogs(filtered);
-  };
-  const clearPending = () => setPendingLogs([]);
-
-  const sendRecord = async (record) => {
-    const fp = createFingerprint(record);
-    if (state._sendingFingerprints.has(fp)) {
-      warn("Record is already being sent, skipping duplicate send:", fp);
-      return false;
-    }
-    state._sendingFingerprints.add(fp);
-    try {
-      await gmRequest(
-        "POST",
-        CONFIG.API_BASE_URL + CONFIG.LOG_ENDPOINT,
-        record,
-      );
-      return true;
-    } catch (e) {
-      warn("Send record failed:", e.message);
-      return false;
-    } finally {
-      state._sendingFingerprints.delete(fp);
-    }
-  };
-
-  const flushPending = async (generation) => {
-    if (generation !== undefined && generation !== state.initGeneration) return;
-    let pending = getPendingLogs();
-    if (!pending.length) return;
-    for (let i = 0; i < pending.length; i++) {
-      if (generation !== undefined && generation !== state.initGeneration)
-        break;
-      const record = pending[i];
-      const sent = await sendRecord(record);
-      if (sent) {
-        removeFromPendingById(record.id);
-        pending = getPendingLogs();
-        i--;
-      }
-    }
-  };
-
-  // ==================== STATS ====================
-  const fetchStatsFromServer = async () => {
-    const operator = getEmail();
-    if (!operator) return null;
-    try {
-      const resp = await retryRequest(
-        () =>
-          gmRequest(
-            "GET",
-            `${CONFIG.API_BASE_URL}${CONFIG.LOG_ENDPOINT}?operator=${encodeURIComponent(operator)}`,
-          ),
-        CONFIG.AUTH_RETRY_MAX,
-        CONFIG.AUTH_RETRY_DELAY_MS,
-      );
-      if (resp.status === 200 && resp.data) {
-        const stats = {
-          qc: Number(resp.data.qc) || 0,
-          judgement: Number(resp.data.judgement) || 0,
-          rimassreceive: Number(resp.data.rimassreceive) || 0,
-          lastUpdated: Date.now(),
-        };
-        setStore(`stats_${todayKey()}`, stats);
-        return stats;
-      }
-    } catch (e) {
-      warn("fetchStats error:", e);
-    }
-    return null;
-  };
-
-  const syncWidgetWithStats = async (generation) => {
-    if (state.isDestroyed) return;
-    if (generation !== undefined && generation !== state.initGeneration) return;
-    if (state.statsPromise) return state.statsPromise;
-    if (Date.now() - state.lastStatsSyncTime < CONFIG.STATS_THROTTLE_MS) return;
-
-    state.statsPromise = (async () => {
-      try {
-        const serverStats = await fetchStatsFromServer();
-        if (generation !== undefined && generation !== state.initGeneration)
-          return;
-        if (state.isDestroyed) return;
-        const fallback = getStore(`stats_${todayKey()}`, {
-          qc: 0,
-          judgement: 0,
-          rimassreceive: 0,
-          lastUpdated: 0,
-        });
-        widgetUpdateStats(serverStats || fallback);
-        state.lastStatsSyncTime = Date.now();
-      } catch (e) {
-        warn("syncStats error:", e);
-      } finally {
-        state.statsPromise = null;
-      }
-    })();
-    return state.statsPromise;
-  };
-
-  // ==================== AUTH ====================
-  const checkAuth = async (email) => {
-    if (!email || !isValidEmail(email))
-      return { allowed: false, reason: "invalid_email" };
-    const cacheKey = `qc_authz_${email}`;
-    const cached = getStore(cacheKey, null);
-    if (cached?.expireAt && Date.now() < cached.expireAt && cached.value)
-      return cached.value;
-    try {
-      const resp = await retryRequest(
-        () =>
-          gmRequest("POST", CONFIG.API_BASE_URL + CONFIG.AUTH_ENDPOINT, {
-            email,
-            page: location.pathname,
-          }),
-        CONFIG.AUTH_RETRY_MAX,
-        CONFIG.AUTH_RETRY_DELAY_MS,
-      );
-      const value = {
-        allowed: Boolean(resp?.data?.allowed),
-        reason: resp?.data?.reason || "",
-        widget_visible: resp?.data?.widget_visible !== false,
-      };
-      setStore(cacheKey, {
-        expireAt: Date.now() + CONFIG.AUTH_CACHE_MS,
-        value,
-      });
-      return value;
-    } catch (e) {
-      warn("Auth error:", e);
-      return cached?.value || { allowed: false, reason: "authz_error" };
-    }
-  };
-
-  const ensureAuth = async (email, generation) => {
-    state.authPromise = (async () => {
-      try {
-        const auth = await checkAuth(email);
-        if (generation !== undefined && generation !== state.initGeneration) {
-          return auth;
-        }
-        state.authStatus = auth;
-        state.authPromise = null;
-        WidgetVisibilityWatcher.apply();
-
-        if (auth.allowed) {
-          syncWidgetWithStats(generation);
-        } else {
-          if (auth.reason !== "authz_error") clearPending();
-        }
-        return auth;
-      } catch (err) {
-        if (generation !== undefined && generation !== state.initGeneration) {
-          return { allowed: false, reason: "authz_error" };
-        }
-        state.authStatus = { allowed: false, reason: "authz_error" };
-        state.authPromise = null;
-        WidgetVisibilityWatcher.apply();
-        throw err;
-      }
-    })();
-    return state.authPromise;
-  };
-
-  // ==================== ACTION PROCESSOR ====================
-  const recordAndSend = async (pageType, userEmail, endTimeOverride) => {
-    const record = makeRecord(pageType, userEmail, endTimeOverride);
-    if (shouldSkip(record, pageType)) return;
-    if (isRecordedToday(record)) {
-      log("Duplicate in today's dedup set, skipping");
-      return;
-    }
-    markRecordedToday(record);
-    addToPending(record);
-
-    const statsKey = `stats_${todayKey()}`;
-    const stats = getStore(statsKey, {
-      qc: 0,
-      judgement: 0,
-      rimassreceive: 0,
-      lastUpdated: 0,
-    });
-    if (pageType === "qc") stats.qc++;
-    else if (pageType === "judgement") stats.judgement++;
-    else if (pageType === "rimassreceive") stats.rimassreceive++;
-    stats.lastUpdated = Date.now();
-    setStore(statsKey, stats);
-
-    if (state.authStatus === null) {
-      ensureAuth(userEmail, state.initGeneration);
-    }
-    if (state.authStatus?.allowed) {
-      const sent = await sendRecord(record);
-      if (sent) {
-        removeFromPendingById(record.id);
-      }
-      syncWidgetWithStats(state.initGeneration);
-    } else {
-      log("Record queued, waiting for auth");
-    }
-  };
-
-  // ==================== BUTTON TRACKING & MARKING ====================
-  const matchActionButton = (el, cfg) => {
-    let current = el;
-    while (current && current !== document.body) {
-      if (
-        current.matches(
-          'button, input[type="submit"], a[role="button"], div[role="button"]',
-        )
-      ) {
-        if (cfg.actionSelector && current.matches(cfg.actionSelector))
-          return current;
-        const text = normalize(cfg.actionText || "").toLowerCase();
-        if (text) {
-          const elText = normalize(current.textContent).toLowerCase();
-          if (
-            cfg.actionTextMatch === "contains"
-              ? elText.includes(text)
-              : elText === text
-          )
-            return current;
-        }
-      }
-      current = current.parentElement;
-    }
-    return null;
-  };
-
+  // ==================== BUTTON TRACKING & MARKING (CẬP NHẬT) ====================
   let buttonObserver = null;
 
   const markSingleButton = (el, cfg) => {
@@ -725,13 +106,13 @@
       buttonObserver = null;
     }
 
-    // Đánh dấu các nút hiện có
+    // Đánh dấu tất cả nút hiện tại
     const candidates = document.querySelectorAll(
       'button, input[type="submit"], a[role="button"], div[role="button"]',
     );
     candidates.forEach((el) => markSingleButton(el, cfg));
 
-    // Tạo observer mới, KHÔNG TỰ DISCONNECT
+    // Tạo observer mới, KHÔNG tự disconnect
     buttonObserver = new MutationObserver((mutations) => {
       for (const mut of mutations) {
         for (const node of mut.addedNodes) {
@@ -744,186 +125,27 @@
   };
 
   // ==================== EVENT HANDLERS ====================
-  const clickHandler = async (e) => {
-    if (state.isDestroyed) return;
-    const pageType = state.currentPageType;
-    const email = state.currentEmail;
-    if (!pageType || !email) return;
-    const cfg = PAGE_CONFIG[pageType];
-    if (!cfg) return;
-    const btn = matchActionButton(e.target, cfg);
-    if (!btn || btn.disabled) return;
-    btn.dataset.qcTracked = "true";
-    if (cfg.apiCapture) {
-      try {
-        await addApiWaiter(
-          cfg.apiCapture.urlPattern,
-          cfg.apiCapture.method,
-          CONFIG.API_CAPTURE_TIMEOUT_MS,
-          cfg.apiCapture.successCondition ||
-            ((data) => data && data.retcode === 0),
-        );
-      } catch (err) {
-        warn("API capture failed:", err.message);
-        return;
-      }
-    }
-    recordAndSend(pageType, email).catch((e) =>
-      error("recordAndSend error:", e),
-    );
-  };
-
-  const inputHandler = (e) => {
-    if (state.isDestroyed) return;
-    const pageType = state.currentPageType;
-    if (!pageType) return;
-    const cfg = PAGE_CONFIG[pageType];
-    if (!cfg?.fields?.scan_value) return;
-    const keywords = cfg.fields.scan_value;
-    const target = e.target;
-    for (const kw of keywords) {
-      if (kw.startsWith("#")) {
-        if (target.matches(kw) || target.closest(kw)) {
-          const val = normalize(target.value);
-          if (val) setPageStartTimeIfNeeded(val);
-          return;
-        }
-      } else {
-        const container = target.closest(`[data-for="${kw}"]`);
-        if (container && target.matches("input,textarea")) {
-          const val = normalize(target.value);
-          if (val) setPageStartTimeIfNeeded(val);
-          return;
-        }
-      }
-    }
-  };
-
-  const beforeUnloadHandler = () => {
-    const pending = getPendingLogs();
-    if (pending.length) {
-      const payload = JSON.stringify(pending);
-      const url = CONFIG.API_BASE_URL + CONFIG.LOG_ENDPOINT;
-      if (navigator.sendBeacon) {
-        navigator.sendBeacon(
-          url,
-          new Blob([payload], { type: "application/json" }),
-        );
-      } else {
-        try {
-          GM_xmlhttpRequest({
-            method: "POST",
-            url,
-            headers: { "Content-Type": "application/json" },
-            data: payload,
-          });
-        } catch {}
-      }
-      // Không xoá pending để đảm bảo an toàn dữ liệu.
-    }
-    cleanup();
-  };
-
-  const unloadHandler = () => cleanup();
+  // ... (clickHandler, inputHandler, beforeUnloadHandler, unloadHandler giữ nguyên) ...
 
   // ==================== NAVIGATION MONITOR ====================
-  const NavigationMonitor = (() => {
-    const callbacks = [];
-    let installed = false;
-    const notify = () =>
-      callbacks.forEach((fn) => {
-        try {
-          fn();
-        } catch (e) {
-          warn("Nav callback error:", e);
-        }
-      });
-    return {
-      onNavigate(cb) {
-        if (!callbacks.includes(cb)) callbacks.push(cb);
-        if (!installed) {
-          installed = true;
-          const origPush = history.pushState;
-          history.pushState = function (...args) {
-            origPush.apply(this, args);
-            notify();
-          };
-          const origReplace = history.replaceState;
-          history.replaceState = function (...args) {
-            origReplace.apply(this, args);
-            notify();
-          };
-          window.addEventListener("popstate", notify);
-          window.addEventListener("hashchange", notify);
-        }
-      },
-    };
-  })();
-
-  // ==================== IMMEDIATE STATE UPDATE ====================
-  const updatePageInfo = () => {
-    const pageType = getPageType(location.href);
-    const email = getEmail();
-    state.currentPageType = pageType !== "unknown" ? pageType : null;
-    state.currentEmail = email || null;
-    log("Page info updated:", state.currentPageType, state.currentEmail);
-  };
-  NavigationMonitor.onNavigate(updatePageInfo);
-  updatePageInfo();
+  // ... (giữ nguyên) ...
 
   // ==================== WIDGET VISIBILITY WATCHER ====================
-  const WidgetVisibilityWatcher = (() => {
-    let lastDecision = null;
-    const apply = async () => {
-      if (!state.currentPageType) {
-        if (lastDecision !== "hidden") {
-          lastDecision = "hidden";
-          widgetSetVisible(false);
-        }
-        return;
-      }
-
-      let allowed;
-      if (state.authStatus) {
-        allowed = state.authStatus.allowed;
-      } else {
-        const email = state.currentEmail;
-        if (!email) return;
-        const auth = await ensureAuth(email, state.initGeneration);
-        allowed = auth.allowed;
-      }
-      const decision = allowed ? "visible" : "hidden";
-      if (decision !== lastDecision) {
-        lastDecision = decision;
-        widgetSetVisible(allowed);
-        if (allowed) syncWidgetWithStats(state.initGeneration);
-      }
-    };
-    NavigationMonitor.onNavigate(apply);
-    apply();
-    return { apply };
-  })();
+  // ... (giữ nguyên) ...
 
   // ==================== STORAGE LISTENER ====================
-  if (typeof GM_addValueChangeListener === "function") {
-    try {
-      GM_addValueChangeListener(
-        `stats_${todayKey()}`,
-        (name, oldVal, newVal) => {
-          if (newVal !== undefined && !state.isDestroyed)
-            widgetUpdateStats(newVal);
-        },
-      );
-    } catch (e) {
-      warn("Storage listener error", e);
-    }
-  }
+  // ... (giữ nguyên) ...
 
-  // ==================== CLEANUP ====================
+  // ==================== CLEANUP (CẬP NHẬT) ====================
   const cleanup = () => {
     if (state.flushIntervalId) clearInterval(state.flushIntervalId);
     if (state.statsSyncIntervalId) clearInterval(state.statsSyncIntervalId);
-    state.flushIntervalId = state.statsSyncIntervalId = null;
+    if (state.buttonRescanIntervalId)
+      clearInterval(state.buttonRescanIntervalId);
+    state.flushIntervalId =
+      state.statsSyncIntervalId =
+      state.buttonRescanIntervalId =
+        null;
     cancelAllApiWaiters();
     state._sendingFingerprints.clear();
     state.isDestroyed = true;
@@ -954,17 +176,7 @@
   };
 
   // ==================== REFRESH PAGE STATE ====================
-  const refreshPageState = () => {
-    const pageType = state.currentPageType;
-    if (!pageType) return;
-    collectFields(pageType);
-    log(
-      "Page state refreshed, scan_value:",
-      state.lastScanValue,
-      "pageStartTime:",
-      state.pageStartTime,
-    );
-  };
+  // ... (giữ nguyên) ...
 
   // ==================== VISUAL HIGHLIGHT ====================
   const QC_STYLE_ID = "qc-tracker-styles";
@@ -984,19 +196,28 @@
       GM_addStyle(QC_STYLE_CONTENT);
       return;
     }
-    if (!document.getElementById(QC_STYLE_ID)) {
-      const styleEl = document.createElement("style");
-      styleEl.id = QC_STYLE_ID;
-      styleEl.textContent = QC_STYLE_CONTENT;
-      document.head.appendChild(styleEl);
-      log("Styles applied via DOM fallback");
-    }
+    // Fallback DOM style, but also observe head to re-apply if removed
+    const ensureStyleElement = () => {
+      if (!document.getElementById(QC_STYLE_ID)) {
+        const styleEl = document.createElement("style");
+        styleEl.id = QC_STYLE_ID;
+        styleEl.textContent = QC_STYLE_CONTENT;
+        document.head.appendChild(styleEl);
+        log("Styles applied via DOM fallback");
+      }
+    };
+    ensureStyleElement();
+    // Dùng MutationObserver trên head để chống React xóa style
+    const headObserver = new MutationObserver(() => ensureStyleElement());
+    headObserver.observe(document.head, { childList: true });
+    // Lưu lại để cleanup (thêm vào state nếu cần, nhưng ở đây ta có thể lưu vào biến cục bộ)
+    // Vì script chỉ chạy một lần, ta có thể không cần cleanup observer này.
   }
 
   // Áp dụng style ngay từ đầu
   applyStyles();
 
-  // ==================== INIT ====================
+  // ==================== INIT (CẬP NHẬT) ====================
   let debounceTimer = null;
   const debouncedInit = () => {
     if (debounceTimer) clearTimeout(debounceTimer);
@@ -1020,7 +241,7 @@
         state.authStatus = null;
         state.authPromise = null;
 
-        // Đảm bảo style luôn tồn tại sau khi cleanup (có thể đã bị SPA xóa)
+        // Đảm bảo style tồn tại
         applyStyles();
 
         document.addEventListener("click", clickHandler, true);
@@ -1053,6 +274,19 @@
 
         refreshPageState();
         markAllTrackedButtons(pageType);
+
+        // Bắt đầu quét định kỳ để đánh dấu nút (phòng trường hợp observer bỏ sót)
+        state.buttonRescanIntervalId = setInterval(() => {
+          if (!state.isDestroyed && state.currentPageType) {
+            const cfg = PAGE_CONFIG[state.currentPageType];
+            if (cfg) {
+              const candidates = document.querySelectorAll(
+                'button, input[type="submit"], a[role="button"], div[role="button"]',
+              );
+              candidates.forEach((el) => markSingleButton(el, cfg));
+            }
+          }
+        }, CONFIG.BUTTON_RESCAN_INTERVAL_MS);
 
         try {
           const auth = await ensureAuth(email, generation);

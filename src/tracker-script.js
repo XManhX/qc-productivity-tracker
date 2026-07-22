@@ -7,7 +7,7 @@
     API_BASE_URL: "__API_BASE_URL__",
     AUTH_ENDPOINT: "/api/qc-productivity/authz",
     LOG_ENDPOINT: "/api/qc-productivity/log",
-    DEBUG: true, // Nên tắt trong production để tránh lộ dữ liệu nhạy cảm
+    DEBUG: true, // Tắt trong production để tránh lộ dữ liệu nhạy cảm (email, scan_value)
     AUTH_CACHE_MS: 5 * 60 * 1000,
     AUTH_RETRY_MAX: 2,
     AUTH_RETRY_DELAY_MS: 1000,
@@ -197,7 +197,6 @@
     console.error("[QC Tracker] WidgetManager not found");
   }
 
-  // Helper an toàn để gọi WidgetManager
   const widgetSetVisible = (visible) => {
     if (widgetReady && typeof WidgetManager.setVisible === "function") {
       WidgetManager.setVisible(visible);
@@ -209,7 +208,7 @@
     }
   };
 
-  // ==================== EMAIL (có cache tối ưu) ====================
+  // ==================== EMAIL (cache tối ưu) ====================
   const getEmail = () => {
     const cached = getStore("user_email", "");
     const ts = getStore("user_email_timestamp", 0);
@@ -301,7 +300,7 @@
     return result;
   };
 
-  // ==================== API INTERCEPTOR (TỐI ƯU + CHỐNG OVERRIDE CHỒNG) ====================
+  // ==================== API INTERCEPTOR (CHỈ PARSE KHI CẦN + CHỐNG OVERRIDE) ====================
   const cancelAllApiWaiters = () => {
     const waiters = state.apiWaiters;
     while (waiters.length) {
@@ -330,7 +329,6 @@
     });
   };
 
-  // Chỉ override một lần, tránh chồng lấp khi script bị enable/disable
   if (!window.__qcFetchOverridden) {
     const originalFetch = window.fetch;
     window.fetch = function (input, init) {
@@ -600,11 +598,11 @@
         state.authPromise = null;
 
         if (auth.allowed) {
-          flushPending();
+          flushPending(); // Gửi ngay các log đang chờ
           widgetSetVisible(true);
           syncWidgetWithStats();
         } else {
-          // Chỉ xóa pending nếu lỗi không phải là do mạng (authz_error)
+          // Chỉ xóa pending nếu server thực sự từ chối (không phải lỗi mạng)
           if (auth.reason !== "authz_error") {
             clearPending();
           }
@@ -615,9 +613,9 @@
         return auth;
       })
       .catch((err) => {
+        // Lỗi bất ngờ (thường là mạng) – giữ pending, chờ cơ hội sau
         state.authStatus = { allowed: false, reason: "authz_error" };
         state.authPromise = null;
-        // Không clear pending khi lỗi bất ngờ
         widgetSetVisible(false);
         WidgetVisibilityWatcher.applyVisibility();
         throw err;
@@ -650,7 +648,7 @@
     setStore(statsKey, stats);
 
     if (state.authStatus === null) {
-      ensureAuth(userEmail);
+      ensureAuth(userEmail); // kích hoạt auth nếu chưa từng kiểm tra
     }
     if (state.authStatus?.allowed) {
       await sendRecord(record);
@@ -687,7 +685,7 @@
     return null;
   };
 
-  // ==================== BUTTON MARKING WITH MUTATION OBSERVER ====================
+  // ==================== BUTTON MARKING (TỐI ƯU MUTATIONOBSERVER) ====================
   let buttonObserver = null;
 
   const markSingleButton = (el, cfg) => {
@@ -714,6 +712,27 @@
     }
   };
 
+  // Hàm đệ quy duyệt qua node và các con để tìm button và đánh dấu
+  const processNodeForButtons = (node, cfg) => {
+    if (node.nodeType !== Node.ELEMENT_NODE) return;
+    if (
+      node.matches(
+        'button, input[type="submit"], a[role="button"], div[role="button"]',
+      )
+    ) {
+      if (!node.dataset.qcTracked) {
+        markSingleButton(node, cfg);
+      }
+    }
+    // Nếu node có chứa các button con
+    const children = node.querySelectorAll(
+      'button, input[type="submit"], a[role="button"], div[role="button"]',
+    );
+    children.forEach((child) => {
+      if (!child.dataset.qcTracked) markSingleButton(child, cfg);
+    });
+  };
+
   const markAllTrackedButtons = (pageType) => {
     const cfg = PAGE_CONFIG[pageType];
     if (!cfg) return;
@@ -723,24 +742,23 @@
       buttonObserver = null;
     }
 
+    // Quét lần đầu toàn bộ trang
     const candidates = document.querySelectorAll(
       'button, input[type="submit"], a[role="button"], div[role="button"]',
     );
     candidates.forEach((el) => markSingleButton(el, cfg));
 
+    // Nếu vẫn chưa có nút nào được đánh dấu, cài observer chỉ trên các node được thêm
     if (!document.querySelector("[data-qc-tracked]")) {
       log("No buttons found yet, setting up MutationObserver for:", pageType);
       buttonObserver = new MutationObserver((mutations) => {
-        const newCandidates = document.querySelectorAll(
-          'button, input[type="submit"], a[role="button"], div[role="button"]',
-        );
         let found = false;
-        newCandidates.forEach((el) => {
-          if (!el.dataset.qcTracked) {
-            markSingleButton(el, cfg);
-            if (el.dataset.qcTracked) found = true;
+        for (const mutation of mutations) {
+          for (const node of mutation.addedNodes) {
+            processNodeForButtons(node, cfg);
+            if (node.querySelector?.("[data-qc-tracked]")) found = true;
           }
-        });
+        }
         if (found) {
           log("Buttons found, disconnecting observer");
           buttonObserver.disconnect();
@@ -1000,7 +1018,6 @@
             await flushPending();
           } else {
             warn("User not authorized:", auth.reason);
-            // ensureAuth đã xử lý widget visibility và clear pending nếu cần
           }
         } catch (e) {
           error("Auth failed:", e);
@@ -1044,7 +1061,7 @@
     .then(() => log("Tracker started"))
     .catch((e) => error("Startup error:", e));
 
-  // ==================== VISUAL HIGHLIGHT (FALLBACK) ====================
+  // ==================== VISUAL HIGHLIGHT ====================
   (function applyStyle(css) {
     if (typeof GM_addStyle !== "undefined") {
       GM_addStyle(css);

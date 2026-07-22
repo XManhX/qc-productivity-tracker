@@ -47,7 +47,7 @@
       unload: null,
     },
     _sendingFingerprints: new Set(),
-    initGeneration: 0, // tăng dần mỗi lần init
+    initGeneration: 0,
   };
 
   // ==================== UTILITIES ====================
@@ -468,19 +468,12 @@
   };
 
   const flushPending = async (generation) => {
-    if (generation !== undefined && generation !== state.initGeneration) {
-      log("flushPending cancelled (old generation)");
-      return;
-    }
+    if (generation !== undefined && generation !== state.initGeneration) return;
     let pending = getPendingLogs();
     if (!pending.length) return;
-    log(`Flushing ${pending.length} pending logs`);
     for (let i = 0; i < pending.length; i++) {
-      // Kiểm tra lại generation mỗi vòng lặp để thoát sớm nếu có re‑init
-      if (generation !== undefined && generation !== state.initGeneration) {
-        log("flushPending interrupted by new init");
+      if (generation !== undefined && generation !== state.initGeneration)
         break;
-      }
       const record = pending[i];
       const sent = await sendRecord(record);
       if (sent) {
@@ -523,17 +516,13 @@
 
   const syncWidgetWithStats = async (generation) => {
     if (state.isDestroyed) return;
-    if (generation !== undefined && generation !== state.initGeneration) {
-      log("syncWidgetWithStats cancelled (old generation)");
-      return;
-    }
+    if (generation !== undefined && generation !== state.initGeneration) return;
     if (state.statsPromise) return state.statsPromise;
     if (Date.now() - state.lastStatsSyncTime < CONFIG.STATS_THROTTLE_MS) return;
 
     state.statsPromise = (async () => {
       try {
         const serverStats = await fetchStatsFromServer();
-        // Kiểm tra lại generation sau khi fetch
         if (generation !== undefined && generation !== state.initGeneration)
           return;
         if (state.isDestroyed) return;
@@ -589,48 +578,30 @@
   };
 
   const ensureAuth = async (email, generation) => {
-    // Nếu đã có promise đang chạy nhưng khác generation thì hủy bỏ bằng cách tạo promise mới?
-    // Thực tế, ta sẽ không reuse state.authPromise nếu generation khác, nhưng để đơn giản,
-    // mỗi lần gọi ensureAuth với generation mới sẽ thay thế promise cũ.
-    if (
-      state.authPromise &&
-      generation !== undefined &&
-      generation !== state.initGeneration
-    ) {
-      // Hủy promise cũ bằng cách cho phép tạo mới
-    }
+    // Nếu có promise cũ và generation đã thay đổi, ta vẫn tạo promise mới,
+    // nhưng không cần thiết phải quản lý phức tạp vì apply đã kiểm tra generation.
     state.authPromise = (async () => {
       try {
         const auth = await checkAuth(email);
-        // Kiểm tra generation sau khi auth xong
         if (generation !== undefined && generation !== state.initGeneration) {
-          log("ensureAuth result ignored (old generation)");
-          return auth; // vẫn trả về nhưng không cập nhật state
+          return auth;
         }
-        const prevAllowed = state.authStatus?.allowed;
         state.authStatus = auth;
         state.authPromise = null;
+        WidgetVisibilityWatcher.apply(); // ← gọi tập trung
 
         if (auth.allowed) {
-          widgetSetVisible(true);
-          // syncWidgetWithStats nên được gọi với generation hiện tại để tránh conflict
           syncWidgetWithStats(generation);
         } else {
           if (auth.reason !== "authz_error") clearPending();
-          widgetSetVisible(false);
-        }
-        if (prevAllowed !== auth.allowed) {
-          WidgetVisibilityWatcher.apply();
         }
         return auth;
       } catch (err) {
         if (generation !== undefined && generation !== state.initGeneration) {
-          // bỏ qua lỗi
           return { allowed: false, reason: "authz_error" };
         }
         state.authStatus = { allowed: false, reason: "authz_error" };
         state.authPromise = null;
-        widgetSetVisible(false);
         WidgetVisibilityWatcher.apply();
         throw err;
       }
@@ -663,7 +634,6 @@
     setStore(statsKey, stats);
 
     if (state.authStatus === null) {
-      // Gọi ensureAuth với generation hiện tại
       ensureAuth(userEmail, state.initGeneration);
     }
     if (state.authStatus?.allowed) {
@@ -671,7 +641,6 @@
       if (sent) {
         removeFromPendingById(record.id);
       }
-      // sync sau khi gửi, dùng generation hiện tại
       syncWidgetWithStats(state.initGeneration);
     } else {
       log("Record queued, waiting for auth");
@@ -907,9 +876,19 @@
   const WidgetVisibilityWatcher = (() => {
     let lastDecision = null;
     const apply = async () => {
+      // Nếu không ở trang QC → luôn ẩn widget
+      if (!state.currentPageType) {
+        if (lastDecision !== "hidden") {
+          lastDecision = "hidden";
+          widgetSetVisible(false);
+        }
+        return;
+      }
+
       let allowed;
-      if (state.authStatus) allowed = state.authStatus.allowed;
-      else {
+      if (state.authStatus) {
+        allowed = state.authStatus.allowed;
+      } else {
         const email = state.currentEmail;
         if (!email) return;
         const auth = await ensureAuth(email, state.initGeneration);
@@ -956,7 +935,7 @@
       buttonObserver = null;
     }
 
-    widgetSetVisible(false); // dừng guard, xóa widget
+    widgetSetVisible(false);
 
     if (state._listeners.click) {
       document.removeEventListener("click", state._listeners.click, true);
@@ -1001,13 +980,12 @@
       state.pendingReinitUrl = location.href;
       return state.initPromise;
     }
-    // Tăng generation, tạo snapshot
     const generation = ++state.initGeneration;
     state.initPromise = (async () => {
       try {
         log("Init for:", location.href, "generation:", generation);
         state.pendingReinitUrl = null;
-        cleanup(); // dọn dẹp phiên cũ, bao gồm widget
+        cleanup();
         state.isDestroyed = false;
         state.pageStartTime = null;
         state.lastScanValue = null;
@@ -1029,7 +1007,7 @@
         if (pageType === "unknown") {
           state.currentPageType = null;
           state.currentEmail = null;
-          widgetSetVisible(false);
+          widgetSetVisible(false); // dự phòng
           return;
         }
         state.currentPageType = pageType;
@@ -1047,11 +1025,7 @@
 
         try {
           const auth = await ensureAuth(email, generation);
-          // Kiểm tra lại generation trước khi flush
-          if (generation !== state.initGeneration) {
-            log("Init auth result ignored, generation changed");
-            return;
-          }
+          if (generation !== state.initGeneration) return;
           if (auth.allowed) {
             log("Authorization successful");
             await flushPending(generation);
@@ -1063,11 +1037,10 @@
           error("Auth failed:", e);
         }
 
-        if (generation !== state.initGeneration) return; // dừng nếu có init mới hơn
+        if (generation !== state.initGeneration) return;
 
         state.flushIntervalId = setInterval(() => {
           if (!state.isDestroyed && state.authStatus?.allowed) {
-            // Dùng generation hiện tại để flush
             flushPending(state.initGeneration).catch(warn);
           }
         }, CONFIG.FLUSH_INTERVAL_MS);

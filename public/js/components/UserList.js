@@ -8,7 +8,6 @@ export class UserList {
     this.container = container;
     this._render();
     this._bindEvents();
-
     this.pagination = new Pagination(
       this.container.querySelector("#pagination-wrapper"),
       userStore,
@@ -18,7 +17,6 @@ export class UserList {
         windowSize: 5,
       },
     );
-
     userStore.on("update", () => {
       this._updateView();
       this.pagination.refresh({
@@ -27,7 +25,6 @@ export class UserList {
         totalItems: userStore.totalFiltered,
       });
     });
-
     this._updateView();
   }
 
@@ -111,7 +108,6 @@ export class UserList {
     this.container.querySelector("#summary-active").textContent = active;
     this.container.querySelector("#summary-inactive").textContent =
       total - active;
-
     const badge = this.container.querySelector("#user-count-badge");
     const filtered = userStore.filteredUsers;
     if (badge) {
@@ -127,11 +123,9 @@ export class UserList {
   _renderTable() {
     const tbody = this.container.querySelector("#user-list-body");
     if (!tbody) return;
-
     const { loading, error, users, roles } = userStore.state;
     const pagedUsers = userStore.pagedUsers;
     const filteredUsers = userStore.filteredUsers;
-
     if (loading) {
       tbody.innerHTML = `<tr><td colspan="5" class="py-12 text-center text-slate-400"><div class="loading-spinner w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full mx-auto"></div><span>Đang tải...</span></td></tr>`;
       return;
@@ -148,7 +142,6 @@ export class UserList {
       tbody.innerHTML = `<tr><td colspan="5" class="py-14 text-center text-slate-400"><i data-lucide="search-x" class="w-8 h-8 mx-auto"></i><p class="font-semibold mt-2">Không tìm thấy nhân sự</p><p class="text-sm">Thử lại với bộ lọc khác.</p></td></tr>`;
       return;
     }
-
     tbody.innerHTML = pagedUsers
       .map((user) => {
         const isActive = user.is_active !== false;

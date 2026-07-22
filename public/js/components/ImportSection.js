@@ -8,7 +8,6 @@ export class ImportSection {
     this.importedRows = [];
     this._render();
     this._bindEvents();
-    // Chỉ cần cập nhật dropdown cho bulk add (vẫn giữ role mặc định cho bulk)
     userStore.on("update", () => this._updateBulkRoleDropdown());
   }
 
@@ -32,7 +31,6 @@ export class ImportSection {
           <button id="import-file-btn" class="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-sm py-2.5 rounded-xl transition shadow-sm">Chọn File</button>
           <button id="download-template-btn" class="px-3 py-2.5 border border-slate-200 hover:bg-slate-100 text-slate-600 rounded-xl text-xs font-semibold transition">Tải Mẫu CSV</button>
         </div>
-        <!-- Đã xóa phần chọn Role mặc định cho import -->
         <div id="import-preview" class="hidden mt-4 border border-slate-200 rounded-xl overflow-hidden">
           <div class="flex items-center justify-between px-4 py-3 bg-slate-50 border-b border-slate-200">
             <div>
@@ -48,7 +46,7 @@ export class ImportSection {
             </table>
           </div>
         </div>
-        <!-- Bulk Add (giữ nguyên, vẫn có chọn role mặc định) -->
+        <!-- Bulk Add -->
         <div class="mt-6 border-t border-slate-100 pt-6">
           <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Thêm Hàng Loạt (Bulk Add)</h3>
           <p class="text-slate-400 text-xs mb-3">Copy và dán danh sách Email vào bên dưới (các email phân cách nhau bởi dấu phẩy, dấu cách hoặc xuống dòng).</p>
@@ -67,7 +65,6 @@ export class ImportSection {
     this._updateBulkRoleDropdown();
   }
 
-  // Chỉ cập nhật dropdown cho bulk add
   _updateBulkRoleDropdown() {
     const select = this.container.querySelector("#bulk-role");
     if (!select) return;
@@ -89,7 +86,6 @@ export class ImportSection {
     this.container
       .querySelector("#download-template-btn")
       .addEventListener("click", () => {
-        // Mẫu CSV có cột role_key bắt buộc
         const csv =
           "Họ và tên,Email,role_key\nNguyễn Văn A,nguyenvana@shopee.com,qc_rr\nTrần Thị B,tranthib@shopee.com,qc_cb";
         const blob = new Blob([csv], { type: "text/csv" });
@@ -155,7 +151,6 @@ export class ImportSection {
     else reader.readAsArrayBuffer(file);
   }
 
-  // Chỉ giữ lại các dòng có email VÀ role_key không rỗng
   _buildImportRows(data) {
     if (!Array.isArray(data)) return [];
     return data
@@ -176,7 +171,7 @@ export class ImportSection {
           role_key,
         };
       })
-      .filter((r) => r.email && r.role_key); // Bắt buộc có email và role_key
+      .filter((r) => r.email && r.role_key);
   }
 
   _renderImportPreview() {
@@ -205,16 +200,12 @@ export class ImportSection {
 
   async _importPreparedRows() {
     if (!this.importedRows.length) return;
-
-    // Tất cả các dòng đã có role_key, không cần default
     const payload = this.importedRows.map((r) => ({
       email: r.email,
       name: r.name,
       role_key: r.role_key,
     }));
-
     if (!confirm(`Import ${payload.length} nhân sự?`)) return;
-
     const btn = this.container.querySelector("#import-submit-btn");
     btn.disabled = true;
     btn.textContent = "Đang import...";

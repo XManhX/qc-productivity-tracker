@@ -14,7 +14,7 @@ export class UserList {
       this.container.querySelector("#pagination-wrapper"),
       userStore,
       {
-        showPageSizeDropdown: false,
+        showPageSizeDropdown: true,
         pageSizeOptions: [10, 25, 50, 100],
         windowSize: 5,
       },

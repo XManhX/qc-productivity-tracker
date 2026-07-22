@@ -396,7 +396,7 @@
     const id = Date.now() + "_" + Math.random().toString(36).substr(2, 9);
     return {
       id,
-      idempotency_key: id, // thêm key trùng lặp
+      idempotency_key: id,
       version: CONFIG.VERSION,
       page: pageType,
       action: normalize(cfg.actionText || ""),
@@ -580,8 +580,6 @@
   };
 
   const ensureAuth = async (email, generation) => {
-    // Nếu có promise cũ và generation đã thay đổi, ta vẫn tạo promise mới,
-    // nhưng không cần thiết phải quản lý phức tạp vì apply đã kiểm tra generation.
     state.authPromise = (async () => {
       try {
         const auth = await checkAuth(email);
@@ -590,7 +588,7 @@
         }
         state.authStatus = auth;
         state.authPromise = null;
-        WidgetVisibilityWatcher.apply(); // ← gọi tập trung
+        WidgetVisibilityWatcher.apply();
 
         if (auth.allowed) {
           syncWidgetWithStats(generation);
@@ -807,14 +805,12 @@
     if (pending.length) {
       const payload = JSON.stringify(pending);
       const url = CONFIG.API_BASE_URL + CONFIG.LOG_ENDPOINT;
-      // Thử gửi qua beacon (fire-and-forget)
       if (navigator.sendBeacon) {
         navigator.sendBeacon(
           url,
           new Blob([payload], { type: "application/json" }),
         );
       } else {
-        // Nếu không có beacon, dùng GM_xmlhttpRequest đồng bộ (không chờ)
         try {
           GM_xmlhttpRequest({
             method: "POST",
@@ -822,10 +818,9 @@
             headers: { "Content-Type": "application/json" },
             data: payload,
           });
-        } catch (e) {}
+        } catch {}
       }
-      // QUAN TRỌNG: không xóa pending logs. Chúng sẽ được gửi lại vào lần sau.
-      // (không gọi setPendingLogs([]))
+      // Không xóa pending logs để đảm bảo an toàn dữ liệu.
     }
     cleanup();
   };
@@ -881,7 +876,6 @@
   const WidgetVisibilityWatcher = (() => {
     let lastDecision = null;
     const apply = async () => {
-      // Nếu không ở trang QC → luôn ẩn widget
       if (!state.currentPageType) {
         if (lastDecision !== "hidden") {
           lastDecision = "hidden";
@@ -973,6 +967,36 @@
     );
   };
 
+  // ==================== VISUAL HIGHLIGHT ====================
+  const QC_STYLE_ID = "qc-tracker-styles";
+  const QC_STYLE_CONTENT = `
+    [data-qc-tracked="true"]:not([data-qc-disabled]) {
+      outline: 2px solid #EE4D2D !important;
+      outline-offset: 2px;
+    }
+    [data-qc-disabled="true"] {
+      outline: 2px solid #999999 !important;
+      outline-offset: 2px;
+    }
+  `;
+
+  function applyStyles() {
+    if (typeof GM_addStyle !== "undefined") {
+      GM_addStyle(QC_STYLE_CONTENT);
+      return;
+    }
+    if (!document.getElementById(QC_STYLE_ID)) {
+      const styleEl = document.createElement("style");
+      styleEl.id = QC_STYLE_ID;
+      styleEl.textContent = QC_STYLE_CONTENT;
+      document.head.appendChild(styleEl);
+      log("Styles applied via DOM fallback");
+    }
+  }
+
+  // Áp dụng style ngay từ đầu
+  applyStyles();
+
   // ==================== INIT ====================
   let debounceTimer = null;
   const debouncedInit = () => {
@@ -997,6 +1021,9 @@
         state.authStatus = null;
         state.authPromise = null;
 
+        // Đảm bảo style luôn tồn tại sau khi cleanup (có thể đã bị SPA xóa)
+        applyStyles();
+
         document.addEventListener("click", clickHandler, true);
         document.addEventListener("input", inputHandler, true);
         window.addEventListener("beforeunload", beforeUnloadHandler);
@@ -1012,7 +1039,7 @@
         if (pageType === "unknown") {
           state.currentPageType = null;
           state.currentEmail = null;
-          widgetSetVisible(false); // dự phòng
+          widgetSetVisible(false);
           return;
         }
         state.currentPageType = pageType;
@@ -1084,22 +1111,4 @@
   init()
     .then(() => log("Tracker started"))
     .catch((e) => error("Startup error:", e));
-
-  // ==================== VISUAL HIGHLIGHT ====================
-  const style = `
-    [data-qc-tracked="true"]:not([data-qc-disabled]) {
-      outline: 2px solid #EE4D2D !important;
-      outline-offset: 2px;
-    }
-    [data-qc-disabled="true"] {
-      outline: 2px solid #999999 !important;
-      outline-offset: 2px;
-    }
-  `;
-  if (typeof GM_addStyle !== "undefined") GM_addStyle(style);
-  else {
-    const styleEl = document.createElement("style");
-    styleEl.textContent = style;
-    document.head.appendChild(styleEl);
-  }
 })();

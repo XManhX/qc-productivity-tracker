@@ -981,6 +981,7 @@
     if (state.statsSyncIntervalId) clearInterval(state.statsSyncIntervalId);
     state.flushIntervalId = state.statsSyncIntervalId = null;
     cancelAllApiWaiters();
+    state._sendingFingerprints.clear();
     state.isDestroyed = true;
 
     if (buttonObserver) {

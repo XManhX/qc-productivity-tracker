@@ -147,24 +147,18 @@ export default async function handler(req, res) {
       };
     });
 
-    // ---------- 4. Lấy logs và tổng hợp ----------
-    const startOfDay = `${targetDate}T00:00:00+07:00`;
-    const endOfDay = `${targetDate}T23:59:59+07:00`;
-
-    const { data: logs, error: logsError } = await supabase
-      .from("qc_logs")
-      .select("operator, created_at")
-      .eq("page", "qc")
-      .gte("created_at", startOfDay)
-      .lte("created_at", endOfDay)
-      .in("operator", [...userMap.keys()]);
-
-    if (logsError) throw logsError;
-
-    // Tổng hợp theo giờ (dùng Map để nhanh)
-    const report = new Map();
+    // ---------- 4. Gọi function tính toán trực tiếp trên DB ----------
+    const { data: stats, error: statsError } = await supabase.rpc(
+      "get_dashboard_stats",
+      {
+        target_date: targetDate,
+        user_emails: [...userMap.keys()],
+      },
+    );
+    if (statsError) throw statsError;
 
     // Khởi tạo báo cáo cho mọi user (kể cả không có log)
+    const report = new Map();
     for (const [email, info] of userMap) {
       const targets = targetMap[info.role_key] || {
         low_threshold: 10,
@@ -179,18 +173,19 @@ export default async function handler(req, res) {
       });
     }
 
-    // Điền dữ liệu từ logs
-    for (const log of logs) {
-      const email = log.operator;
-      if (!userMap.has(email)) continue;
-      const vnDate = new Date(
-        new Date(log.created_at).getTime() + 7 * 60 * 60 * 1000,
-      );
-      const hour = vnDate.getUTCHours();
-      const entry = report.get(email);
-      entry.total += 1;
-      entry.hourly[hour] += 1;
-    }
+    // Điền dữ liệu từ kết quả function
+    (stats || []).forEach((row) => {
+      const entry = report.get(row.email);
+      if (entry) {
+        entry.total = row.total;
+        if (row.hourly) {
+          Object.entries(row.hourly).forEach(([hour, count]) => {
+            const h = parseInt(hour, 10);
+            if (h >= 0 && h < 24) entry.hourly[h] = count;
+          });
+        }
+      }
+    });
 
     let results = Array.from(report.values());
 

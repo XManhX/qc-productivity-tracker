@@ -18,7 +18,6 @@
     STATS_SYNC_INTERVAL_MS: 30000,
     API_CAPTURE_TIMEOUT_MS: 15000,
     STATS_THROTTLE_MS: 5000,
-    BUTTON_RESCAN_INTERVAL_MS: 2000,
   };
 
   // ==================== PAGE CONFIG ====================
@@ -32,7 +31,6 @@
     initPromise: null,
     flushIntervalId: null,
     statsSyncIntervalId: null,
-    buttonRescanIntervalId: null,
     isDestroyed: false,
     pendingReinitUrl: null,
     authStatus: null,
@@ -398,7 +396,7 @@
     const id = Date.now() + "_" + Math.random().toString(36).substr(2, 9);
     return {
       id,
-      idempotency_key: id,
+      idempotency_key: id, // thêm key trùng lặp
       version: CONFIG.VERSION,
       page: pageType,
       action: normalize(cfg.actionText || ""),
@@ -582,6 +580,8 @@
   };
 
   const ensureAuth = async (email, generation) => {
+    // Nếu có promise cũ và generation đã thay đổi, ta vẫn tạo promise mới,
+    // nhưng không cần thiết phải quản lý phức tạp vì apply đã kiểm tra generation.
     state.authPromise = (async () => {
       try {
         const auth = await checkAuth(email);
@@ -590,7 +590,7 @@
         }
         state.authStatus = auth;
         state.authPromise = null;
-        WidgetVisibilityWatcher.apply();
+        WidgetVisibilityWatcher.apply(); // ← gọi tập trung
 
         if (auth.allowed) {
           syncWidgetWithStats(generation);
@@ -720,26 +720,30 @@
   const markAllTrackedButtons = (pageType) => {
     const cfg = PAGE_CONFIG[pageType];
     if (!cfg) return;
-
     if (buttonObserver) {
       buttonObserver.disconnect();
       buttonObserver = null;
     }
-
     const candidates = document.querySelectorAll(
       'button, input[type="submit"], a[role="button"], div[role="button"]',
     );
     candidates.forEach((el) => markSingleButton(el, cfg));
-
-    buttonObserver = new MutationObserver((mutations) => {
-      for (const mut of mutations) {
-        for (const node of mut.addedNodes) {
-          processNodeForButtons(node, cfg);
+    if (!document.querySelector("[data-qc-tracked]")) {
+      buttonObserver = new MutationObserver((mutations) => {
+        let found = false;
+        for (const mut of mutations) {
+          for (const node of mut.addedNodes) {
+            processNodeForButtons(node, cfg);
+            if (node.querySelector?.("[data-qc-tracked]")) found = true;
+          }
         }
-      }
-    });
-    buttonObserver.observe(document.body, { childList: true, subtree: true });
-    log("Button observer started for page:", pageType);
+        if (found) {
+          buttonObserver.disconnect();
+          buttonObserver = null;
+        }
+      });
+      buttonObserver.observe(document.body, { childList: true, subtree: true });
+    }
   };
 
   // ==================== EVENT HANDLERS ====================
@@ -803,12 +807,14 @@
     if (pending.length) {
       const payload = JSON.stringify(pending);
       const url = CONFIG.API_BASE_URL + CONFIG.LOG_ENDPOINT;
+      // Thử gửi qua beacon (fire-and-forget)
       if (navigator.sendBeacon) {
         navigator.sendBeacon(
           url,
           new Blob([payload], { type: "application/json" }),
         );
       } else {
+        // Nếu không có beacon, dùng GM_xmlhttpRequest đồng bộ (không chờ)
         try {
           GM_xmlhttpRequest({
             method: "POST",
@@ -816,8 +822,10 @@
             headers: { "Content-Type": "application/json" },
             data: payload,
           });
-        } catch {}
+        } catch (e) {}
       }
+      // QUAN TRỌNG: không xóa pending logs. Chúng sẽ được gửi lại vào lần sau.
+      // (không gọi setPendingLogs([]))
     }
     cleanup();
   };
@@ -873,6 +881,7 @@
   const WidgetVisibilityWatcher = (() => {
     let lastDecision = null;
     const apply = async () => {
+      // Nếu không ở trang QC → luôn ẩn widget
       if (!state.currentPageType) {
         if (lastDecision !== "hidden") {
           lastDecision = "hidden";
@@ -921,12 +930,7 @@
   const cleanup = () => {
     if (state.flushIntervalId) clearInterval(state.flushIntervalId);
     if (state.statsSyncIntervalId) clearInterval(state.statsSyncIntervalId);
-    if (state.buttonRescanIntervalId)
-      clearInterval(state.buttonRescanIntervalId);
-    state.flushIntervalId =
-      state.statsSyncIntervalId =
-      state.buttonRescanIntervalId =
-        null;
+    state.flushIntervalId = state.statsSyncIntervalId = null;
     cancelAllApiWaiters();
     state._sendingFingerprints.clear();
     state.isDestroyed = true;
@@ -969,50 +973,6 @@
     );
   };
 
-  // ==================== VISUAL HIGHLIGHT (CHỐNG XÓA STYLE) ====================
-  const QC_STYLE_ID = "qc-tracker-styles";
-  const QC_STYLE_CONTENT = `
-    [data-qc-tracked="true"]:not([data-qc-disabled]) {
-      outline: 2px solid #EE4D2D !important;
-      outline-offset: 2px;
-    }
-    [data-qc-disabled="true"] {
-      outline: 2px solid #999999 !important;
-      outline-offset: 2px;
-    }
-  `;
-
-  let styleObserver = null;
-
-  function applyStyles() {
-    // Ưu tiên GM_addStyle (an toàn nhất)
-    if (typeof GM_addStyle !== "undefined") {
-      GM_addStyle(QC_STYLE_CONTENT);
-      return;
-    }
-
-    // Fallback: dùng DOM style và theo dõi head để chống xóa
-    const ensureStyleElement = () => {
-      if (!document.getElementById(QC_STYLE_ID)) {
-        const styleEl = document.createElement("style");
-        styleEl.id = QC_STYLE_ID;
-        styleEl.textContent = QC_STYLE_CONTENT;
-        document.head.appendChild(styleEl);
-        log("Styles applied via DOM fallback");
-      }
-    };
-    ensureStyleElement();
-
-    // Nếu chưa có observer thì tạo mới để giám sát head
-    if (!styleObserver) {
-      styleObserver = new MutationObserver(() => ensureStyleElement());
-      styleObserver.observe(document.head, { childList: true });
-    }
-  }
-
-  // Gọi ngay từ đầu
-  applyStyles();
-
   // ==================== INIT ====================
   let debounceTimer = null;
   const debouncedInit = () => {
@@ -1037,9 +997,6 @@
         state.authStatus = null;
         state.authPromise = null;
 
-        // Đảm bảo style luôn tồn tại sau cleanup
-        applyStyles();
-
         document.addEventListener("click", clickHandler, true);
         document.addEventListener("input", inputHandler, true);
         window.addEventListener("beforeunload", beforeUnloadHandler);
@@ -1055,7 +1012,7 @@
         if (pageType === "unknown") {
           state.currentPageType = null;
           state.currentEmail = null;
-          widgetSetVisible(false);
+          widgetSetVisible(false); // dự phòng
           return;
         }
         state.currentPageType = pageType;
@@ -1070,19 +1027,6 @@
 
         refreshPageState();
         markAllTrackedButtons(pageType);
-
-        // Bắt đầu quét định kỳ để đảm bảo mọi nút đều được đánh dấu
-        state.buttonRescanIntervalId = setInterval(() => {
-          if (!state.isDestroyed && state.currentPageType) {
-            const cfg = PAGE_CONFIG[state.currentPageType];
-            if (cfg) {
-              const candidates = document.querySelectorAll(
-                'button, input[type="submit"], a[role="button"], div[role="button"]',
-              );
-              candidates.forEach((el) => markSingleButton(el, cfg));
-            }
-          }
-        }, CONFIG.BUTTON_RESCAN_INTERVAL_MS);
 
         try {
           const auth = await ensureAuth(email, generation);
@@ -1140,4 +1084,22 @@
   init()
     .then(() => log("Tracker started"))
     .catch((e) => error("Startup error:", e));
+
+  // ==================== VISUAL HIGHLIGHT ====================
+  const style = `
+    [data-qc-tracked="true"]:not([data-qc-disabled]) {
+      outline: 2px solid #EE4D2D !important;
+      outline-offset: 2px;
+    }
+    [data-qc-disabled="true"] {
+      outline: 2px solid #999999 !important;
+      outline-offset: 2px;
+    }
+  `;
+  if (typeof GM_addStyle !== "undefined") GM_addStyle(style);
+  else {
+    const styleEl = document.createElement("style");
+    styleEl.textContent = style;
+    document.head.appendChild(styleEl);
+  }
 })();

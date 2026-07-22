@@ -84,11 +84,14 @@ class DashboardStore {
       this.state.filters.date = today; // mặc định là hôm nay
     }
 
-    // --- Chuỗi tìm kiếm ---
+    // --- Role filter ---
     this.state.filters.role =
       typeof rawFilters.role === "string" ? rawFilters.role.trim() : "";
+
+    // --- Query string (tên/email) ---
     this.state.filters.q =
       typeof rawFilters.q === "string" ? rawFilters.q.trim() : "";
+
     this.state.filters.minTotal =
       typeof rawFilters.minTotal === "string" ? rawFilters.minTotal : "";
 
@@ -213,6 +216,10 @@ class DashboardStore {
 
   // ========== State Modifiers ==========
   setFilters(partial) {
+    // Chuẩn hóa các giá trị string để loại bỏ khoảng trắng thừa
+    if (typeof partial.q === "string") partial.q = partial.q.trim();
+    if (typeof partial.role === "string") partial.role = partial.role.trim();
+
     // Loại bỏ các key có giá trị undefined (nếu có)
     Object.keys(partial).forEach((key) => {
       if (partial[key] === undefined) delete partial[key];

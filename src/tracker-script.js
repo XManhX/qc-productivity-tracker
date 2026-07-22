@@ -33,8 +33,8 @@
     statsSyncIntervalId: null,
     isDestroyed: false,
     pendingReinitUrl: null,
-    authStatus: null, // { allowed, reason, widget_visible }
-    authPromise: null, // Promise đang chạy hoặc đã resolve
+    authStatus: null,
+    authPromise: null,
     currentPageType: null,
     currentEmail: null,
     apiWaiters: [],
@@ -188,17 +188,29 @@
 
   // ==================== WIDGET ====================
   // __WIDGET_CODE__
-
   // BẢO MẬT: WidgetManager phải dùng textContent (không innerHTML) khi hiển thị dữ liệu từ API.
-  if (typeof WidgetManager !== "undefined" && WidgetManager.init) {
+  const widgetReady =
+    typeof WidgetManager !== "undefined" && WidgetManager.init;
+  if (widgetReady) {
     WidgetManager.init(getStore, setStore);
   } else {
     console.error("[QC Tracker] WidgetManager not found");
   }
 
+  // Helper an toàn để gọi WidgetManager
+  const widgetSetVisible = (visible) => {
+    if (widgetReady && typeof WidgetManager.setVisible === "function") {
+      WidgetManager.setVisible(visible);
+    }
+  };
+  const widgetUpdateStats = (stats) => {
+    if (widgetReady && typeof WidgetManager.updateStats === "function") {
+      WidgetManager.updateStats(stats);
+    }
+  };
+
   // ==================== EMAIL (có cache tối ưu) ====================
   const getEmail = () => {
-    // Nếu đã có email hợp lệ và còn trong thời gian cache, trả về ngay
     const cached = getStore("user_email", "");
     const ts = getStore("user_email_timestamp", 0);
     if (
@@ -209,7 +221,6 @@
       return cached;
     }
 
-    // Nếu không, quét storage (chỉ làm khi cần)
     try {
       const keys = [
         "user_email",
@@ -238,7 +249,6 @@
     } catch (e) {
       warn("Error reading storage:", e);
     }
-    // Trả về cached cũ nếu có (dù hết hạn) để tránh mất email đột ngột
     return cached || "";
   };
 
@@ -291,7 +301,7 @@
     return result;
   };
 
-  // ==================== API INTERCEPTOR (TỐI ƯU: CHỈ PARSE KHI CẦN) ====================
+  // ==================== API INTERCEPTOR (TỐI ƯU + CHỐNG OVERRIDE CHỒNG) ====================
   const cancelAllApiWaiters = () => {
     const waiters = state.apiWaiters;
     while (waiters.length) {
@@ -303,106 +313,109 @@
 
   const addApiWaiter = (urlPattern, method, timeoutMs, successCondition) => {
     return new Promise((resolve, reject) => {
-      const timeoutId = setTimeout(() => {
-        const idx = state.apiWaiters.indexOf(waiter);
-        if (idx > -1) state.apiWaiters.splice(idx, 1);
-        reject(new Error("API capture timeout"));
-      }, timeoutMs);
       const waiter = {
         urlPattern,
         method,
         resolve,
         reject,
-        timeoutId,
+        timeoutId: null,
         successCondition,
       };
+      waiter.timeoutId = setTimeout(() => {
+        const idx = state.apiWaiters.indexOf(waiter);
+        if (idx > -1) state.apiWaiters.splice(idx, 1);
+        reject(new Error("API capture timeout"));
+      }, timeoutMs);
       state.apiWaiters.push(waiter);
     });
   };
 
-  // Override fetch – chỉ parse JSON khi có waiter phù hợp
-  const originalFetch = window.fetch;
-  window.fetch = function (input, init) {
-    const url =
-      typeof input === "string"
-        ? input
-        : input instanceof Request
-          ? input.url
-          : "";
-    const method = (
-      init?.method || (input instanceof Request ? input.method : "GET")
-    ).toUpperCase();
+  // Chỉ override một lần, tránh chồng lấp khi script bị enable/disable
+  if (!window.__qcFetchOverridden) {
+    const originalFetch = window.fetch;
+    window.fetch = function (input, init) {
+      const url =
+        typeof input === "string"
+          ? input
+          : input instanceof Request
+            ? input.url
+            : "";
+      const method = (
+        init?.method || (input instanceof Request ? input.method : "GET")
+      ).toUpperCase();
 
-    // Kiểm tra nhanh: có waiter nào quan tâm đến URL này không
-    const interestedWaiters = state.apiWaiters.filter(
-      (w) => url.includes(w.urlPattern) && method === w.method,
-    );
+      const interestedWaiters = state.apiWaiters.filter(
+        (w) => url.includes(w.urlPattern) && method === w.method,
+      );
 
-    const fetchPromise = originalFetch.call(this, input, init);
+      const fetchPromise = originalFetch.call(this, input, init);
 
-    if (interestedWaiters.length > 0) {
-      fetchPromise
-        .then((response) => {
-          if (!response.ok) return;
-          response
-            .clone()
-            .json()
-            .then((data) => {
-              for (let i = interestedWaiters.length - 1; i >= 0; i--) {
-                const w = interestedWaiters[i];
+      if (interestedWaiters.length > 0) {
+        fetchPromise
+          .then((response) => {
+            if (!response.ok) return;
+            response
+              .clone()
+              .json()
+              .then((data) => {
+                for (let i = interestedWaiters.length - 1; i >= 0; i--) {
+                  const w = interestedWaiters[i];
+                  clearTimeout(w.timeoutId);
+                  if (w.successCondition(data)) w.resolve(data);
+                  else w.reject(new Error("API failed condition"));
+                  const idx = state.apiWaiters.indexOf(w);
+                  if (idx > -1) state.apiWaiters.splice(idx, 1);
+                }
+              })
+              .catch(() => {});
+          })
+          .catch(() => {});
+      }
+      return fetchPromise;
+    };
+    window.__qcFetchOverridden = true;
+  }
+
+  if (!window.__qcXHROverridden) {
+    const XHRProto = XMLHttpRequest.prototype;
+    const originalOpen = XHRProto.open;
+    const originalSend = XHRProto.send;
+    XHRProto.open = function (method, url, ...rest) {
+      this._qcMethod = method.toUpperCase();
+      this._qcUrl = url;
+      return originalOpen.call(this, method, url, ...rest);
+    };
+    XHRProto.send = function (body) {
+      const xhr = this;
+      const originalReady = xhr.onreadystatechange;
+      xhr.onreadystatechange = function () {
+        if (xhr.readyState === 4) {
+          const interested = state.apiWaiters.filter(
+            (w) =>
+              xhr._qcUrl &&
+              xhr._qcUrl.includes(w.urlPattern) &&
+              xhr._qcMethod === w.method,
+          );
+          if (interested.length > 0) {
+            try {
+              const data = JSON.parse(xhr.responseText);
+              for (let i = interested.length - 1; i >= 0; i--) {
+                const w = interested[i];
                 clearTimeout(w.timeoutId);
                 if (w.successCondition(data)) w.resolve(data);
                 else w.reject(new Error("API failed condition"));
-                // Xóa khỏi danh sách chính
                 const idx = state.apiWaiters.indexOf(w);
                 if (idx > -1) state.apiWaiters.splice(idx, 1);
               }
-            })
-            .catch(() => {}); // parse fail -> không ảnh hưởng
-        })
-        .catch(() => {});
-    }
-    return fetchPromise;
-  };
-
-  // Override XMLHttpRequest – chỉ parse JSON khi cần
-  const XHRProto = XMLHttpRequest.prototype;
-  const originalOpen = XHRProto.open;
-  const originalSend = XHRProto.send;
-  XHRProto.open = function (method, url, ...rest) {
-    this._qcMethod = method.toUpperCase();
-    this._qcUrl = url;
-    return originalOpen.call(this, method, url, ...rest);
-  };
-  XHRProto.send = function (body) {
-    const xhr = this;
-    const originalReady = xhr.onreadystatechange;
-    xhr.onreadystatechange = function () {
-      if (xhr.readyState === 4) {
-        const interested = state.apiWaiters.filter(
-          (w) =>
-            xhr._qcUrl &&
-            xhr._qcUrl.includes(w.urlPattern) &&
-            xhr._qcMethod === w.method,
-        );
-        if (interested.length > 0) {
-          try {
-            const data = JSON.parse(xhr.responseText);
-            for (let i = interested.length - 1; i >= 0; i--) {
-              const w = interested[i];
-              clearTimeout(w.timeoutId);
-              if (w.successCondition(data)) w.resolve(data);
-              else w.reject(new Error("API failed condition"));
-              const idx = state.apiWaiters.indexOf(w);
-              if (idx > -1) state.apiWaiters.splice(idx, 1);
-            }
-          } catch (e) {}
+            } catch (e) {}
+          }
         }
-      }
-      if (originalReady) originalReady.apply(this, arguments);
+        if (originalReady) originalReady.apply(this, arguments);
+      };
+      return originalSend.call(this, body);
     };
-    return originalSend.call(this, body);
-  };
+    window.__qcXHROverridden = true;
+  }
 
   // ==================== RECORD MANAGEMENT ====================
   const makeRecord = (pageType, userEmail, endTime = nowISO()) => {
@@ -528,7 +541,7 @@
           rimassreceive: 0,
           lastUpdated: 0,
         });
-        WidgetManager.updateStats(serverStats || fallbackStats);
+        widgetUpdateStats(serverStats || fallbackStats);
         state.lastStatsSyncTime = Date.now();
       } catch (e) {
         warn("syncWidgetWithStats error:", e);
@@ -539,7 +552,7 @@
     return state.statsPromise;
   };
 
-  // ==================== AUTH (TỐI ƯU: CHỈ GỌI KHI THỰC SỰ CẦN) ====================
+  // ==================== AUTH (CHỈ CLEAR PENDING KHI BỊ TỪ CHỐI THỰC SỰ) ====================
   const checkAuth = async (email) => {
     if (!email || !isValidEmail(email))
       return { allowed: false, reason: "invalid_email" };
@@ -585,13 +598,17 @@
         const prevAllowed = state.authStatus?.allowed;
         state.authStatus = auth;
         state.authPromise = null;
+
         if (auth.allowed) {
           flushPending();
-          WidgetManager.setVisible(true);
+          widgetSetVisible(true);
           syncWidgetWithStats();
         } else {
-          clearPending();
-          WidgetManager.setVisible(false);
+          // Chỉ xóa pending nếu lỗi không phải là do mạng (authz_error)
+          if (auth.reason !== "authz_error") {
+            clearPending();
+          }
+          widgetSetVisible(false);
         }
         if (prevAllowed !== auth.allowed)
           WidgetVisibilityWatcher.applyVisibility();
@@ -600,8 +617,8 @@
       .catch((err) => {
         state.authStatus = { allowed: false, reason: "authz_error" };
         state.authPromise = null;
-        clearPending();
-        WidgetManager.setVisible(false);
+        // Không clear pending khi lỗi bất ngờ
+        widgetSetVisible(false);
         WidgetVisibilityWatcher.applyVisibility();
         throw err;
       });
@@ -619,7 +636,6 @@
     markRecordedToday(record);
     addToPending(record);
 
-    // Cập nhật thống kê local
     const statsKey = `stats_${todayKey()}`;
     const stats = getStore(statsKey, {
       qc: 0,
@@ -633,7 +649,6 @@
     stats.lastUpdated = Date.now();
     setStore(statsKey, stats);
 
-    // Chỉ gọi ensureAuth nếu chưa có trạng thái auth nào (null), tránh gọi lại khi đã biết bị từ chối
     if (state.authStatus === null) {
       ensureAuth(userEmail);
     }
@@ -641,7 +656,6 @@
       await sendRecord(record);
       await syncWidgetWithStats();
     } else {
-      // Nếu authStatus false, record vẫn nằm pending, sẽ được flush nếu sau này auth thành công (qua ensureAuth)
       log("Record queued, waiting for auth");
     }
   };
@@ -854,13 +868,13 @@
   NavigationMonitor.onNavigate(updatePageInfo);
   updatePageInfo();
 
-  // ==================== WIDGET VISIBILITY WATCHER (tối ưu) ====================
+  // ==================== WIDGET VISIBILITY WATCHER ====================
   const WidgetVisibilityWatcher = (() => {
     let lastDecision = null;
     const shouldBeVisible = async () => {
-      const pt = state.currentPageType; // dùng state thay vì getPageType lại
+      const pt = state.currentPageType;
       if (!pt) return false;
-      const email = state.currentEmail; // dùng state thay vì getEmail()
+      const email = state.currentEmail;
       if (!email) return false;
       const auth = await ensureAuth(email);
       return auth.allowed;
@@ -870,7 +884,7 @@
       const decision = visible ? "visible" : "hidden";
       if (decision !== lastDecision) {
         lastDecision = decision;
-        WidgetManager.setVisible(visible);
+        widgetSetVisible(visible);
         if (visible) syncWidgetWithStats();
       }
     };
@@ -884,8 +898,10 @@
     const statsKey = `stats_${todayKey()}`;
     try {
       GM_addValueChangeListener(statsKey, (name, oldVal, newVal) => {
-        log("Stats updated via storage, updating widget");
-        WidgetManager.updateStats(newVal);
+        if (newVal !== undefined) {
+          log("Stats updated via storage, updating widget");
+          widgetUpdateStats(newVal);
+        }
       });
     } catch (e) {
       warn("Storage listener error", e);
@@ -931,7 +947,7 @@
     }
     cleanup();
   });
-  window.addEventListener("unload", cleanup); // an toàn hơn
+  window.addEventListener("unload", cleanup);
 
   // ==================== INIT (DEBOUNCED) ====================
   let debounceTimer = null;
@@ -976,15 +992,19 @@
 
         markAllTrackedButtons(pageType);
 
-        // Đảm bảo auth được kiểm tra một lần duy nhất
-        ensureAuth(email)
-          .then((auth) => {
-            if (!auth.allowed) warn("User not authorized:", auth.reason);
-            else log("Authorization successful");
-          })
-          .catch((e) => error("Auth failed:", e));
-
-        await flushPending();
+        // Chờ auth hoàn tất rồi mới flush
+        try {
+          const auth = await ensureAuth(email);
+          if (auth.allowed) {
+            log("Authorization successful");
+            await flushPending();
+          } else {
+            warn("User not authorized:", auth.reason);
+            // ensureAuth đã xử lý widget visibility và clear pending nếu cần
+          }
+        } catch (e) {
+          error("Auth failed:", e);
+        }
 
         state.flushIntervalId = setInterval(() => {
           if (!state.isDestroyed && state.authStatus?.allowed)

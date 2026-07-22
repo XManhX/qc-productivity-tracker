@@ -1,3 +1,4 @@
+// components/FilterBar.js
 import { store } from "../store/DashboardStore.js";
 import { debounce } from "../utils/debounce.js";
 import { refreshIcons } from "../utils/icons.js";
@@ -8,7 +9,7 @@ export class FilterBar {
     this._initialRender();
     this._bindEvents();
     store.on("update", () => this._applyState());
-    this._applyState(); // đồng bộ giá trị từ store
+    this._applyState(); // đồng bộ giá trị ban đầu từ store
   }
 
   _initialRender() {
@@ -127,15 +128,18 @@ export class FilterBar {
     const hourEndEl = this.container.querySelector("#filter-hour-end");
     const activeOnlyEl = this.container.querySelector("#filter-active-only");
 
-    dateEl.value = f.date;
-    roleEl.value = f.role;
-    qEl.value = f.q;
-    minTotalEl.value = f.minTotal;
-    hourStartEl.value = f.hourStart;
-    hourEndEl.value = f.hourEnd;
+    // Chỉ gán giá trị nếu người dùng không đang thao tác trực tiếp trên input đó
+    // Điều này ngăn mất dữ liệu khi store cập nhật trong lúc nhập
+    if (document.activeElement !== dateEl) dateEl.value = f.date;
+    if (document.activeElement !== roleEl) roleEl.value = f.role;
+    if (document.activeElement !== qEl) qEl.value = f.q;
+    if (document.activeElement !== minTotalEl) minTotalEl.value = f.minTotal;
+    if (document.activeElement !== hourStartEl) hourStartEl.value = f.hourStart;
+    if (document.activeElement !== hourEndEl) hourEndEl.value = f.hourEnd;
+    // Checkbox không bị ảnh hưởng gõ phím, có thể gán trực tiếp
     activeOnlyEl.checked = f.activeOnly;
 
-    // Cập nhật dropdown roles nếu có thay đổi
+    // Cập nhật dropdown roles nếu cần (khi có roles mới hoặc chưa khởi tạo)
     if (store.state.roles.length && roleEl.options.length <= 1) {
       roleEl.innerHTML = '<option value="">Tất cả role</option>';
       store.state.roles.forEach((r) => {
@@ -144,7 +148,10 @@ export class FilterBar {
         opt.textContent = r.display_name || r.role_key;
         roleEl.appendChild(opt);
       });
-      roleEl.value = f.role;
+      // Sau khi thêm options, phục hồi giá trị đã chọn (nếu không đang focus)
+      if (document.activeElement !== roleEl) {
+        roleEl.value = f.role;
+      }
     }
   }
 

@@ -8,14 +8,18 @@ export class ImportSection {
     this.importedRows = [];
     this._render();
     this._bindEvents();
-    userStore.on("update", () => this._updateRoleDropdowns());
+    // Chỉ cần cập nhật dropdown cho bulk add (vẫn giữ role mặc định cho bulk)
+    userStore.on("update", () => this._updateBulkRoleDropdown());
   }
 
   _render() {
     this.container.innerHTML = `
       <div class="border-t border-slate-100 pt-6">
         <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Import từ Excel / CSV</h3>
-        <p class="text-slate-400 text-xs mb-3">Tải file Excel hoặc CSV có cột Email, Họ tên và Role (role_key).</p>
+        <p class="text-slate-400 text-xs mb-3">
+          Tải file Excel hoặc CSV có các cột: <strong>Email</strong>, <strong>Họ tên</strong> và <strong>role_key</strong>. 
+          Mỗi dòng bắt buộc phải có <strong>role_key</strong> (ví dụ: qc_rr, qc_cb). Dòng nào thiếu sẽ bị bỏ qua.
+        </p>
         <div id="import-dropzone" class="import-dropzone border-2 border-dashed border-slate-200 rounded-xl p-4 text-center bg-slate-50 transition">
           <input type="file" id="excel-file" accept=".xlsx,.xls,.csv" class="hidden" />
           <div class="flex flex-col items-center justify-center gap-2 py-3">
@@ -28,10 +32,7 @@ export class ImportSection {
           <button id="import-file-btn" class="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-sm py-2.5 rounded-xl transition shadow-sm">Chọn File</button>
           <button id="download-template-btn" class="px-3 py-2.5 border border-slate-200 hover:bg-slate-100 text-slate-600 rounded-xl text-xs font-semibold transition">Tải Mẫu CSV</button>
         </div>
-        <div class="mt-3">
-          <label class="text-xs font-semibold text-slate-600">Role mặc định cho import:</label>
-          <select id="import-role" class="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"></select>
-        </div>
+        <!-- Đã xóa phần chọn Role mặc định cho import -->
         <div id="import-preview" class="hidden mt-4 border border-slate-200 rounded-xl overflow-hidden">
           <div class="flex items-center justify-between px-4 py-3 bg-slate-50 border-b border-slate-200">
             <div>
@@ -47,7 +48,7 @@ export class ImportSection {
             </table>
           </div>
         </div>
-        <!-- Bulk Add -->
+        <!-- Bulk Add (giữ nguyên, vẫn có chọn role mặc định) -->
         <div class="mt-6 border-t border-slate-100 pt-6">
           <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Thêm Hàng Loạt (Bulk Add)</h3>
           <p class="text-slate-400 text-xs mb-3">Copy và dán danh sách Email vào bên dưới (các email phân cách nhau bởi dấu phẩy, dấu cách hoặc xuống dòng).</p>
@@ -63,20 +64,19 @@ export class ImportSection {
       </div>
     `;
     lucide.createIcons();
-    this._updateRoleDropdowns();
+    this._updateBulkRoleDropdown();
   }
 
-  _updateRoleDropdowns() {
-    ["import-role", "bulk-role"].forEach((id) => {
-      const select = this.container.querySelector(`#${id}`);
-      if (!select) return;
-      select.innerHTML = "";
-      userStore.state.roles.forEach((role) => {
-        const opt = document.createElement("option");
-        opt.value = role.role_key;
-        opt.textContent = role.display_name || role.role_key;
-        select.appendChild(opt);
-      });
+  // Chỉ cập nhật dropdown cho bulk add
+  _updateBulkRoleDropdown() {
+    const select = this.container.querySelector("#bulk-role");
+    if (!select) return;
+    select.innerHTML = "";
+    userStore.state.roles.forEach((role) => {
+      const opt = document.createElement("option");
+      opt.value = role.role_key;
+      opt.textContent = role.display_name || role.role_key;
+      select.appendChild(opt);
     });
   }
 
@@ -89,6 +89,7 @@ export class ImportSection {
     this.container
       .querySelector("#download-template-btn")
       .addEventListener("click", () => {
+        // Mẫu CSV có cột role_key bắt buộc
         const csv =
           "Họ và tên,Email,role_key\nNguyễn Văn A,nguyenvana@shopee.com,qc_rr\nTrần Thị B,tranthib@shopee.com,qc_cb";
         const blob = new Blob([csv], { type: "text/csv" });
@@ -124,7 +125,7 @@ export class ImportSection {
 
   _handleFile(file) {
     const reader = new FileReader();
-    this.importedRows = []; // Reset trước mỗi lần đọc
+    this.importedRows = [];
     reader.onload = (e) => {
       try {
         const wb = XLSX.read(e.target.result, {
@@ -138,9 +139,12 @@ export class ImportSection {
       }
       this._renderImportPreview();
       if (this.importedRows.length) {
-        showToast(`Đọc được ${this.importedRows.length} dòng`, "success");
+        showToast(
+          `Đọc được ${this.importedRows.length} dòng hợp lệ`,
+          "success",
+        );
       } else {
-        showToast("Không tìm thấy email hợp lệ", "error");
+        showToast("Không tìm thấy dòng nào có đủ email và role_key", "error");
       }
     };
     reader.onerror = () => {
@@ -151,6 +155,7 @@ export class ImportSection {
     else reader.readAsArrayBuffer(file);
   }
 
+  // Chỉ giữ lại các dòng có email VÀ role_key không rỗng
   _buildImportRows(data) {
     if (!Array.isArray(data)) return [];
     return data
@@ -159,14 +164,19 @@ export class ImportSection {
           .toLowerCase()
           .trim();
         const name = row.name || row["Họ và tên"] || row["Name"] || "";
-        const role_key = row.role_key || row["role"] || row["Role"] || "";
+        const role_key = (
+          row.role_key ||
+          row["role"] ||
+          row["Role"] ||
+          ""
+        ).trim();
         return {
           email,
           name: name || email.split("@")[0].toUpperCase(),
           role_key,
         };
       })
-      .filter((r) => r.email);
+      .filter((r) => r.email && r.role_key); // Bắt buộc có email và role_key
   }
 
   _renderImportPreview() {
@@ -186,7 +196,7 @@ export class ImportSection {
       .slice(0, 10)
       .map(
         (r, i) =>
-          `<tr><td>${i + 1}</td><td>${escapeHtml(r.name)}</td><td>${escapeHtml(r.email)}</td><td>${escapeHtml(r.role_key || "mặc định")}</td></tr>`,
+          `<tr><td>${i + 1}</td><td>${escapeHtml(r.name)}</td><td>${escapeHtml(r.email)}</td><td>${escapeHtml(r.role_key)}</td></tr>`,
       )
       .join("");
     if (this.importedRows.length > 10)
@@ -195,13 +205,16 @@ export class ImportSection {
 
   async _importPreparedRows() {
     if (!this.importedRows.length) return;
-    const defaultRoleKey = this.container.querySelector("#import-role").value;
+
+    // Tất cả các dòng đã có role_key, không cần default
     const payload = this.importedRows.map((r) => ({
       email: r.email,
       name: r.name,
-      role_key: r.role_key || defaultRoleKey,
+      role_key: r.role_key,
     }));
+
     if (!confirm(`Import ${payload.length} nhân sự?`)) return;
+
     const btn = this.container.querySelector("#import-submit-btn");
     btn.disabled = true;
     btn.textContent = "Đang import...";

@@ -77,8 +77,12 @@ class DashboardStore {
 
     const today = this.getTodayVN();
 
-    // --- Ngày ---
-    this.state.filters.date = rawFilters.date || today;
+    // --- Ngày: Nếu đã lưu và là hôm nay thì giữ, còn không thì dùng hôm nay ---
+    if (rawFilters.date && rawFilters.date === today) {
+      this.state.filters.date = rawFilters.date; // vẫn trong ngày hôm nay
+    } else {
+      this.state.filters.date = today; // mặc định là hôm nay
+    }
 
     // --- Chuỗi tìm kiếm ---
     this.state.filters.role =

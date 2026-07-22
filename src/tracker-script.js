@@ -503,19 +503,21 @@
       const record = pending[i];
       const sent = await sendRecord(record);
       if (!sent) {
-        // Nếu thất bại vì đang được gửi bởi nơi khác, bỏ qua và tiếp tục
         const fp = createFingerprint(record);
         if (state._sendingFingerprints.has(fp)) {
-          // Đang được gửi, bỏ qua record này và xét record tiếp theo
-          i++;
+          // Record đang được gửi bởi một tiến trình khác (ví dụ recordAndSend)
+          // Có thể nó đã bị xóa khỏi pending, cần đồng bộ lại
+          pending = getPendingLogs();
+          i = 0; // bắt đầu lại từ đầu với mảng mới
           continue;
         }
-
         warn("Flush interrupted, remaining records will be retried later");
         break;
       }
+      // Gửi thành công → xóa khỏi pending và cập nhật mảng
       removeFromPending(record);
       pending = getPendingLogs();
+      // Không tăng i vì mảng đã thay đổi, phần tử kế tiếp tự động trượt vào vị trí i
     }
   };
 

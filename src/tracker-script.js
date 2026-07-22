@@ -7,7 +7,7 @@
     API_BASE_URL: "__API_BASE_URL__",
     AUTH_ENDPOINT: "/api/qc-productivity/authz",
     LOG_ENDPOINT: "/api/qc-productivity/log",
-    DEBUG: true,
+    DEBUG: true, // Nên tắt trong production để tránh lộ dữ liệu nhạy cảm
     AUTH_CACHE_MS: 5 * 60 * 1000,
     AUTH_RETRY_MAX: 2,
     AUTH_RETRY_DELAY_MS: 1000,
@@ -33,8 +33,8 @@
     statsSyncIntervalId: null,
     isDestroyed: false,
     pendingReinitUrl: null,
-    authStatus: null,
-    authPromise: null,
+    authStatus: null, // { allowed, reason, widget_visible }
+    authPromise: null, // Promise đang chạy hoặc đã resolve
     currentPageType: null,
     currentEmail: null,
     apiWaiters: [],
@@ -188,16 +188,27 @@
 
   // ==================== WIDGET ====================
   // __WIDGET_CODE__
-  // LƯU Ý BẢO MẬT: WidgetManager nên dùng textContent, không innerHTML với dữ liệu API.
-
+  // BẢO MẬT: WidgetManager phải dùng textContent (không innerHTML) khi hiển thị dữ liệu từ API.
   if (typeof WidgetManager !== "undefined" && WidgetManager.init) {
     WidgetManager.init(getStore, setStore);
   } else {
     console.error("[QC Tracker] WidgetManager not found");
   }
 
-  // ==================== EMAIL ====================
+  // ==================== EMAIL (có cache tối ưu) ====================
   const getEmail = () => {
+    // Nếu đã có email hợp lệ và còn trong thời gian cache, trả về ngay
+    const cached = getStore("user_email", "");
+    const ts = getStore("user_email_timestamp", 0);
+    if (
+      cached &&
+      isValidEmail(cached) &&
+      Date.now() - ts < CONFIG.EMAIL_CACHE_MS
+    ) {
+      return cached;
+    }
+
+    // Nếu không, quét storage (chỉ làm khi cần)
     try {
       const keys = [
         "user_email",
@@ -226,15 +237,8 @@
     } catch (e) {
       warn("Error reading storage:", e);
     }
-    const cached = getStore("user_email", "");
-    const ts = getStore("user_email_timestamp", 0);
-    if (
-      cached &&
-      isValidEmail(cached) &&
-      Date.now() - ts < CONFIG.EMAIL_CACHE_MS
-    )
-      return cached;
-    return "";
+    // Trả về cached cũ nếu có (dù hết hạn) để tránh mất email đột ngột
+    return cached || "";
   };
 
   // ==================== FIELD EXTRACTION ====================
@@ -286,7 +290,7 @@
     return result;
   };
 
-  // ==================== API INTERCEPTOR & WAITER ====================
+  // ==================== API INTERCEPTOR (TỐI ƯU: CHỈ PARSE KHI CẦN) ====================
   const cancelAllApiWaiters = () => {
     const waiters = state.apiWaiters;
     while (waiters.length) {
@@ -315,7 +319,7 @@
     });
   };
 
-  // Override fetch
+  // Override fetch – chỉ parse JSON khi có waiter phù hợp
   const originalFetch = window.fetch;
   window.fetch = function (input, init) {
     const url =
@@ -327,32 +331,40 @@
     const method = (
       init?.method || (input instanceof Request ? input.method : "GET")
     ).toUpperCase();
+
+    // Kiểm tra nhanh: có waiter nào quan tâm đến URL này không
+    const interestedWaiters = state.apiWaiters.filter(
+      (w) => url.includes(w.urlPattern) && method === w.method,
+    );
+
     const fetchPromise = originalFetch.call(this, input, init);
-    fetchPromise
-      .then((response) => {
-        if (!response.ok) return;
-        response
-          .clone()
-          .json()
-          .then((data) => {
-            const waiters = state.apiWaiters;
-            for (let i = waiters.length - 1; i >= 0; i--) {
-              const w = waiters[i];
-              if (url.includes(w.urlPattern) && method === w.method) {
+
+    if (interestedWaiters.length > 0) {
+      fetchPromise
+        .then((response) => {
+          if (!response.ok) return;
+          response
+            .clone()
+            .json()
+            .then((data) => {
+              for (let i = interestedWaiters.length - 1; i >= 0; i--) {
+                const w = interestedWaiters[i];
                 clearTimeout(w.timeoutId);
                 if (w.successCondition(data)) w.resolve(data);
                 else w.reject(new Error("API failed condition"));
-                waiters.splice(i, 1);
+                // Xóa khỏi danh sách chính
+                const idx = state.apiWaiters.indexOf(w);
+                if (idx > -1) state.apiWaiters.splice(idx, 1);
               }
-            }
-          })
-          .catch(() => {});
-      })
-      .catch(() => {});
+            })
+            .catch(() => {}); // parse fail -> không ảnh hưởng
+        })
+        .catch(() => {});
+    }
     return fetchPromise;
   };
 
-  // Override XMLHttpRequest
+  // Override XMLHttpRequest – chỉ parse JSON khi cần
   const XHRProto = XMLHttpRequest.prototype;
   const originalOpen = XHRProto.open;
   const originalSend = XHRProto.send;
@@ -366,23 +378,25 @@
     const originalReady = xhr.onreadystatechange;
     xhr.onreadystatechange = function () {
       if (xhr.readyState === 4) {
-        try {
-          const data = JSON.parse(xhr.responseText);
-          const waiters = state.apiWaiters;
-          for (let i = waiters.length - 1; i >= 0; i--) {
-            const w = waiters[i];
-            if (
-              xhr._qcUrl &&
-              xhr._qcUrl.includes(w.urlPattern) &&
-              xhr._qcMethod === w.method
-            ) {
+        const interested = state.apiWaiters.filter(
+          (w) =>
+            xhr._qcUrl &&
+            xhr._qcUrl.includes(w.urlPattern) &&
+            xhr._qcMethod === w.method,
+        );
+        if (interested.length > 0) {
+          try {
+            const data = JSON.parse(xhr.responseText);
+            for (let i = interested.length - 1; i >= 0; i--) {
+              const w = interested[i];
               clearTimeout(w.timeoutId);
               if (w.successCondition(data)) w.resolve(data);
               else w.reject(new Error("API failed condition"));
-              waiters.splice(i, 1);
+              const idx = state.apiWaiters.indexOf(w);
+              if (idx > -1) state.apiWaiters.splice(idx, 1);
             }
-          }
-        } catch (e) {}
+          } catch (e) {}
+        }
       }
       if (originalReady) originalReady.apply(this, arguments);
     };
@@ -524,7 +538,7 @@
     return state.statsPromise;
   };
 
-  // ==================== AUTH ====================
+  // ==================== AUTH (TỐI ƯU: CHỈ GỌI KHI THỰC SỰ CẦN) ====================
   const checkAuth = async (email) => {
     if (!email || !isValidEmail(email))
       return { allowed: false, reason: "invalid_email" };
@@ -604,6 +618,7 @@
     markRecordedToday(record);
     addToPending(record);
 
+    // Cập nhật thống kê local
     const statsKey = `stats_${todayKey()}`;
     const stats = getStore(statsKey, {
       qc: 0,
@@ -617,11 +632,16 @@
     stats.lastUpdated = Date.now();
     setStore(statsKey, stats);
 
+    // Chỉ gọi ensureAuth nếu chưa có trạng thái auth nào (null), tránh gọi lại khi đã biết bị từ chối
+    if (state.authStatus === null) {
+      ensureAuth(userEmail);
+    }
     if (state.authStatus?.allowed) {
       await sendRecord(record);
       await syncWidgetWithStats();
-    } else if (!state.authStatus) {
-      ensureAuth(userEmail);
+    } else {
+      // Nếu authStatus false, record vẫn nằm pending, sẽ được flush nếu sau này auth thành công (qua ensureAuth)
+      log("Record queued, waiting for auth");
     }
   };
 
@@ -822,7 +842,7 @@
     };
   })();
 
-  // ==================== IMMEDIATE STATE UPDATE ON NAVIGATION ====================
+  // ==================== IMMEDIATE STATE UPDATE ====================
   const updatePageInfo = () => {
     const pageType = getPageType(location.href);
     const email = getEmail();
@@ -830,18 +850,16 @@
     state.currentEmail = email || null;
     log("Page info updated:", state.currentPageType, state.currentEmail);
   };
-  // Đăng ký callback này đầu tiên để đảm bảo state được cập nhật sớm nhất
   NavigationMonitor.onNavigate(updatePageInfo);
-  // Cũng gọi ngay lúc khởi tạo
   updatePageInfo();
 
-  // ==================== WIDGET VISIBILITY WATCHER ====================
+  // ==================== WIDGET VISIBILITY WATCHER (tối ưu) ====================
   const WidgetVisibilityWatcher = (() => {
     let lastDecision = null;
     const shouldBeVisible = async () => {
-      const pt = getPageType(location.href);
-      if (pt === "unknown") return false;
-      const email = getEmail();
+      const pt = state.currentPageType; // dùng state thay vì getPageType lại
+      if (!pt) return false;
+      const email = state.currentEmail; // dùng state thay vì getEmail()
       if (!email) return false;
       const auth = await ensureAuth(email);
       return auth.allowed;
@@ -887,7 +905,7 @@
     }
   };
 
-  // ==================== BEFOREUNLOAD ====================
+  // ==================== BEFOREUNLOAD & UNLOAD ====================
   window.addEventListener("beforeunload", () => {
     const pending = getPendingLogs();
     if (pending.length) {
@@ -912,6 +930,7 @@
     }
     cleanup();
   });
+  window.addEventListener("unload", cleanup); // an toàn hơn
 
   // ==================== INIT (DEBOUNCED) ====================
   let debounceTimer = null;
@@ -938,8 +957,6 @@
 
         cleanOldData();
 
-        // Lấy pageType và email từ state đã được updatePageInfo cập nhật trước đó,
-        // nhưng để an toàn vẫn gọi lại (nếu chưa có)
         const pageType = state.currentPageType || getPageType(location.href);
         if (pageType === "unknown") {
           state.currentPageType = null;
@@ -958,6 +975,7 @@
 
         markAllTrackedButtons(pageType);
 
+        // Đảm bảo auth được kiểm tra một lần duy nhất
         ensureAuth(email)
           .then((auth) => {
             if (!auth.allowed) warn("User not authorized:", auth.reason);
@@ -993,7 +1011,6 @@
     return state.initPromise;
   };
 
-  // Đăng ký callback cho debouncedInit (đã có updatePageInfo chạy trước đó)
   NavigationMonitor.onNavigate(() => {
     if (location.href !== state.lastUrl) {
       state.lastUrl = location.href;
@@ -1002,7 +1019,6 @@
     }
   });
 
-  // Khởi động lần đầu
   init()
     .then(() => log("Tracker started"))
     .catch((e) => error("Startup error:", e));

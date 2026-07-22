@@ -464,7 +464,6 @@
       .join("|");
   };
 
-  // Hàm gửi record, trả về true nếu thành công, false nếu thất bại – không tự xóa khỏi pending
   const sendRecord = async (record) => {
     try {
       await gmRequest(
@@ -479,7 +478,6 @@
     }
   };
 
-  // Flush pending an toàn, không gửi trùng lặp
   const flushPending = async () => {
     let pending = getPendingLogs();
     if (!pending.length) return;
@@ -489,14 +487,11 @@
       const record = pending[i];
       const sent = await sendRecord(record);
       if (!sent) {
-        // Nếu gửi thất bại, dừng flush, giữ lại các record chưa gửi (từ i trở đi)
         warn("Flush interrupted, remaining records will be retried later");
         break;
       }
-      // Gửi thành công → xóa khỏi pending và cập nhật lại mảng
       removeFromPending(record);
-      pending = getPendingLogs(); // lấy mảng mới sau khi xóa
-      // Không tăng i vì mảng đã thay đổi, phần tử tiếp theo đã trở thành vị trí i
+      pending = getPendingLogs();
     }
   };
 
@@ -562,7 +557,7 @@
     return state.statsPromise;
   };
 
-  // ==================== AUTH (CHỈ CLEAR PENDING KHI BỊ TỪ CHỐI THỰC SỰ, KHÔNG FLUSH TỰ ĐỘNG) ====================
+  // ==================== AUTH ====================
   const checkAuth = async (email) => {
     if (!email || !isValidEmail(email))
       return { allowed: false, reason: "invalid_email" };
@@ -611,22 +606,27 @@
 
         if (auth.allowed) {
           widgetSetVisible(true);
-          syncWidgetWithStats(); // không flush ở đây, sẽ do init quản lý
+          syncWidgetWithStats();
         } else {
           if (auth.reason !== "authz_error") {
             clearPending();
           }
           widgetSetVisible(false);
         }
-        if (prevAllowed !== auth.allowed)
+        // Chỉ gọi applyVisibility nếu trạng thái allowed thực sự thay đổi
+        if (prevAllowed !== auth.allowed) {
           WidgetVisibilityWatcher.applyVisibility();
+        }
         return auth;
       })
       .catch((err) => {
+        const prevAllowed = state.authStatus?.allowed;
         state.authStatus = { allowed: false, reason: "authz_error" };
         state.authPromise = null;
         widgetSetVisible(false);
-        WidgetVisibilityWatcher.applyVisibility();
+        if (prevAllowed !== false) {
+          WidgetVisibilityWatcher.applyVisibility();
+        }
         throw err;
       });
     return state.authPromise;
@@ -662,7 +662,7 @@
     if (state.authStatus?.allowed) {
       const sent = await sendRecord(record);
       if (sent) {
-        removeFromPending(record); // gửi thành công thì xóa khỏi pending
+        removeFromPending(record);
       }
       await syncWidgetWithStats();
     } else {
@@ -726,6 +726,8 @@
 
   const processNodeForButtons = (node, cfg) => {
     if (node.nodeType !== Node.ELEMENT_NODE) return;
+    // Nếu node đã được đánh dấu, bỏ qua toàn bộ cây con để tiết kiệm
+    if (node.dataset?.qcTracked !== undefined) return;
     if (
       node.matches(
         'button, input[type="submit"], a[role="button"], div[role="button"]',
@@ -819,7 +821,6 @@
     true,
   );
 
-  // Input delegation cho scan_value
   document.addEventListener(
     "input",
     (e) => {
@@ -1018,12 +1019,11 @@
 
         markAllTrackedButtons(pageType);
 
-        // Chờ auth rồi mới flush (đảm bảo không flush khi chưa được phép)
         try {
           const auth = await ensureAuth(email);
           if (auth.allowed) {
             log("Authorization successful");
-            await flushPending(); // chỉ flush sau khi đã được phép
+            await flushPending();
           } else {
             warn("User not authorized:", auth.reason);
           }

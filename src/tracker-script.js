@@ -18,6 +18,8 @@
     STATS_SYNC_INTERVAL_MS: 30000,
     API_CAPTURE_TIMEOUT_MS: 15000,
     STATS_THROTTLE_MS: 5000,
+    // Thời gian chờ tối đa cho button observer nếu không tìm thấy nút
+    BUTTON_OBSERVE_TIMEOUT_MS: 10000,
   };
 
   // ==================== PAGE CONFIG ====================
@@ -48,6 +50,10 @@
     },
     _sendingFingerprints: new Set(),
     initGeneration: 0,
+    _buttonObserver: null,
+    _buttonObserverTimeout: null,
+    _inputCache: null,
+    _beaconSent: false,
   };
 
   // ==================== UTILITIES ====================
@@ -230,41 +236,51 @@
     return cached || "";
   };
 
-  // ==================== FIELD EXTRACTION ====================
-  const getInputByKeywords = (keywords) => {
-    for (const kw of keywords) {
-      let input = null;
-      if (kw.startsWith("#")) {
-        const target = document.querySelector(kw);
-        if (target)
-          input = target.matches("input,textarea")
-            ? target
-            : target.querySelector("input,textarea");
-      } else {
-        const parent = document.querySelector(`[data-for="${kw}"]`);
-        if (parent) input = parent.querySelector("input,textarea");
+  // ==================== FIELD EXTRACTION (tối ưu quét DOM) ====================
+  const buildInputCache = (pageType) => {
+    const cfg = PAGE_CONFIG[pageType];
+    if (!cfg) return {};
+    const cache = {};
+    Object.entries(cfg.fields).forEach(([field, keywords]) => {
+      for (const kw of keywords) {
+        let input = null;
+        if (kw.startsWith("#")) {
+          const target = document.querySelector(kw);
+          if (target)
+            input = target.matches("input,textarea")
+              ? target
+              : target.querySelector("input,textarea");
+        } else {
+          const parent = document.querySelector(`[data-for="${kw}"]`);
+          if (parent) input = parent.querySelector("input,textarea");
+        }
+        if (input) {
+          cache[field] = input;
+          break;
+        }
       }
-      if (input) {
-        const val = normalize(input.value);
-        if (val) return val;
-      }
+    });
+    return cache;
+  };
+
+  const getInputValue = (field, cache) => {
+    const el = cache[field];
+    if (el) {
+      const val = normalize(el.value);
+      if (val) return val;
     }
     return "";
   };
 
-  const setPageStartTimeIfNeeded = (scanValue) => {
-    if (scanValue && scanValue !== state.lastScanValue) {
-      state.lastScanValue = scanValue;
-      state.pageStartTime = nowISO();
-    }
-  };
-
   const collectFields = (pageType) => {
+    if (!state._inputCache || state._inputCache._pageType !== pageType) {
+      state._inputCache = { _pageType: pageType, ...buildInputCache(pageType) };
+    }
     const cfg = PAGE_CONFIG[pageType];
     if (!cfg) return { device_id: "", scan_value: "" };
     const result = {};
-    Object.entries(cfg.fields).forEach(([field, keywords]) => {
-      result[field] = getInputByKeywords(keywords);
+    Object.keys(cfg.fields).forEach((field) => {
+      result[field] = getInputValue(field, state._inputCache);
     });
     if (!result.scan_value) {
       const idFromUrl = getIdFromUrl(pageType);
@@ -276,6 +292,13 @@
       setPageStartTimeIfNeeded(result.scan_value);
     }
     return result;
+  };
+
+  const setPageStartTimeIfNeeded = (scanValue) => {
+    if (scanValue && scanValue !== state.lastScanValue) {
+      state.lastScanValue = scanValue;
+      state.pageStartTime = nowISO();
+    }
   };
 
   // ==================== API INTERCEPTOR ====================
@@ -396,7 +419,7 @@
     const id = Date.now() + "_" + Math.random().toString(36).substr(2, 9);
     return {
       id,
-      idempotency_key: id, // thêm key trùng lặp
+      idempotency_key: id,
       version: CONFIG.VERSION,
       page: pageType,
       action: normalize(cfg.actionText || ""),
@@ -580,8 +603,6 @@
   };
 
   const ensureAuth = async (email, generation) => {
-    // Nếu có promise cũ và generation đã thay đổi, ta vẫn tạo promise mới,
-    // nhưng không cần thiết phải quản lý phức tạp vì apply đã kiểm tra generation.
     state.authPromise = (async () => {
       try {
         const auth = await checkAuth(email);
@@ -590,7 +611,7 @@
         }
         state.authStatus = auth;
         state.authPromise = null;
-        WidgetVisibilityWatcher.apply(); // ← gọi tập trung
+        WidgetVisibilityWatcher.apply();
 
         if (auth.allowed) {
           syncWidgetWithStats(generation);
@@ -676,8 +697,6 @@
     return null;
   };
 
-  let buttonObserver = null;
-
   const markSingleButton = (el, cfg) => {
     let matched = false;
     if (cfg.actionSelector && el.matches(cfg.actionSelector)) matched = true;
@@ -717,19 +736,21 @@
       });
   };
 
-  const markAllTrackedButtons = (pageType) => {
-    const cfg = PAGE_CONFIG[pageType];
-    if (!cfg) return;
-    if (buttonObserver) {
-      buttonObserver.disconnect();
-      buttonObserver = null;
+  const startButtonObserver = (cfg) => {
+    if (state._buttonObserver) {
+      state._buttonObserver.disconnect();
+      state._buttonObserver = null;
     }
+    if (state._buttonObserverTimeout)
+      clearTimeout(state._buttonObserverTimeout);
+
     const candidates = document.querySelectorAll(
       'button, input[type="submit"], a[role="button"], div[role="button"]',
     );
     candidates.forEach((el) => markSingleButton(el, cfg));
+
     if (!document.querySelector("[data-qc-tracked]")) {
-      buttonObserver = new MutationObserver((mutations) => {
+      state._buttonObserver = new MutationObserver((mutations) => {
         let found = false;
         for (const mut of mutations) {
           for (const node of mut.addedNodes) {
@@ -738,12 +759,39 @@
           }
         }
         if (found) {
-          buttonObserver.disconnect();
-          buttonObserver = null;
+          stopButtonObserver();
         }
       });
-      buttonObserver.observe(document.body, { childList: true, subtree: true });
+      state._buttonObserver.observe(document.body, {
+        childList: true,
+        subtree: true,
+      });
+
+      state._buttonObserverTimeout = setTimeout(() => {
+        if (state._buttonObserver) {
+          log("Button observer timed out, disconnecting");
+          stopButtonObserver();
+        }
+      }, CONFIG.BUTTON_OBSERVE_TIMEOUT_MS);
     }
+  };
+
+  const stopButtonObserver = () => {
+    if (state._buttonObserver) {
+      state._buttonObserver.disconnect();
+      state._buttonObserver = null;
+    }
+    if (state._buttonObserverTimeout) {
+      clearTimeout(state._buttonObserverTimeout);
+      state._buttonObserverTimeout = null;
+    }
+  };
+
+  const markAllTrackedButtons = (pageType) => {
+    const cfg = PAGE_CONFIG[pageType];
+    if (!cfg) return;
+    stopButtonObserver();
+    startButtonObserver(cfg);
   };
 
   // ==================== EVENT HANDLERS ====================
@@ -804,17 +852,28 @@
 
   const beforeUnloadHandler = () => {
     const pending = getPendingLogs();
-    if (pending.length) {
+    if (pending.length && !state._beaconSent) {
       const payload = JSON.stringify(pending);
       const url = CONFIG.API_BASE_URL + CONFIG.LOG_ENDPOINT;
-      // Thử gửi qua beacon (fire-and-forget)
-      if (navigator.sendBeacon) {
-        navigator.sendBeacon(
+      try {
+        const sent = navigator.sendBeacon(
           url,
           new Blob([payload], { type: "application/json" }),
         );
-      } else {
-        // Nếu không có beacon, dùng GM_xmlhttpRequest đồng bộ (không chờ)
+        if (sent) {
+          state._beaconSent = true;
+        } else {
+          try {
+            GM_xmlhttpRequest({
+              method: "POST",
+              url,
+              headers: { "Content-Type": "application/json" },
+              data: payload,
+            });
+            state._beaconSent = true;
+          } catch (e) {}
+        }
+      } catch (e) {
         try {
           GM_xmlhttpRequest({
             method: "POST",
@@ -822,10 +881,9 @@
             headers: { "Content-Type": "application/json" },
             data: payload,
           });
-        } catch (e) {}
+          state._beaconSent = true;
+        } catch (e2) {}
       }
-      // QUAN TRỌNG: không xóa pending logs. Chúng sẽ được gửi lại vào lần sau.
-      // (không gọi setPendingLogs([]))
     }
     cleanup();
   };
@@ -881,7 +939,6 @@
   const WidgetVisibilityWatcher = (() => {
     let lastDecision = null;
     const apply = async () => {
-      // Nếu không ở trang QC → luôn ẩn widget
       if (!state.currentPageType) {
         if (lastDecision !== "hidden") {
           lastDecision = "hidden";
@@ -935,10 +992,8 @@
     state._sendingFingerprints.clear();
     state.isDestroyed = true;
 
-    if (buttonObserver) {
-      buttonObserver.disconnect();
-      buttonObserver = null;
-    }
+    stopButtonObserver();
+    state._inputCache = null;
 
     widgetSetVisible(false);
 
@@ -964,6 +1019,7 @@
   const refreshPageState = () => {
     const pageType = state.currentPageType;
     if (!pageType) return;
+    state._inputCache = null;
     collectFields(pageType);
     log(
       "Page state refreshed, scan_value:",
@@ -996,6 +1052,7 @@
         state.lastScanValue = null;
         state.authStatus = null;
         state.authPromise = null;
+        state._beaconSent = false;
 
         document.addEventListener("click", clickHandler, true);
         document.addEventListener("input", inputHandler, true);
@@ -1012,7 +1069,7 @@
         if (pageType === "unknown") {
           state.currentPageType = null;
           state.currentEmail = null;
-          widgetSetVisible(false); // dự phòng
+          widgetSetVisible(false);
           return;
         }
         state.currentPageType = pageType;
@@ -1084,22 +1141,4 @@
   init()
     .then(() => log("Tracker started"))
     .catch((e) => error("Startup error:", e));
-
-  // ==================== VISUAL HIGHLIGHT ====================
-  const style = `
-    [data-qc-tracked="true"]:not([data-qc-disabled]) {
-      outline: 2px solid #EE4D2D !important;
-      outline-offset: 2px;
-    }
-    [data-qc-disabled="true"] {
-      outline: 2px solid #999999 !important;
-      outline-offset: 2px;
-    }
-  `;
-  if (typeof GM_addStyle !== "undefined") GM_addStyle(style);
-  else {
-    const styleEl = document.createElement("style");
-    styleEl.textContent = style;
-    document.head.appendChild(styleEl);
-  }
 })();

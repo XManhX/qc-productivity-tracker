@@ -188,6 +188,7 @@
 
   // ==================== WIDGET ====================
   // __WIDGET_CODE__
+
   // BẢO MẬT: WidgetManager phải dùng textContent (không innerHTML) khi hiển thị dữ liệu từ API.
   if (typeof WidgetManager !== "undefined" && WidgetManager.init) {
     WidgetManager.init(getStore, setStore);

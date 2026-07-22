@@ -3,17 +3,8 @@ import { NavBar } from "./components/NavBar.js";
 import { UserForm } from "./components/UserForm.js";
 import { ImportSection } from "./components/ImportSection.js";
 import { UserList } from "./components/UserList.js";
-// import { checkAuth, handleAuthToken, isAdmin } from './services/auth.js'; // nếu cần auth
 
 async function init() {
-  // ---- Bỏ comment nếu cần auth ----
-  // handleAuthToken();
-  // if (!checkAuth()) return;
-  // if (!isAdmin()) {
-  //   alert('Bạn không có quyền truy cập.');
-  //   window.location.href = '/index.html';
-  //   return;
-  // }
   new NavBar(document.getElementById("nav-container"), "users");
 
   await userStore.loadRoles();

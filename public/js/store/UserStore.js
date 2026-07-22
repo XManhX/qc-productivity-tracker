@@ -9,11 +9,11 @@ import {
 class UserStore {
   constructor() {
     this.state = {
-      users: [], // dữ liệu gốc từ API
+      users: [],
       roles: [],
       filters: {
         searchQuery: "",
-        statusFilter: "all", // 'all' | 'active' | 'inactive'
+        statusFilter: "all",
         roleFilter: "",
         pageSize: 25,
         page: 1,
@@ -32,14 +32,12 @@ class UserStore {
     this.listeners.forEach((cb) => cb());
   }
 
-  // ========== Computed (giờ đây có getter giống Dashboard) ==========
+  // ========== Getters ==========
   get items() {
-    // Dữ liệu đã được phân trang để hiển thị
     return this.pagedUsers;
   }
 
   get totalItems() {
-    // Tổng số bản ghi sau khi lọc
     return this.filteredUsers.length;
   }
 
@@ -50,7 +48,14 @@ class UserStore {
     );
   }
 
-  // Giữ nguyên các getter cũ (dùng nội bộ)
+  get currentPage() {
+    return this.state.filters.page;
+  }
+
+  get totalFiltered() {
+    return this.totalItems;
+  }
+
   get filteredUsers() {
     const { users, filters } = this.state;
     const q = filters.searchQuery.toLowerCase().trim();
@@ -93,7 +98,7 @@ class UserStore {
     try {
       const users = await fetchUsers();
       this.state.users = users;
-      this.state.filters.page = 1; // reset về trang 1
+      this.state.filters.page = 1;
     } catch (err) {
       this.state.error = err.message;
     } finally {
@@ -104,7 +109,7 @@ class UserStore {
 
   setFilters(partial) {
     Object.assign(this.state.filters, partial);
-    if (!("page" in partial)) this.state.filters.page = 1; // reset về trang 1 trừ khi set page rõ ràng
+    if (!("page" in partial)) this.state.filters.page = 1;
     this.notify();
   }
 
@@ -127,7 +132,6 @@ class UserStore {
   async updateUser(id, updates) {
     try {
       await updateUser({ id, ...updates });
-      // Cập nhật cục bộ
       const idx = this.state.users.findIndex((u) => u.id == id);
       if (idx !== -1) {
         Object.assign(this.state.users[idx], updates);
@@ -179,8 +183,8 @@ class UserStore {
       searchQuery: "",
       statusFilter: "all",
       roleFilter: "",
+      pageSize: 25,
       page: 1,
-      pageSize: 8,
     };
     this.notify();
   }

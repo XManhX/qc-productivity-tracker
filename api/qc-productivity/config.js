@@ -59,6 +59,7 @@ export default async function handler(req, res) {
           idle_threshold_minutes: body.idle_threshold_minutes,
           cooldown_minutes: body.cooldown_minutes,
           max_users_per_message: body.max_users_per_message,
+          seatalk_webhook_url: body.seatalk_webhook_url || null,
           updated_at: new Date().toISOString(),
         })
         .eq("id", 1);

@@ -1,4 +1,3 @@
-// services/api.js
 const BASE_URL = "/api/qc-productivity";
 
 async function request(url, options = {}) {
@@ -21,18 +20,15 @@ async function request(url, options = {}) {
   return data;
 }
 
-// Dashboard
 export async function fetchDashboard(params) {
   const qs = new URLSearchParams(params).toString();
   return request(`${BASE_URL}/dashboard?${qs}`);
 }
 
-// Roles
 export async function fetchRoles() {
   return request("/api/qc-roles");
 }
 
-// Users
 export async function fetchUsers() {
   return request(`${BASE_URL}/users`);
 }
@@ -72,7 +68,6 @@ export async function bulkCreateUsers(payload) {
   });
 }
 
-// Targets
 export async function fetchTargets() {
   return request(`${BASE_URL}/targets`);
 }
@@ -84,7 +79,6 @@ export async function updateTarget(data) {
   });
 }
 
-// Roles (CRUD)
 export async function createRole(data) {
   return request("/api/qc-roles", {
     method: "POST",
@@ -103,7 +97,6 @@ export async function deleteRole(id) {
   return request(`/api/qc-roles?id=${id}`, { method: "DELETE" });
 }
 
-// Auth
 export async function fetchMe() {
   return request(`${BASE_URL}/me`);
 }

@@ -9,7 +9,6 @@ export class UserList {
     this._render();
     this._bindEvents();
 
-    // Khởi tạo Pagination chung (không có dropdown page size)
     this.pagination = new Pagination(
       this.container.querySelector("#pagination-wrapper"),
       userStore,
@@ -22,9 +21,8 @@ export class UserList {
 
     userStore.on("update", () => {
       this._updateView();
-      // Cập nhật pagination mỗi khi store thay đổi
       this.pagination.refresh({
-        page: userStore.state.currentPage,
+        page: userStore.currentPage,
         totalPages: userStore.totalPages,
         totalItems: userStore.totalFiltered,
       });
@@ -131,9 +129,8 @@ export class UserList {
     if (!tbody) return;
 
     const { loading, error, users, roles } = userStore.state;
-    // Lấy qua getter
-    const filteredUsers = userStore.filteredUsers;
     const pagedUsers = userStore.pagedUsers;
+    const filteredUsers = userStore.filteredUsers;
 
     if (loading) {
       tbody.innerHTML = `<tr><td colspan="5" class="py-12 text-center text-slate-400"><div class="loading-spinner w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full mx-auto"></div><span>Đang tải...</span></td></tr>`;

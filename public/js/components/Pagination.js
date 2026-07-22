@@ -1,104 +1,89 @@
 export class Pagination {
-  /**
-   * @param {HTMLElement} container
-   * @param {Object} store - phải có: state.filters (page, pageSize), totalItems, totalPages, setPage, setFilters
-   * @param {Object} options
-   * @param {boolean} [options.showPageSizeDropdown] - có hiện dropdown chọn pageSize không?
-   * @param {number[]} [options.pageSizeOptions] - các lựa chọn cho dropdown (mặc định [10,25,50,100])
-   * @param {number} [options.windowSize] - nếu >0 sẽ hiện phân trang dạng cửa sổ, null để hiện tất cả
-   */
   constructor(container, store, options = {}) {
     this.container = container;
     this.store = store;
-    this.showPageSizeDropdown = options.showPageSizeDropdown ?? false;
-    this.pageSizeOptions = options.pageSizeOptions ?? [10, 25, 50, 100];
-    this.windowSize = options.windowSize ?? null;
-    this._render();
-    store.on("update", () => this._render());
+    this.options = {
+      showPageSizeDropdown: false,
+      pageSizeOptions: [10, 25, 50, 100],
+      windowSize: 5,
+      ...options,
+    };
+    this.refresh();
   }
 
-  _render() {
-    const { filters } = this.store.state;
-    const page = Number(filters.page);
-    const pageSize = Number(filters.pageSize);
-    const totalItems = this.store.totalItems;
-    const totalPages = this.store.totalPages;
+  refresh(data) {
+    const page = data ? data.page : this.store.currentPage;
+    const totalPages = data ? data.totalPages : this.store.totalPages;
+    const totalItems = data ? data.totalItems : this.store.totalFiltered;
 
-    const startItem = totalItems === 0 ? 0 : (page - 1) * pageSize + 1;
-    const endItem = Math.min(page * pageSize, totalItems);
+    if (!this.container) return;
+    this.container.innerHTML = this._buildHTML(page, totalPages, totalItems);
+    this._bindEvents();
+  }
 
-    let html = `
-      <div class="border-t border-slate-100 bg-slate-50 px-4 py-3 flex flex-col sm:flex-row items-center justify-between gap-3">
-        <div class="text-xs text-slate-500">
-          ${totalItems === 0 ? "Không có kết quả" : `Hiển thị ${startItem}–${endItem} trên ${totalItems} mục`}
-        </div>
-        <div class="flex items-center gap-3">
-    `;
-
-    if (this.showPageSizeDropdown) {
-      html += `
-        <div class="flex items-center bg-white border border-slate-200 rounded-xl px-3 py-2">
-          <label class="text-sm text-slate-500 mr-2">Hiển thị</label>
-          <select id="page-size-select" class="text-sm focus:outline-none bg-transparent">
-            ${this.pageSizeOptions.map((opt) => `<option value="${opt}" ${opt === pageSize ? "selected" : ""}>${opt}</option>`).join("")}
-          </select>
-        </div>
-      `;
+  _buildHTML(page, totalPages, totalItems) {
+    const windowSize = this.options.windowSize;
+    let pages = [];
+    if (totalPages <= windowSize + 4) {
+      for (let i = 1; i <= totalPages; i++) pages.push(i);
+    } else {
+      pages.push(1);
+      let start = Math.max(2, page - Math.floor(windowSize / 2));
+      let end = Math.min(totalPages - 1, start + windowSize - 1);
+      if (end - start < windowSize) start = Math.max(2, end - windowSize + 1);
+      if (start > 2) pages.push("...");
+      for (let i = start; i <= end; i++) pages.push(i);
+      if (end < totalPages - 1) pages.push("...");
+      pages.push(totalPages);
     }
 
-    html += `<div class="flex items-center gap-2" id="page-buttons"></div></div></div>`;
-    this.container.innerHTML = html;
+    const pageItems = pages
+      .map((p) => {
+        if (p === "...")
+          return `<span class="px-2 py-1 text-slate-400">...</span>`;
+        const active =
+          p === page
+            ? "bg-indigo-600 text-white"
+            : "bg-white text-slate-700 hover:bg-slate-100";
+        return `<button data-page="${p}" class="w-8 h-8 rounded-lg text-sm font-medium ${active} transition">${p}</button>`;
+      })
+      .join("");
 
-    // Bind page size dropdown
-    const sizeSelect = this.container.querySelector("#page-size-select");
-    if (sizeSelect) {
-      sizeSelect.addEventListener("change", (e) => {
+    const pageSizeDropdown = this.options.showPageSizeDropdown
+      ? `
+      <select id="page-size-select" class="ml-3 rounded-lg border border-slate-200 bg-white px-2 py-1 text-sm">
+        ${this.options.pageSizeOptions.map((s) => `<option value="${s}" ${s === this.store.state.filters.pageSize ? "selected" : ""}>${s}</option>`).join("")}
+      </select>`
+      : "";
+
+    return `
+      <div class="flex items-center justify-between p-4 border-t border-slate-100">
+        <span class="text-sm text-slate-500">Tổng: ${totalItems} nhân sự</span>
+        <div class="flex items-center gap-1">
+          <button data-page="prev" ${page === 1 ? "disabled" : ""} class="w-8 h-8 rounded-lg bg-white text-slate-700 hover:bg-slate-100 transition disabled:opacity-40"><i data-lucide="chevron-left" class="w-4 h-4"></i></button>
+          ${pageItems}
+          <button data-page="next" ${page === totalPages ? "disabled" : ""} class="w-8 h-8 rounded-lg bg-white text-slate-700 hover:bg-slate-100 transition disabled:opacity-40"><i data-lucide="chevron-right" class="w-4 h-4"></i></button>
+          ${pageSizeDropdown}
+        </div>
+      </div>
+    `;
+  }
+
+  _bindEvents() {
+    lucide.createIcons();
+    this.container.querySelectorAll("button[data-page]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const val = btn.dataset.page;
+        if (val === "prev") this.store.setPage(this.store.currentPage - 1);
+        else if (val === "next") this.store.setPage(this.store.currentPage + 1);
+        else this.store.setPage(Number(val));
+      });
+    });
+    const ps = this.container.querySelector("#page-size-select");
+    if (ps) {
+      ps.addEventListener("change", (e) => {
         this.store.setFilters({ pageSize: Number(e.target.value), page: 1 });
       });
     }
-
-    // Nút phân trang
-    const buttonsContainer = this.container.querySelector("#page-buttons");
-    if (!buttonsContainer) return;
-    if (totalPages <= 1) {
-      buttonsContainer.innerHTML = "";
-      return;
-    }
-
-    const makeBtn = (label, disabled, onClick) => {
-      const btn = document.createElement("button");
-      btn.className = `px-3 py-1 rounded-md text-sm font-medium ${disabled ? "bg-slate-100 text-slate-400 cursor-default" : "bg-white text-slate-700 hover:bg-slate-50 border border-slate-200 transition"}`;
-      btn.innerText = label;
-      if (!disabled) btn.addEventListener("click", onClick);
-      return btn;
-    };
-
-    buttonsContainer.appendChild(
-      makeBtn("Trước", page <= 1, () => this.store.setPage(page - 1)),
-    );
-
-    let pages = [];
-    if (this.windowSize && totalPages > this.windowSize) {
-      let start = Math.max(1, page - Math.floor(this.windowSize / 2));
-      let end = Math.min(totalPages, start + this.windowSize - 1);
-      if (end - start < this.windowSize - 1)
-        start = Math.max(1, end - this.windowSize + 1);
-      for (let p = start; p <= end; p++) pages.push(p);
-    } else {
-      for (let p = 1; p <= totalPages; p++) pages.push(p);
-    }
-
-    pages.forEach((p) => {
-      const btn = document.createElement("button");
-      btn.className = `px-3 py-1 rounded-md text-sm font-medium transition ${p === page ? "bg-indigo-600 text-white shadow-sm" : "bg-white text-slate-700 hover:bg-slate-50 border border-slate-200"}`;
-      btn.innerText = String(p);
-      if (p !== page)
-        btn.addEventListener("click", () => this.store.setPage(p));
-      buttonsContainer.appendChild(btn);
-    });
-
-    buttonsContainer.appendChild(
-      makeBtn("Sau", page >= totalPages, () => this.store.setPage(page + 1)),
-    );
   }
 }

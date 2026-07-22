@@ -124,6 +124,7 @@ export class ImportSection {
 
   _handleFile(file) {
     const reader = new FileReader();
+    this.importedRows = []; // Reset trước mỗi lần đọc
     reader.onload = (e) => {
       try {
         const wb = XLSX.read(e.target.result, {
@@ -132,18 +133,20 @@ export class ImportSection {
         const sheet = wb.Sheets[wb.SheetNames[0]];
         const rows = XLSX.utils.sheet_to_json(sheet, { defval: "" });
         this.importedRows = this._buildImportRows(rows);
-        this._renderImportPreview();
-        showToast(
-          this.importedRows.length
-            ? `Đọc được ${this.importedRows.length} dòng`
-            : "Không tìm thấy email hợp lệ",
-          this.importedRows.length ? "success" : "error",
-        );
       } catch (err) {
         showToast("Không thể đọc file: " + err.message, "error");
       }
+      this._renderImportPreview();
+      if (this.importedRows.length) {
+        showToast(`Đọc được ${this.importedRows.length} dòng`, "success");
+      } else {
+        showToast("Không tìm thấy email hợp lệ", "error");
+      }
     };
-    reader.onerror = () => showToast("Lỗi đọc file", "error");
+    reader.onerror = () => {
+      showToast("Lỗi đọc file", "error");
+      this._renderImportPreview();
+    };
     if (file.name.endsWith(".csv")) reader.readAsText(file);
     else reader.readAsArrayBuffer(file);
   }
@@ -204,12 +207,12 @@ export class ImportSection {
     btn.textContent = "Đang import...";
     try {
       const result = await userStore.importUsers(payload);
-      showToast(
-        `✅ Đã thêm ${result.insertedCount || 0} mới, bỏ qua ${result.skippedCount || 0}`,
-      );
+      const inserted = result.insertedCount || 0;
+      const skipped = result.skippedCount || 0;
+      showToast(`✅ Đã thêm ${inserted} mới, bỏ qua ${skipped}`);
       this.importedRows = [];
       this._renderImportPreview();
-      fileInput.value = "";
+      this.container.querySelector("#excel-file").value = "";
     } catch (err) {
       showToast("❌ " + err.message, "error");
     } finally {

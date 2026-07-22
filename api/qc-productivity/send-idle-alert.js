@@ -208,7 +208,8 @@ export default async function handler(req, res) {
 
     // Gửi webhook
     let sent = false;
-    const webhookUrl = process.env.SEATALK_ALERT_WEBHOOK_URL;
+    const webhookUrl =
+      config.seatalk_webhook_url || process.env.SEATALK_ALERT_WEBHOOK_URL;
     if (webhookUrl && !webhookUrl.includes("xxx")) {
       const webhookRes = await fetch(webhookUrl, {
         method: "POST",

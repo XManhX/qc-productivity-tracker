@@ -106,6 +106,14 @@ export class AlertConfigForm {
               <input type="number" name="max_users_per_message" value="${config.max_users_per_message}" min="1" class="w-full form-input rounded-md border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
             </div>
           </div>
+
+          <div>
+            <label class="block text-sm font-medium text-slate-500">Seatalk Webhook URL</label>
+            <input type="url" name="seatalk_webhook_url" value="${config.seatalk_webhook_url || ""}" 
+                  class="w-full form-input rounded-md border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                  placeholder="https://seatalkwebhook..."
+            >
+          </div>
         </fieldset>
 
         <div class="flex justify-end space-x-3">
@@ -153,10 +161,13 @@ export class AlertConfigForm {
         "idle_threshold_minutes",
         "cooldown_minutes",
         "max_users_per_message",
+        "seatalk_webhook_url",
       ];
       fields.forEach((f) => {
         data[f] = parseInt(formData.get(f), 10);
       });
+
+      data["seatalk_webhook_url"] = formData.get("seatalk_webhook_url") || "";
 
       const result = await this.store.saveConfig(data);
       const toast = document.getElementById("toast");

@@ -613,9 +613,8 @@
           }
           widgetSetVisible(false);
         }
-        // Chỉ gọi applyVisibility nếu trạng thái allowed thực sự thay đổi
         if (prevAllowed !== auth.allowed) {
-          WidgetVisibilityWatcher.applyVisibility();
+          WidgetVisibilityWatcher.apply();
         }
         return auth;
       })
@@ -625,7 +624,7 @@
         state.authPromise = null;
         widgetSetVisible(false);
         if (prevAllowed !== false) {
-          WidgetVisibilityWatcher.applyVisibility();
+          WidgetVisibilityWatcher.apply();
         }
         throw err;
       });
@@ -726,7 +725,6 @@
 
   const processNodeForButtons = (node, cfg) => {
     if (node.nodeType !== Node.ELEMENT_NODE) return;
-    // Nếu node đã được đánh dấu, bỏ qua toàn bộ cây con để tiết kiệm
     if (node.dataset?.qcTracked !== undefined) return;
     if (
       node.matches(
@@ -895,29 +893,30 @@
   NavigationMonitor.onNavigate(updatePageInfo);
   updatePageInfo();
 
-  // ==================== WIDGET VISIBILITY WATCHER ====================
+  // ==================== WIDGET VISIBILITY WATCHER (tối ưu) ====================
   const WidgetVisibilityWatcher = (() => {
     let lastDecision = null;
-    const shouldBeVisible = async () => {
-      const pt = state.currentPageType;
-      if (!pt) return false;
-      const email = state.currentEmail;
-      if (!email) return false;
-      const auth = await ensureAuth(email);
-      return auth.allowed;
-    };
     const apply = async () => {
-      const visible = await shouldBeVisible();
-      const decision = visible ? "visible" : "hidden";
+      // Sử dụng trực tiếp state.authStatus nếu đã có, tránh gọi ensureAuth không cần thiết
+      let allowed;
+      if (state.authStatus) {
+        allowed = state.authStatus.allowed;
+      } else {
+        const email = state.currentEmail;
+        if (!email) return;
+        const auth = await ensureAuth(email);
+        allowed = auth.allowed;
+      }
+      const decision = allowed ? "visible" : "hidden";
       if (decision !== lastDecision) {
         lastDecision = decision;
-        widgetSetVisible(visible);
-        if (visible) syncWidgetWithStats();
+        widgetSetVisible(allowed);
+        if (allowed) syncWidgetWithStats();
       }
     };
     NavigationMonitor.onNavigate(apply);
     apply();
-    return { applyVisibility: apply };
+    return { apply };
   })();
 
   // ==================== STORAGE LISTENER ====================

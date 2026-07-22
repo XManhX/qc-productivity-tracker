@@ -127,6 +127,11 @@ export class ImportSection {
         const wb = XLSX.read(e.target.result, {
           type: file.name.endsWith(".csv") ? "string" : "array",
         });
+        if (!wb.SheetNames.length) {
+          showToast("File không có sheet dữ liệu", "error");
+          this._renderImportPreview();
+          return;
+        }
         const sheet = wb.Sheets[wb.SheetNames[0]];
         const rows = XLSX.utils.sheet_to_json(sheet, { defval: "" });
         this.importedRows = this._buildImportRows(rows);
@@ -140,7 +145,10 @@ export class ImportSection {
           "success",
         );
       } else {
-        showToast("Không tìm thấy dòng nào có đủ email và role_key", "error");
+        showToast(
+          "Không tìm thấy dòng nào có đủ email và role_key. Kiểm tra lại file.",
+          "error",
+        );
       }
     };
     reader.onerror = () => {
@@ -152,19 +160,51 @@ export class ImportSection {
   }
 
   _buildImportRows(data) {
-    if (!Array.isArray(data)) return [];
+    if (!Array.isArray(data) || data.length === 0) return [];
+
+    // Tìm tên cột từ dòng dữ liệu đầu tiên
+    const firstRow = data[0] || {};
+    const headers = Object.keys(firstRow);
+
+    // Hàm tìm tên cột khớp với danh sách tên gợi ý (không phân biệt hoa thường, bỏ qua dấu cách thừa)
+    const findColumn = (possibleNames) => {
+      const normalized = possibleNames.map((p) =>
+        p.toLowerCase().replace(/\s+/g, ""),
+      );
+      return headers.find((h) => {
+        const clean = h.toLowerCase().replace(/\s+/g, "");
+        return normalized.includes(clean);
+      });
+    };
+
+    const emailCol = findColumn(["email", "e-mail", "e_mail", "mail"]);
+    const nameCol = findColumn([
+      "name",
+      "họ và tên",
+      "ho va ten",
+      "full name",
+      "fullname",
+      "tên",
+    ]);
+    const roleCol = findColumn([
+      "role_key",
+      "role",
+      "role key",
+      "rolekey",
+      "vai trò",
+      "role_key",
+    ]);
+
+    if (!emailCol || !roleCol) {
+      // Không tìm thấy cột bắt buộc -> trả về rỗng
+      return [];
+    }
+
     return data
       .map((row) => {
-        const email = (row.email || row["e-mail"] || row["Email"] || "")
-          .toLowerCase()
-          .trim();
-        const name = row.name || row["Họ và tên"] || row["Name"] || "";
-        const role_key = (
-          row.role_key ||
-          row["role"] ||
-          row["Role"] ||
-          ""
-        ).trim();
+        const email = (row[emailCol] || "").toString().toLowerCase().trim();
+        const name = nameCol ? (row[nameCol] || "").toString().trim() : "";
+        const role_key = (row[roleCol] || "").toString().trim();
         return {
           email,
           name: name || email.split("@")[0].toUpperCase(),

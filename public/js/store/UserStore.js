@@ -3,7 +3,6 @@ import {
   fetchRoles,
   createUser,
   updateUser,
-  bulkCreateUsers,
 } from "../services/api.js";
 
 class UserStore {
@@ -32,26 +31,21 @@ class UserStore {
     this.listeners.forEach((cb) => cb());
   }
 
-  // ========== Getters ==========
   get items() {
     return this.pagedUsers;
   }
-
   get totalItems() {
     return this.filteredUsers.length;
   }
-
   get totalPages() {
     return Math.max(
       1,
       Math.ceil(this.totalItems / this.state.filters.pageSize),
     );
   }
-
   get currentPage() {
     return this.state.filters.page;
   }
-
   get totalFiltered() {
     return this.totalItems;
   }
@@ -80,7 +74,6 @@ class UserStore {
     return this.filteredUsers.slice(start, start + this.state.filters.pageSize);
   }
 
-  // ========== Actions ==========
   async loadRoles() {
     try {
       const roles = await fetchRoles();
@@ -168,6 +161,48 @@ class UserStore {
     return { success, failed };
   }
 
+  // Phương thức mới: import có upsert
+  async importWithUpsert(payloadArray) {
+    let created = 0,
+      updated = 0,
+      errors = 0;
+    for (const item of payloadArray) {
+      try {
+        const existing = this.state.users.find((u) => u.email === item.email);
+        if (existing) {
+          // Kiểm tra xem có thay đổi gì không
+          const changes = {};
+          if (item.name && item.name !== existing.name)
+            changes.name = item.name;
+          if (item.role_key && item.role_key !== existing.role_key)
+            changes.role_key = item.role_key;
+          if (Object.keys(changes).length > 0) {
+            await updateUser({ id: existing.id, ...changes });
+            // Cập nhật ngay trên đối tượng local
+            Object.assign(existing, changes);
+            if (changes.role_key) {
+              const role = this.state.roles.find(
+                (r) => r.role_key === changes.role_key,
+              );
+              existing.display_name = role ? role.display_name : "";
+            }
+            updated++;
+          }
+          // Nếu không có thay đổi thì bỏ qua, không tính updated
+        } else {
+          await createUser(item);
+          created++;
+        }
+      } catch (err) {
+        errors++;
+      }
+    }
+    // Đồng bộ lại toàn bộ danh sách sau khi xử lý
+    await this.loadUsers();
+    return { created, updated, errors };
+  }
+
+  // (giữ lại importUsers cũ nếu cần, nhưng không bắt buộc)
   async importUsers(payloadArray) {
     try {
       const result = await bulkCreateUsers({ import: payloadArray });

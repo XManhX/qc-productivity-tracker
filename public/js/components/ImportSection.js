@@ -17,7 +17,8 @@ export class ImportSection {
         <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Import từ Excel / CSV</h3>
         <p class="text-slate-400 text-xs mb-3">
           Tải file Excel hoặc CSV có các cột: <strong>Email</strong>, <strong>Họ tên</strong> và <strong>role_key</strong>. 
-          Mỗi dòng bắt buộc phải có <strong>role_key</strong> (ví dụ: qc_rr, qc_cb). Dòng nào thiếu sẽ bị bỏ qua.
+          Mỗi dòng bắt buộc phải có <strong>role_key</strong> (ví dụ: qc_rr, qc_cb). 
+          Nếu email đã tồn tại, hệ thống sẽ tự động cập nhật tên/role nếu có thay đổi.
         </p>
         <div id="import-dropzone" class="import-dropzone border-2 border-dashed border-slate-200 rounded-xl p-4 text-center bg-slate-50 transition">
           <input type="file" id="excel-file" accept=".xlsx,.xls,.csv" class="hidden" />
@@ -161,12 +162,9 @@ export class ImportSection {
 
   _buildImportRows(data) {
     if (!Array.isArray(data) || data.length === 0) return [];
-
-    // Tìm tên cột từ dòng dữ liệu đầu tiên
     const firstRow = data[0] || {};
     const headers = Object.keys(firstRow);
 
-    // Hàm tìm tên cột khớp với danh sách tên gợi ý (không phân biệt hoa thường, bỏ qua dấu cách thừa)
     const findColumn = (possibleNames) => {
       const normalized = possibleNames.map((p) =>
         p.toLowerCase().replace(/\s+/g, ""),
@@ -192,11 +190,9 @@ export class ImportSection {
       "role key",
       "rolekey",
       "vai trò",
-      "role_key",
     ]);
 
     if (!emailCol || !roleCol) {
-      // Không tìm thấy cột bắt buộc -> trả về rỗng
       return [];
     }
 
@@ -250,10 +246,13 @@ export class ImportSection {
     btn.disabled = true;
     btn.textContent = "Đang import...";
     try {
-      const result = await userStore.importUsers(payload);
-      const inserted = result.insertedCount || 0;
-      const skipped = result.skippedCount || 0;
-      showToast(`✅ Đã thêm ${inserted} mới, bỏ qua ${skipped}`);
+      // Sử dụng phương thức mới có upsert
+      const result = await userStore.importWithUpsert(payload);
+      const { created, updated, errors } = result;
+      let msg = `✅ Import hoàn tất: ${created} mới`;
+      if (updated) msg += `, ${updated} cập nhật`;
+      if (errors) msg += `, ${errors} lỗi`;
+      showToast(msg);
       this.importedRows = [];
       this._renderImportPreview();
       this.container.querySelector("#excel-file").value = "";

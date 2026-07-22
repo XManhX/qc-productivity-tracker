@@ -23,6 +23,7 @@ class DashboardStore {
       error: null,
     };
     this.listeners = [];
+    this._lastDateCheck = this.getTodayVN();
   }
 
   // ========== Subscriptions ==========

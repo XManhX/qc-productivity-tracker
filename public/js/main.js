@@ -34,12 +34,18 @@ async function init() {
 
   console.log(store.state.data); // Debug state ban đầu
 
-  // 5. Tự động refresh mỗi 2 phút nếu đang xem ngày hôm nay
+  // 5. Kiểm tra chuyển ngày và tự động refresh khi cần
   setInterval(() => {
-    if (store.state.filters.date === store.getTodayVN()) {
+    const today = store.getTodayVN();
+    if (today !== store._lastDateCheck) {
+      // Sang ngày mới → cập nhật filter-date & tải lại dữ liệu
+      store._lastDateCheck = today;
+      store.setFilters({ date: today });
+    } else if (store.state.filters.date === today) {
+      // Vẫn đang trong ngày hiện tại → refresh dữ liệu
       store.loadData();
     }
-  }, 120000);
+  }, 60_000); // 1 phút
 }
 
 document.addEventListener("DOMContentLoaded", init);

@@ -393,8 +393,10 @@
   const makeRecord = (pageType, userEmail, endTime = nowISO()) => {
     const fields = collectFields(pageType);
     const cfg = PAGE_CONFIG[pageType] || {};
+    const id = Date.now() + "_" + Math.random().toString(36).substr(2, 9);
     return {
-      id: Date.now() + "_" + Math.random().toString(36).substr(2, 9),
+      id,
+      idempotency_key: id, // thêm key trùng lặp
       version: CONFIG.VERSION,
       page: pageType,
       action: normalize(cfg.actionText || ""),
@@ -805,12 +807,14 @@
     if (pending.length) {
       const payload = JSON.stringify(pending);
       const url = CONFIG.API_BASE_URL + CONFIG.LOG_ENDPOINT;
+      // Thử gửi qua beacon (fire-and-forget)
       if (navigator.sendBeacon) {
         navigator.sendBeacon(
           url,
           new Blob([payload], { type: "application/json" }),
         );
       } else {
+        // Nếu không có beacon, dùng GM_xmlhttpRequest đồng bộ (không chờ)
         try {
           GM_xmlhttpRequest({
             method: "POST",
@@ -818,9 +822,10 @@
             headers: { "Content-Type": "application/json" },
             data: payload,
           });
-        } catch {}
+        } catch (e) {}
       }
-      setPendingLogs([]);
+      // QUAN TRỌNG: không xóa pending logs. Chúng sẽ được gửi lại vào lần sau.
+      // (không gọi setPendingLogs([]))
     }
     cleanup();
   };

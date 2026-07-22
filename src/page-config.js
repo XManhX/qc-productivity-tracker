@@ -5,9 +5,7 @@ export const PAGE_CONFIG = {
     actionText: "complete",
     actionTextMatch: "contains",
     requiredFields: ["scan_value"],
-    fields: {
-      scan_value: ["sheet_id"],
-    },
+    fields: { scan_value: ["sheet_id"] },
     urlParam: "sheet_id",
   },
   judgement: {
@@ -16,9 +14,7 @@ export const PAGE_CONFIG = {
     actionText: "confirm",
     actionTextMatch: "contains",
     requiredFields: ["scan_value"],
-    fields: {
-      scan_value: ["#rms-judging-input-asnID"],
-    },
+    fields: { scan_value: ["#rms-judging-input-asnID"] },
     urlParam: "id",
   },
   rimassreceive: {

@@ -12,10 +12,7 @@ export function createTrackerSource() {
   let source = fs.readFileSync(scriptPath, "utf8");
   const widgetSource = fs.readFileSync(widgetPath, "utf8");
 
-  // Inject widget code
   source = source.replace("// __WIDGET_CODE__", widgetSource);
-
-  // Replace __PAGE_CONFIG__ with actual config object
   source = source.replace(
     "__PAGE_CONFIG__",
     JSON.stringify(PAGE_CONFIG, null, 2),

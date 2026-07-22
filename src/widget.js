@@ -1,4 +1,3 @@
-// ==================== WIDGET MANAGER (Final) ====================
 const WidgetManager = (function () {
   let _getStore = null;
   let _setStore = null;
@@ -13,7 +12,6 @@ const WidgetManager = (function () {
   let dragStartPos = { top: 0, left: 0 };
   let dragStartMouse = { x: 0, y: 0 };
 
-  // Try to use store if available, else fallback
   const getPos = () => {
     try {
       if (_getStore)
@@ -97,7 +95,6 @@ const WidgetManager = (function () {
   const createWidget = () => {
     if (widgetEl && document.body.contains(widgetEl)) return;
 
-    // Remove old if detached
     if (widgetEl && !document.body.contains(widgetEl)) {
       widgetEl = null;
       headerEl = null;
@@ -119,7 +116,7 @@ const WidgetManager = (function () {
     `;
 
     headerEl = document.createElement("div");
-    headerEl.innerText = "📊 NĂNG SUẤT HÔM NAY";
+    headerEl.textContent = "📊 NĂNG SUẤT HÔM NAY";
     headerEl.style.cssText =
       "font-weight:bold; border-bottom:1px solid #555; padding-bottom:6px; margin-bottom:8px; cursor:move; color:#ff5722; text-align:center;";
     widgetEl.appendChild(headerEl);
@@ -150,7 +147,6 @@ const WidgetManager = (function () {
     window.addEventListener("resize", enforceBounds);
     widgetEl._resizeHandler = enforceBounds;
 
-    // Update display with current stats
     updateDisplay(currentStats);
   };
 
@@ -166,19 +162,16 @@ const WidgetManager = (function () {
   const updateDisplay = (stats) => {
     currentStats = stats || currentStats;
     if (!widgetEl) return;
-    document.getElementById("qc-tracker-value-qc") &&
-      (document.getElementById("qc-tracker-value-qc").textContent =
-        Number(currentStats.qc) || 0);
-    document.getElementById("qc-tracker-value-judgement") &&
-      (document.getElementById("qc-tracker-value-judgement").textContent =
-        Number(currentStats.judgement) || 0);
-    document.getElementById("qc-tracker-value-rimassreceive") &&
-      (document.getElementById("qc-tracker-value-rimassreceive").textContent =
-        Number(currentStats.rimassreceive) || 0);
+    const qcEl = document.getElementById("qc-tracker-value-qc");
+    const jdEl = document.getElementById("qc-tracker-value-judgement");
+    const rcEl = document.getElementById("qc-tracker-value-rimassreceive");
+    if (qcEl) qcEl.textContent = Number(currentStats.qc) || 0;
+    if (jdEl) jdEl.textContent = Number(currentStats.judgement) || 0;
+    if (rcEl) rcEl.textContent = Number(currentStats.rimassreceive) || 0;
   };
 
   const startGuard = () => {
-    stopGuard(); // Clear old ones first
+    stopGuard();
     guardObserver = new MutationObserver(() => {
       if (shouldBeVisible) {
         if (!widgetEl || !document.body.contains(widgetEl)) {
@@ -188,14 +181,13 @@ const WidgetManager = (function () {
     });
     guardObserver.observe(document.body, { childList: true, subtree: true });
 
-    // Also poll every 1s as safety net
     guardInterval = setInterval(() => {
       if (shouldBeVisible) {
         if (!widgetEl || !document.body.contains(widgetEl)) {
           createWidget();
         }
       }
-    }, 1000);
+    }, 2000); // giảm tần suất polling
   };
 
   const stopGuard = () => {

@@ -18,6 +18,7 @@
     STATS_SYNC_INTERVAL_MS: 30000,
     API_CAPTURE_TIMEOUT_MS: 15000,
     STATS_THROTTLE_MS: 5000,
+    // Không cần DEDUP_COOLDOWN_MS nữa
   };
 
   // ==================== PAGE CONFIG ====================
@@ -47,6 +48,7 @@
       unload: null,
     },
     _sendingFingerprints: new Set(),
+    // Dedup vĩnh viễn dùng GM_setValue (giữ nguyên cơ chế cũ)
   };
 
   // ==================== UTILITIES ====================
@@ -138,7 +140,7 @@
     }
   };
 
-  // ==================== DEDUP LOGIC ====================
+  // ==================== DEDUP LOGIC (VĨNH VIỄN TRONG NGÀY) ====================
   const DEDUP_KEY_PREFIX = "qc_dedup_";
   const buildDedupKey = (record) => {
     const date = todayKey();
@@ -215,7 +217,7 @@
     }
   };
 
-  // ==================== EMAIL (cache tối ưu) ====================
+  // ==================== EMAIL ====================
   const getEmail = () => {
     const cached = getStore("user_email", "");
     const ts = getStore("user_email_timestamp", 0);
@@ -307,7 +309,7 @@
     return result;
   };
 
-  // ==================== API INTERCEPTOR (CHỈ PARSE KHI CẦN + CHỐNG OVERRIDE) ====================
+  // ==================== API INTERCEPTOR ====================
   const cancelAllApiWaiters = () => {
     const waiters = state.apiWaiters;
     while (waiters.length) {
@@ -427,6 +429,8 @@
     const fields = collectFields(pageType);
     const cfg = PAGE_CONFIG[pageType] || {};
     return {
+      // ID duy nhất để quản lý pending chính xác
+      id: Date.now() + "_" + Math.random().toString(36).substr(2, 9),
       version: CONFIG.VERSION,
       page: pageType,
       action: normalize(cfg.actionText || ""),
@@ -452,10 +456,9 @@
     pending.push(record);
     setPendingLogs(pending);
   };
-  const removeFromPending = (record) => {
+  const removeFromPendingById = (recordId) => {
     const pending = getPendingLogs();
-    const fp = createFingerprint(record);
-    const filtered = pending.filter((r) => createFingerprint(r) !== fp);
+    const filtered = pending.filter((r) => r.id !== recordId);
     if (filtered.length !== pending.length) setPendingLogs(filtered);
   };
   const clearPending = () => setPendingLogs([]);
@@ -475,7 +478,7 @@
     const fp = createFingerprint(record);
     if (state._sendingFingerprints.has(fp)) {
       warn("Record is already being sent, skipping duplicate send:", fp);
-      return false;
+      return false; // đang gửi dở, coi như chưa thành công
     }
     state._sendingFingerprints.add(fp);
 
@@ -499,29 +502,24 @@
     if (!pending.length) return;
     log(`Flushing ${pending.length} pending logs`);
 
-    for (let i = 0; i < pending.length; ) {
+    for (let i = 0; i < pending.length; i++) {
       const record = pending[i];
       const sent = await sendRecord(record);
-      if (!sent) {
-        const fp = createFingerprint(record);
-        if (state._sendingFingerprints.has(fp)) {
-          // Record đang được gửi bởi một tiến trình khác (ví dụ recordAndSend)
-          // Có thể nó đã bị xóa khỏi pending, cần đồng bộ lại
-          pending = getPendingLogs();
-          i = 0; // bắt đầu lại từ đầu với mảng mới
-          continue;
-        }
-        warn("Flush interrupted, remaining records will be retried later");
-        break;
+      if (sent) {
+        removeFromPendingById(record.id);
+        pending = getPendingLogs(); // cập nhật lại mảng sau khi xóa
+        i--; // lùi lại để không bỏ sót phần tử tiếp theo
+      } else {
+        // Nếu không gửi được (có thể do đang gửi dở hoặc lỗi mạng),
+        // ta vẫn tiếp tục với record tiếp theo. Nếu là lỗi mạng thực sự,
+        // các record sau cũng sẽ lỗi, nhưng ít nhất ta không dừng đột ngột.
+        // Hành vi cũ: dừng khi lỗi. Bây giờ: tiếp tục để không bỏ sót cơ hội.
+        // Có thể sau này cải thiện thêm.
       }
-      // Gửi thành công → xóa khỏi pending và cập nhật mảng
-      removeFromPending(record);
-      pending = getPendingLogs();
-      // Không tăng i vì mảng đã thay đổi, phần tử kế tiếp tự động trượt vào vị trí i
     }
   };
 
-  // ==================== STATS (OPTIMIZED) ====================
+  // ==================== STATS ====================
   const fetchStatsFromServer = async () => {
     const operator = getEmail();
     if (!operator) return null;
@@ -661,11 +659,14 @@
   const recordAndSend = async (pageType, userEmail, endTimeOverride) => {
     const record = makeRecord(pageType, userEmail, endTimeOverride);
     if (shouldSkip(record, pageType)) return;
+
+    // Dedup vĩnh viễn trong ngày
     if (isRecordedToday(record)) {
       log("Duplicate in today's dedup set, skipping");
       return;
     }
     markRecordedToday(record);
+
     addToPending(record);
 
     const statsKey = `stats_${todayKey()}`;
@@ -687,7 +688,7 @@
     if (state.authStatus?.allowed) {
       const sent = await sendRecord(record);
       if (sent) {
-        removeFromPending(record);
+        removeFromPendingById(record.id);
       }
       await syncWidgetWithStats();
     } else {
@@ -722,7 +723,7 @@
     return null;
   };
 
-  // ==================== BUTTON MARKING (TỐI ƯU MUTATIONOBSERVER) ====================
+  // ==================== BUTTON MARKING ====================
   let buttonObserver = null;
 
   const markSingleButton = (el, cfg) => {
@@ -935,7 +936,7 @@
   NavigationMonitor.onNavigate(updatePageInfo);
   updatePageInfo();
 
-  // ==================== WIDGET VISIBILITY WATCHER (tối ưu) ====================
+  // ==================== WIDGET VISIBILITY WATCHER ====================
   const WidgetVisibilityWatcher = (() => {
     let lastDecision = null;
     const apply = async () => {
@@ -1007,7 +1008,21 @@
     }
   };
 
-  // ==================== INIT (DEBOUNCED) ====================
+  // ==================== REFRESH PAGE STATE (KHẮC PHỤC MISS KHI CHUYỂN TAB) ====================
+  const refreshPageState = () => {
+    const pageType = state.currentPageType;
+    if (!pageType) return;
+    // Gọi collectFields để cập nhật lastScanValue và pageStartTime từ input hiện tại
+    collectFields(pageType);
+    log(
+      "Page state refreshed, scan_value:",
+      state.lastScanValue,
+      "pageStartTime:",
+      state.pageStartTime,
+    );
+  };
+
+  // ==================== INIT ====================
   let debounceTimer = null;
   const debouncedInit = () => {
     if (debounceTimer) clearTimeout(debounceTimer);
@@ -1030,7 +1045,7 @@
         state.authStatus = null;
         state.authPromise = null;
 
-        // Đăng ký lại các listener (lần đầu hoặc sau cleanup)
+        // Đăng ký lại các listener
         document.addEventListener("click", clickHandler, true);
         document.addEventListener("input", inputHandler, true);
         window.addEventListener("beforeunload", beforeUnloadHandler);
@@ -1057,6 +1072,9 @@
           return;
         }
         state.currentEmail = email;
+
+        // QUAN TRỌNG: Khôi phục pageStartTime từ input hiện có
+        refreshPageState();
 
         markAllTrackedButtons(pageType);
 

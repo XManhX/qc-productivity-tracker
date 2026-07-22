@@ -13,7 +13,11 @@ export class UserList {
     this.pagination = new Pagination(
       this.container.querySelector("#pagination-wrapper"),
       userStore,
-      { showPageSizeDropdown: false, windowSize: 5 },
+      {
+        showPageSizeDropdown: false,
+        pageSizeOptions: [10, 25, 50, 100],
+        windowSize: 5,
+      },
     );
 
     userStore.on("update", () => {

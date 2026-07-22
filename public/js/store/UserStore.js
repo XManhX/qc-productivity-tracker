@@ -15,8 +15,8 @@ class UserStore {
         searchQuery: "",
         statusFilter: "all", // 'all' | 'active' | 'inactive'
         roleFilter: "",
+        pageSize: 25,
         page: 1,
-        pageSize: 8,
       },
       loading: false,
       error: null,

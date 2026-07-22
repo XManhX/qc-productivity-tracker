@@ -6,6 +6,7 @@ export class ImportSection {
   constructor(container) {
     this.container = container;
     this.importedRows = [];
+    this.isImporting = false; // cờ trạng thái import
     this._render();
     this._bindEvents();
     userStore.on("update", () => this._updateBulkRoleDropdown());
@@ -38,13 +39,23 @@ export class ImportSection {
               <p class="text-sm font-semibold text-slate-800">Xem trước dữ liệu</p>
               <p id="import-summary" class="text-xs text-slate-400">0 dòng sẵn sàng</p>
             </div>
-            <button id="import-submit-btn" class="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold px-3 py-2 rounded-lg transition" disabled>Import Ngay</button>
+            <button id="import-submit-btn" class="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold px-3 py-2 rounded-lg transition disabled:opacity-50" disabled>Import Ngay</button>
           </div>
           <div class="overflow-x-auto max-h-56 overflow-y-auto">
             <table class="w-full text-left border-collapse text-xs">
               <thead class="bg-white border-b border-slate-100"><tr><th class="px-4 py-2 text-slate-500">#</th><th class="px-4 py-2 text-slate-500">Họ tên</th><th class="px-4 py-2 text-slate-500">Email</th><th class="px-4 py-2 text-slate-500">Role</th></tr></thead>
               <tbody id="import-preview-body" class="divide-y divide-slate-100"></tbody>
             </table>
+          </div>
+          <!-- Thanh tiến trình import -->
+          <div id="import-progress" class="hidden px-4 py-3 bg-slate-50 border-t border-slate-200">
+            <div class="flex items-center justify-between text-xs text-slate-500 mb-1">
+              <span id="progress-text">Đang xử lý...</span>
+              <span id="progress-count">0/0</span>
+            </div>
+            <div class="w-full bg-slate-200 rounded-full h-1.5">
+              <div id="progress-bar" class="bg-indigo-500 h-1.5 rounded-full transition-all" style="width: 0%"></div>
+            </div>
           </div>
         </div>
         <!-- Bulk Add -->
@@ -192,9 +203,7 @@ export class ImportSection {
       "vai trò",
     ]);
 
-    if (!emailCol || !roleCol) {
-      return [];
-    }
+    if (!emailCol || !roleCol) return [];
 
     return data
       .map((row) => {
@@ -215,14 +224,17 @@ export class ImportSection {
     const body = this.container.querySelector("#import-preview-body");
     const summary = this.container.querySelector("#import-summary");
     const btn = this.container.querySelector("#import-submit-btn");
+    const progressDiv = this.container.querySelector("#import-progress");
     if (!this.importedRows.length) {
       preview.classList.add("hidden");
       btn.disabled = true;
+      progressDiv.classList.add("hidden");
       return;
     }
     preview.classList.remove("hidden");
     summary.textContent = `${this.importedRows.length} dòng sẵn sàng`;
     btn.disabled = false;
+    progressDiv.classList.add("hidden"); // Ẩn progress khi chưa import
     body.innerHTML = this.importedRows
       .slice(0, 10)
       .map(
@@ -235,24 +247,53 @@ export class ImportSection {
   }
 
   async _importPreparedRows() {
-    if (!this.importedRows.length) return;
+    if (!this.importedRows.length || this.isImporting) return;
+    this.isImporting = true;
+
     const payload = this.importedRows.map((r) => ({
       email: r.email,
       name: r.name,
       role_key: r.role_key,
     }));
-    if (!confirm(`Import ${payload.length} nhân sự?`)) return;
+    const total = payload.length;
+
+    if (!confirm(`Import ${total} nhân sự?`)) {
+      this.isImporting = false;
+      return;
+    }
+
     const btn = this.container.querySelector("#import-submit-btn");
+    const progressDiv = this.container.querySelector("#import-progress");
+    const progressText = this.container.querySelector("#progress-text");
+    const progressCount = this.container.querySelector("#progress-count");
+    const progressBar = this.container.querySelector("#progress-bar");
+    const preview = this.container.querySelector("#import-preview");
+
     btn.disabled = true;
     btn.textContent = "Đang import...";
+    progressDiv.classList.remove("hidden");
+    progressText.textContent = "Đang xử lý...";
+    progressCount.textContent = `0/${total}`;
+    progressBar.style.width = "0%";
+
     try {
-      // Sử dụng phương thức mới có upsert
-      const result = await userStore.importWithUpsert(payload);
+      const result = await userStore.importWithUpsert(
+        payload,
+        ({ processed, total, created, updated, errors }) => {
+          // Cập nhật giao diện tiến trình
+          progressCount.textContent = `${processed}/${total}`;
+          progressBar.style.width = `${(processed / total) * 100}%`;
+          progressText.textContent = `Đã tạo ${created}, cập nhật ${updated}, lỗi ${errors}`;
+        },
+      );
+
       const { created, updated, errors } = result;
       let msg = `✅ Import hoàn tất: ${created} mới`;
       if (updated) msg += `, ${updated} cập nhật`;
       if (errors) msg += `, ${errors} lỗi`;
       showToast(msg);
+
+      // Reset sau khi hoàn thành
       this.importedRows = [];
       this._renderImportPreview();
       this.container.querySelector("#excel-file").value = "";
@@ -261,6 +302,11 @@ export class ImportSection {
     } finally {
       btn.disabled = false;
       btn.textContent = "Import Ngay";
+      this.isImporting = false;
+      // Ẩn thanh tiến trình sau 2 giây (để người dùng thấy kết quả)
+      setTimeout(() => {
+        progressDiv.classList.add("hidden");
+      }, 2000);
     }
   }
 

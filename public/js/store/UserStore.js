@@ -161,16 +161,17 @@ class UserStore {
     return { success, failed };
   }
 
-  // Phương thức mới: import có upsert
-  async importWithUpsert(payloadArray) {
+  // Import có upsert + callback tiến trình
+  async importWithUpsert(payloadArray, onProgress = null) {
     let created = 0,
       updated = 0,
       errors = 0;
-    for (const item of payloadArray) {
+    const total = payloadArray.length;
+    for (let i = 0; i < total; i++) {
+      const item = payloadArray[i];
       try {
         const existing = this.state.users.find((u) => u.email === item.email);
         if (existing) {
-          // Kiểm tra xem có thay đổi gì không
           const changes = {};
           if (item.name && item.name !== existing.name)
             changes.name = item.name;
@@ -178,7 +179,6 @@ class UserStore {
             changes.role_key = item.role_key;
           if (Object.keys(changes).length > 0) {
             await updateUser({ id: existing.id, ...changes });
-            // Cập nhật ngay trên đối tượng local
             Object.assign(existing, changes);
             if (changes.role_key) {
               const role = this.state.roles.find(
@@ -188,7 +188,6 @@ class UserStore {
             }
             updated++;
           }
-          // Nếu không có thay đổi thì bỏ qua, không tính updated
         } else {
           await createUser(item);
           created++;
@@ -196,13 +195,16 @@ class UserStore {
       } catch (err) {
         errors++;
       }
+      // Gọi callback tiến trình sau mỗi item
+      if (onProgress) {
+        onProgress({ processed: i + 1, total, created, updated, errors });
+      }
     }
-    // Đồng bộ lại toàn bộ danh sách sau khi xử lý
     await this.loadUsers();
     return { created, updated, errors };
   }
 
-  // (giữ lại importUsers cũ nếu cần, nhưng không bắt buộc)
+  // Giữ lại importUsers cũ nếu cần
   async importUsers(payloadArray) {
     try {
       const result = await bulkCreateUsers({ import: payloadArray });

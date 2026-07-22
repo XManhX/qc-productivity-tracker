@@ -464,6 +464,7 @@
       .join("|");
   };
 
+  // Hàm gửi record, trả về true nếu thành công, false nếu thất bại – không tự xóa khỏi pending
   const sendRecord = async (record) => {
     try {
       await gmRequest(
@@ -471,20 +472,31 @@
         CONFIG.API_BASE_URL + CONFIG.LOG_ENDPOINT,
         record,
       );
-      removeFromPending(record);
       return true;
     } catch (e) {
-      warn("Send record failed, queued:", e.message);
+      warn("Send record failed:", e.message);
       return false;
     }
   };
 
+  // Flush pending an toàn, không gửi trùng lặp
   const flushPending = async () => {
-    const pending = getPendingLogs();
+    let pending = getPendingLogs();
     if (!pending.length) return;
     log(`Flushing ${pending.length} pending logs`);
-    for (const record of pending.slice()) {
-      await sendRecord(record);
+
+    for (let i = 0; i < pending.length; ) {
+      const record = pending[i];
+      const sent = await sendRecord(record);
+      if (!sent) {
+        // Nếu gửi thất bại, dừng flush, giữ lại các record chưa gửi (từ i trở đi)
+        warn("Flush interrupted, remaining records will be retried later");
+        break;
+      }
+      // Gửi thành công → xóa khỏi pending và cập nhật lại mảng
+      removeFromPending(record);
+      pending = getPendingLogs(); // lấy mảng mới sau khi xóa
+      // Không tăng i vì mảng đã thay đổi, phần tử tiếp theo đã trở thành vị trí i
     }
   };
 
@@ -550,7 +562,7 @@
     return state.statsPromise;
   };
 
-  // ==================== AUTH (CHỈ CLEAR PENDING KHI BỊ TỪ CHỐI THỰC SỰ) ====================
+  // ==================== AUTH (CHỈ CLEAR PENDING KHI BỊ TỪ CHỐI THỰC SỰ, KHÔNG FLUSH TỰ ĐỘNG) ====================
   const checkAuth = async (email) => {
     if (!email || !isValidEmail(email))
       return { allowed: false, reason: "invalid_email" };
@@ -598,11 +610,9 @@
         state.authPromise = null;
 
         if (auth.allowed) {
-          flushPending(); // Gửi ngay các log đang chờ
           widgetSetVisible(true);
-          syncWidgetWithStats();
+          syncWidgetWithStats(); // không flush ở đây, sẽ do init quản lý
         } else {
-          // Chỉ xóa pending nếu server thực sự từ chối (không phải lỗi mạng)
           if (auth.reason !== "authz_error") {
             clearPending();
           }
@@ -613,7 +623,6 @@
         return auth;
       })
       .catch((err) => {
-        // Lỗi bất ngờ (thường là mạng) – giữ pending, chờ cơ hội sau
         state.authStatus = { allowed: false, reason: "authz_error" };
         state.authPromise = null;
         widgetSetVisible(false);
@@ -648,10 +657,13 @@
     setStore(statsKey, stats);
 
     if (state.authStatus === null) {
-      ensureAuth(userEmail); // kích hoạt auth nếu chưa từng kiểm tra
+      ensureAuth(userEmail);
     }
     if (state.authStatus?.allowed) {
-      await sendRecord(record);
+      const sent = await sendRecord(record);
+      if (sent) {
+        removeFromPending(record); // gửi thành công thì xóa khỏi pending
+      }
       await syncWidgetWithStats();
     } else {
       log("Record queued, waiting for auth");
@@ -712,7 +724,6 @@
     }
   };
 
-  // Hàm đệ quy duyệt qua node và các con để tìm button và đánh dấu
   const processNodeForButtons = (node, cfg) => {
     if (node.nodeType !== Node.ELEMENT_NODE) return;
     if (
@@ -724,7 +735,6 @@
         markSingleButton(node, cfg);
       }
     }
-    // Nếu node có chứa các button con
     const children = node.querySelectorAll(
       'button, input[type="submit"], a[role="button"], div[role="button"]',
     );
@@ -742,13 +752,11 @@
       buttonObserver = null;
     }
 
-    // Quét lần đầu toàn bộ trang
     const candidates = document.querySelectorAll(
       'button, input[type="submit"], a[role="button"], div[role="button"]',
     );
     candidates.forEach((el) => markSingleButton(el, cfg));
 
-    // Nếu vẫn chưa có nút nào được đánh dấu, cài observer chỉ trên các node được thêm
     if (!document.querySelector("[data-qc-tracked]")) {
       log("No buttons found yet, setting up MutationObserver for:", pageType);
       buttonObserver = new MutationObserver((mutations) => {
@@ -1010,12 +1018,12 @@
 
         markAllTrackedButtons(pageType);
 
-        // Chờ auth hoàn tất rồi mới flush
+        // Chờ auth rồi mới flush (đảm bảo không flush khi chưa được phép)
         try {
           const auth = await ensureAuth(email);
           if (auth.allowed) {
             log("Authorization successful");
-            await flushPending();
+            await flushPending(); // chỉ flush sau khi đã được phép
           } else {
             warn("User not authorized:", auth.reason);
           }

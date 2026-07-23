@@ -1,3 +1,6 @@
+import { DEBUG } from "./config.js";
+const log = (...args) => DEBUG && console.log("[QCTracker Record]", ...args);
+
 export function buildRecord(
   pageType,
   action,
@@ -7,18 +10,15 @@ export function buildRecord(
   startTime,
   endTime,
 ) {
+  log("Building record:", { pageType, action, startFields, endFields });
   const id = Date.now() + "_" + Math.random().toString(36).substr(2, 9);
-  // Merge fields, ưu tiên endFields nếu trùng
   const merged = { ...startFields, ...endFields };
 
-  // Tách riêng asn và return_tn
   const asn = merged.asn || "";
   const returnTn = merged.return_tn || "";
-
-  // Gom tất cả các field còn lại vào extra_data, bao gồm cả asn, return_tn để đầy đủ
   const extraData = { ...merged };
 
-  return {
+  const record = {
     id,
     idempotency_key: id,
     version: "__VERSION__",
@@ -32,4 +32,6 @@ export function buildRecord(
     page_end_time: endTime,
     extra_data: extraData,
   };
+  log("Record built:", record);
+  return record;
 }

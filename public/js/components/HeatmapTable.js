@@ -46,7 +46,7 @@ export class HeatmapTable {
           <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span> Cập nhật trực tiếp
         </span>
       </div>
-      <div class="overflow-x-auto border border-slate-200 rounded-lg shadow-sm">
+      <div class="overflow-x-auto border border-slate-200 shadow-sm">
         <div class="max-h-[calc(100vh-16rem)] overflow-y-auto">
           <table class="w-full text-center border-collapse" id="data-table">
             <thead id="table-header" class="text-xs uppercase tracking-wider font-semibold"></thead>

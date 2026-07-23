@@ -1,15 +1,16 @@
 {
   "name": "qc-productivity-tracker",
-  "version": "1.0.20",
+  "version": "2.0.0",
   "description": "Tampermonkey tracker for QC productivity on WMS return inbound flows",
   "type": "module",
   "private": true,
   "scripts": {
-    "build": "node scripts/build-userscript.js",
+    "build": "node build/build.js",
     "dev": "nodemon --watch src --watch scripts scripts/build-userscript.js"
   },
   "devDependencies": {
-    "nodemon": "^3.1.0"
+    "nodemon": "^3.1.0",
+    "esbuild": "^0.19.0"
   },
   "engines": {
     "node": "24.x"

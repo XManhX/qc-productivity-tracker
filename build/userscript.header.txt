@@ -1,0 +1,19 @@
+// ==UserScript==
+// @name         Shopee WMS QC Productivity Tracker
+// @namespace    http://tampermonkey.net/
+// @version      __VERSION__
+// @description  Track QC, Judgement and Receiving productivity via API capture.
+// @author       QC Team
+// @match        https://wms.ssc.shopee.vn/*
+// @grant        GM_getValue
+// @grant        GM_setValue
+// @grant        GM_deleteValue
+// @grant        GM_listValues
+// @grant        GM_xmlhttpRequest
+// @grant        GM_addValueChangeListener
+// @connect      wms.ssc.shopee.vn
+// @connect      *
+// @updateURL    __API_BASE_URL__/install/qc-productivity-tracker.user.js
+// @downloadURL  __API_BASE_URL__/install/qc-productivity-tracker.user.js
+// @run-at       document-end
+// ==/UserScript==

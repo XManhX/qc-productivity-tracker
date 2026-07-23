@@ -80,7 +80,7 @@ export class HeatmapTable {
       html += `
         <th class="px-3 py-4 text-slate-700 font-semibold border-l border-slate-200/50">
           <button class="group flex items-center justify-center gap-1 w-full" data-sort-trigger="hour-${h}">
-            <span>${h}h</span>
+            <span class="w-full">${h}h</span>
             <span data-sort-icon="hour-${h}"><i data-lucide="chevrons-up-down" class="w-3.5 h-3.5 text-slate-400"></i></span>
           </button>
         </th>`;

@@ -182,8 +182,8 @@ export class HeatmapTable {
     tbody.innerHTML = "";
 
     const leftName = 0;
-    const leftRole = 260;
-    const leftTotal = 350;
+    const leftRole = 262;
+    const leftTotal = 352;
 
     data.forEach((user) => {
       const tr = this._createRow(
@@ -268,7 +268,7 @@ export class HeatmapTable {
   _diffUpdate(newData, hourStart, hourEnd) {
     const tbody = this.container.querySelector("#dashboard-body");
     const oldDataMap = new Map(this._previousData.map((u) => [u.email, u]));
-    const leftTotal = 350;
+    const leftTotal = 352;
 
     // Duyệt dữ liệu mới, cập nhật từng dòng hiện có
     newData.forEach((user) => {

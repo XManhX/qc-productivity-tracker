@@ -24,6 +24,13 @@ function installGlobalInterceptors() {
     );
 
     if (matchedHandlers.length > 0) {
+      let requestBody = null;
+      if (init?.body) {
+        try {
+          requestBody = JSON.parse(init.body);
+        } catch (e) {}
+      }
+
       responsePromise
         .then((response) => {
           if (!response.ok) return;
@@ -33,13 +40,14 @@ function installGlobalInterceptors() {
             .then((data) => {
               for (const h of matchedHandlers) {
                 if (h.config.successCondition(data)) {
-                  let bodyObj = {};
-                  try {
-                    if (init?.body) bodyObj = JSON.parse(init.body);
-                  } catch (e) {
-                    /* empty */
+                  // Kiểm tra điều kiện bổ sung (nếu có)
+                  if (
+                    h.config.captureCondition &&
+                    !h.config.captureCondition(data)
+                  ) {
+                    continue;
                   }
-                  const extracted = h.config.extractFields(bodyObj, data, {});
+                  const extracted = h.config.extractFields(requestBody, data);
                   if (onCaptureCallback)
                     onCaptureCallback(h.config.action, extracted);
                 }
@@ -65,6 +73,11 @@ function installGlobalInterceptors() {
 
   XHRProto.send = function (body) {
     const xhr = this;
+    let requestBody = null;
+    try {
+      if (body) requestBody = JSON.parse(body);
+    } catch (e) {}
+
     const origReady = xhr.onreadystatechange;
     xhr.onreadystatechange = function () {
       if (xhr.readyState === 4) {
@@ -78,11 +91,14 @@ function installGlobalInterceptors() {
             const data = JSON.parse(xhr.responseText);
             for (const h of matchedHandlers) {
               if (h.config.successCondition(data)) {
-                let bodyObj = {};
-                try {
-                  if (body) bodyObj = JSON.parse(body);
-                } catch (e) {}
-                const extracted = h.config.extractFields(bodyObj, data, {});
+                // Kiểm tra điều kiện bổ sung
+                if (
+                  h.config.captureCondition &&
+                  !h.config.captureCondition(data)
+                ) {
+                  continue;
+                }
+                const extracted = h.config.extractFields(requestBody, data);
                 if (onCaptureCallback)
                   onCaptureCallback(h.config.action, extracted);
               }
@@ -92,7 +108,7 @@ function installGlobalInterceptors() {
       }
       if (origReady) origReady.apply(this, arguments);
     };
-    return origSend.call(this, body);
+    return origXHRSend.call(this, body);
   };
 }
 

@@ -65,6 +65,15 @@ export const CAPTURE_CONFIGS = {
       method: "POST",
       action: "end",
       successCondition: (data) => data && data.retcode === 0,
+      captureCondition: (responseData) => {
+        const d = responseData?.data;
+        return (
+          d &&
+          d.is_item_all_received &&
+          d.is_sku_all_received &&
+          d.is_asn_all_received
+        );
+      },
       extractFields: (requestBody, responseData) => ({
         device_id: requestBody?.device_id || "",
         inbound_id: requestBody?.inbound_id || "",

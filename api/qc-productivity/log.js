@@ -155,10 +155,11 @@ export default async function handler(req, res) {
         action: logData.action || null,
         operator: logData.operator || null,
         url: logData.url || null,
-        device_id: logData.device_id || null,
-        scan_value: logData.scan_value || null,
+        asn: logData.asn || null,
+        return_tn: logData.return_tn || null,
         page_start_time: logData.page_start_time || null,
         page_end_time: logData.page_end_time || null,
+        extra_data: logData.extra_data || {},
       };
 
       const dbResponse = await fetch(`${SUPABASE_URL}/rest/v1/qc_logs`, {

@@ -70,7 +70,7 @@ function handleCapture(action, extractedFields) {
     const endTime = new Date().toISOString();
     const record = buildRecord(
       currentPageType,
-      "end",
+      "complete",
       pendingStart.fields,
       extractedFields,
       currentEmail,

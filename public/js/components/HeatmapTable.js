@@ -61,14 +61,14 @@ export class HeatmapTable {
   _buildHeader(headerRow, hourStart, hourEnd) {
     let html = `
       <!-- Cột Nhân viên: sticky top + left, z-index cao nhất -->
-      <th class="sticky top-0 left-0 z-40 w-[220px] min-w-[220px] px-4 py-2 text-left font-semibold text-slate-700 bg-slate-100">
+      <th class="sticky top-0 left-0 z-40 w-[260px] min-w-[260px] px-4 py-2 text-left font-semibold text-slate-700 bg-slate-100">
         <button class="group flex items-center gap-1 w-full text-left" data-sort-trigger="name">
           <span class="w-full">Nhân viên</span>
           <span data-sort-icon="name"><i data-lucide="chevrons-up-down" class="w-3.5 h-3.5 text-slate-400"></i></span>
         </button>
       </th>
-      <!-- Cột Role: sticky top + left (offset = 220px), z-index 30 -->
-      <th class="sticky top-0 left-[220px] z-30 w-[90px] min-w-[90px] px-4 py-2 text-left font-semibold text-slate-700 bg-slate-100">
+      <!-- Cột Role: sticky top + left (offset = 260px), z-index 30 -->
+      <th class="sticky top-0 left-[260px] z-30 w-[90px] min-w-[90px] px-4 py-2 text-left font-semibold text-slate-700 bg-slate-100">
         <button class="group flex items-center gap-1 w-full text-left" data-sort-trigger="role">
           <span class="w-full">Role</span>
           <span data-sort-icon="role"><i data-lucide="chevrons-up-down" class="w-3.5 h-3.5 text-slate-400"></i></span>
@@ -146,7 +146,7 @@ export class HeatmapTable {
       // Cột Nhân viên – sticky left-0, nền trắng
       const tdName = document.createElement("td");
       tdName.className =
-        "sticky left-0 z-10 bg-white w-[220px] min-w-[220px] px-4 py-2 text-left font-medium text-slate-900 border-r border-slate-100 max-w-[260px]";
+        "sticky left-0 z-10 bg-white w-[260px] min-w-[260px] px-4 py-2 text-left font-medium text-slate-900 border-r border-slate-100 max-w-[260px]";
       tdName.innerHTML = `
         <div class="flex items-center gap-3 min-w-0">
           <div class="w-9 h-9 rounded-full bg-slate-100 flex items-center justify-center text-xs font-bold text-slate-600 uppercase border border-slate-200 flex-shrink-0">
@@ -159,10 +159,10 @@ export class HeatmapTable {
         </div>`;
       tr.appendChild(tdName);
 
-      // Cột Role – sticky left-[220px], nền trắng
+      // Cột Role – sticky left-[260px], nền trắng
       const tdRole = document.createElement("td");
       tdRole.className =
-        "sticky left-[220px] z-10 bg-white w-[90px] min-w-[90px] px-2 py-2 border-r border-slate-100 text-sm";
+        "sticky left-[260px] z-10 bg-white w-[90px] min-w-[90px] px-2 py-2 border-r border-slate-100 text-sm";
       tdRole.textContent = user.display_name || user.role_key || "-";
       tr.appendChild(tdRole);
 

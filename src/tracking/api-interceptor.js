@@ -1,3 +1,4 @@
+// src/tracking/api-interceptor.js
 import { CAPTURE_CONFIGS } from "./config.js";
 
 let activeHandlers = [];
@@ -8,6 +9,7 @@ function installGlobalInterceptors() {
   if (installed) return;
   installed = true;
 
+  // --- fetch interceptor ---
   const originalFetch = window.fetch;
   window.fetch = function (input, init) {
     const url = typeof input === "string" ? input : input?.url;
@@ -40,7 +42,6 @@ function installGlobalInterceptors() {
             .then((data) => {
               for (const h of matchedHandlers) {
                 if (h.config.successCondition(data)) {
-                  // Kiểm tra điều kiện bổ sung (nếu có)
                   if (
                     h.config.captureCondition &&
                     !h.config.captureCondition(data)
@@ -61,9 +62,10 @@ function installGlobalInterceptors() {
     return responsePromise;
   };
 
+  // --- XMLHttpRequest interceptor ---
   const XHRProto = XMLHttpRequest.prototype;
   const origOpen = XHRProto.open;
-  const origSend = XHRProto.send;
+  const origSend = XHRProto.send; // <-- lưu lại hàm send gốc
 
   XHRProto.open = function (method, url, ...rest) {
     this._qcMethod = method.toUpperCase();
@@ -91,7 +93,6 @@ function installGlobalInterceptors() {
             const data = JSON.parse(xhr.responseText);
             for (const h of matchedHandlers) {
               if (h.config.successCondition(data)) {
-                // Kiểm tra điều kiện bổ sung
                 if (
                   h.config.captureCondition &&
                   !h.config.captureCondition(data)
@@ -108,7 +109,7 @@ function installGlobalInterceptors() {
       }
       if (origReady) origReady.apply(this, arguments);
     };
-    return origXHRSend.call(this, body);
+    return origSend.call(this, body); // <-- sửa thành origSend
   };
 }
 

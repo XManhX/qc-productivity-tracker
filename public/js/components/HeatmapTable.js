@@ -7,6 +7,7 @@ export class HeatmapTable {
     this.container = container;
     this._renderStructure();
 
+    // Pagination
     this.pagination = new Pagination(
       this.container.querySelector("#pagination-wrapper"),
       store,
@@ -17,16 +18,29 @@ export class HeatmapTable {
       },
     );
 
+    // Trạng thái cho diff update
     this._previousData = null;
     this._lastHourRange = null;
     this._lastSort = null;
 
+    // Live update indicator
+    this._lastUpdateTime = null; // timestamp (ms) lần cập nhật thành công cuối cùng
+    this._updateStatus = "idle"; // 'idle' | 'loading' | 'success' | 'error'
+    this._refreshInterval = 60; // giây, đồng bộ với setInterval trong init.js
+    this._statusTimer = null; // interval cập nhật hiển thị mỗi giây
+
+    // Lắng nghe store
     store.on("update", () => {
+      this._handleStoreUpdate();
       this._renderTable();
       refreshIcons();
     });
+
+    this._startStatusTimer();
+    this._updateStatusDisplay();
   }
 
+  // ==================== CẤU TRÚC GIAO DIỆN ====================
   _renderStructure() {
     this.container.innerHTML = `
       <div class="px-4 py-2 border-b border-slate-100 bg-slate-50 flex items-center justify-between">
@@ -42,11 +56,15 @@ export class HeatmapTable {
             <span class="text-slate-400 italic ml-2">(ngưỡng theo từng role)</span>
           </div>
         </div>
-        <span class="bg-emerald-100 text-emerald-800 text-xs font-semibold px-2.5 py-1 rounded-full flex items-center gap-1">
-          <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span> Cập nhật trực tiếp
-        </span>
+        <!-- Phần trạng thái cập nhật trực tiếp -->
+        <div id="live-update-status" class="flex items-center gap-2 text-xs font-medium">
+          <!-- Sẽ được cập nhật bởi _updateStatusDisplay() -->
+          <span class="flex items-center gap-1.5 bg-slate-100 text-slate-500 px-2.5 py-1 rounded-full">
+            <span class="w-1.5 h-1.5 rounded-full bg-slate-400"></span> Đang kết nối...
+          </span>
+        </div>
       </div>
-      <div class="overflow-x-auto border border-slate-200 shadow-sm">
+      <div class="overflow-x-auto border border-slate-200 rounded-lg shadow-sm">
         <div class="max-h-[calc(100vh-16rem)] overflow-y-auto">
           <table class="w-full text-center border-collapse" id="data-table">
             <thead id="table-header" class="text-xs uppercase tracking-wider font-semibold"></thead>
@@ -59,6 +77,114 @@ export class HeatmapTable {
     refreshIcons();
   }
 
+  // ==================== LIVE UPDATE STATUS (CHUYÊN NGHIỆP) ====================
+  _startStatusTimer() {
+    if (this._statusTimer) return;
+    this._statusTimer = setInterval(() => this._updateStatusDisplay(), 1000);
+  }
+
+  _handleStoreUpdate() {
+    if (store.state.loading) {
+      this._updateStatus = "loading";
+    } else if (store.state.error) {
+      this._updateStatus = "error";
+    } else {
+      this._updateStatus = "success";
+      this._lastUpdateTime = Date.now();
+    }
+    this._updateStatusDisplay();
+  }
+
+  _updateStatusDisplay() {
+    const statusEl = this.container.querySelector("#live-update-status");
+    if (!statusEl) return;
+
+    const now = Date.now();
+    let elapsedStr = "";
+    let countdownStr = "";
+    let statusClass = "";
+    let iconHtml = "";
+    let label = "";
+
+    // Tính thời gian đã trôi qua kể từ lần cập nhật thành công cuối cùng
+    if (
+      this._lastUpdateTime &&
+      (this._updateStatus === "success" || this._updateStatus === "loading")
+    ) {
+      const elapsed = Math.floor((now - this._lastUpdateTime) / 1000);
+      elapsedStr = this._formatDuration(elapsed) + " trước";
+    }
+
+    // Tính thời gian còn lại đến lần refresh tiếp theo (chỉ khi thành công và không phải idle)
+    if (this._updateStatus === "success" && this._lastUpdateTime) {
+      const elapsed = Math.floor((now - this._lastUpdateTime) / 1000);
+      const remaining = Math.max(0, this._refreshInterval - elapsed);
+      countdownStr = this._formatDuration(remaining);
+    } else if (this._updateStatus === "loading") {
+      countdownStr = "đang tải...";
+    }
+
+    switch (this._updateStatus) {
+      case "loading":
+        statusClass = "bg-blue-50 text-blue-700";
+        iconHtml = `<span class="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse"></span>`;
+        label = "Đang cập nhật";
+        break;
+      case "error":
+        statusClass = "bg-red-50 text-red-700";
+        iconHtml = `<i data-lucide="alert-circle" class="w-3.5 h-3.5"></i>`;
+        label = "Lỗi cập nhật";
+        elapsedStr = ""; // có thể hiển thị thông báo lỗi nếu muốn
+        countdownStr = "thử lại sau";
+        break;
+      case "success":
+        statusClass = "bg-emerald-50 text-emerald-700";
+        iconHtml = `<i data-lucide="check-circle-2" class="w-3.5 h-3.5"></i>`;
+        label = "Đã cập nhật";
+        break;
+      default: // idle
+        statusClass = "bg-slate-100 text-slate-500";
+        iconHtml = `<span class="w-1.5 h-1.5 rounded-full bg-slate-400"></span>`;
+        label = "Đang kết nối...";
+        break;
+    }
+
+    statusEl.innerHTML = `
+      <span class="flex items-center gap-1.5 ${statusClass} px-2.5 py-1 rounded-full">
+        ${iconHtml} ${label}
+      </span>
+      ${elapsedStr ? `<span class="text-slate-400">${elapsedStr}</span>` : ""}
+      <span class="text-slate-400 font-mono text-[11px] bg-slate-100 px-1.5 py-0.5 rounded">⏳ ${countdownStr}</span>
+    `;
+
+    // Khi có icon lucide cần refresh (lỗi hoặc thành công)
+    if (this._updateStatus === "error" || this._updateStatus === "success") {
+      refreshIcons();
+    }
+  }
+
+  _formatDuration(totalSeconds) {
+    if (totalSeconds < 60) {
+      return `${totalSeconds}s`;
+    } else if (totalSeconds < 3600) {
+      const m = Math.floor(totalSeconds / 60);
+      const s = totalSeconds % 60;
+      return `${m}:${s.toString().padStart(2, "0")}`;
+    } else {
+      const h = Math.floor(totalSeconds / 3600);
+      const m = Math.floor((totalSeconds % 3600) / 60);
+      return `${h}:${m.toString().padStart(2, "0")}h`;
+    }
+  }
+
+  destroy() {
+    if (this._statusTimer) {
+      clearInterval(this._statusTimer);
+      this._statusTimer = null;
+    }
+  }
+
+  // ==================== HEADER ====================
   _buildHeader(headerRow, hourStart, hourEnd) {
     const leftName = 0;
     const leftRole = 260;
@@ -100,6 +226,7 @@ export class HeatmapTable {
     this._updateSortIcons();
   }
 
+  // ==================== RENDER BẢNG (có diff update) ====================
   _renderTable() {
     const headerRow = this.container.querySelector("#table-header");
     const tbody = this.container.querySelector("#dashboard-body");

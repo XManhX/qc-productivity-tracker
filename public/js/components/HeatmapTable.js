@@ -59,23 +59,28 @@ export class HeatmapTable {
   }
 
   _buildHeader(headerRow, hourStart, hourEnd) {
+    // Các giá trị offset left cho cột sticky (tổng chiều rộng các cột trước đó)
+    const leftName = 0;
+    const leftRole = 260; // width cột Nhân viên
+    const leftTotal = 260 + 90; // width Nhân viên + Role = 350
+
     let html = `
-      <!-- Cột Nhân viên: sticky top + left, z-index cao nhất -->
-      <th class="sticky top-0 left-0 z-40 w-[260px] min-w-[260px] px-4 py-2 text-left font-semibold text-slate-700 bg-slate-100">
+      <!-- Cột Nhân viên: sticky top + left -->
+      <th class="sticky top-0 left-[${leftName}px] z-40 w-[260px] min-w-[260px] px-4 py-2 text-left font-semibold text-slate-700 bg-slate-100">
         <button class="group flex items-center gap-1 w-full text-left" data-sort-trigger="name">
           <span class="w-full">Nhân viên</span>
           <span data-sort-icon="name"><i data-lucide="chevrons-up-down" class="w-3.5 h-3.5 text-slate-400"></i></span>
         </button>
       </th>
-      <!-- Cột Role: sticky top + left (offset = 260px), z-index 30 -->
-      <th class="sticky top-0 left-[260px] z-30 w-[90px] min-w-[90px] px-4 py-2 text-left font-semibold text-slate-700 bg-slate-100">
+      <!-- Cột Role: sticky top + left -->
+      <th class="sticky top-0 left-[${leftRole}px] z-30 w-[90px] min-w-[90px] px-4 py-2 text-left font-semibold text-slate-700 bg-slate-100">
         <button class="group flex items-center gap-1 w-full text-left" data-sort-trigger="role">
           <span class="w-full">Role</span>
           <span data-sort-icon="role"><i data-lucide="chevrons-up-down" class="w-3.5 h-3.5 text-slate-400"></i></span>
         </button>
       </th>
-      <!-- Cột Tổng: chỉ sticky top -->
-      <th class="sticky top-0 z-20 w-[90px] min-w-[90px] px-4 py-4 bg-emerald-50 font-bold text-emerald-800">
+      <!-- Cột Tổng: sticky top + left (offset = 350px), z-index cao hơn dòng dữ liệu -->
+      <th class="sticky top-0 left-[${leftTotal}px] z-30 w-[90px] min-w-[90px] px-4 py-4 bg-emerald-50 font-bold text-emerald-800">
         <button class="group flex items-center justify-center gap-1 w-full" data-sort-trigger="total">
           <span class="w-full">Tổng</span>
           <span data-sort-icon="total"><i data-lucide="chevrons-up-down" class="w-3.5 h-3.5 text-slate-400"></i></span>
@@ -138,15 +143,19 @@ export class HeatmapTable {
       return 0;
     });
 
+    // Offsets cho các cột sticky
+    const leftName = 0;
+    const leftRole = 260; // width cột Nhân viên
+    const leftTotal = 260 + 90; // 350
+
     tbody.innerHTML = "";
     sorted.forEach((user) => {
       const tr = document.createElement("tr");
       tr.className = "hover:bg-slate-50/80 transition duration-150";
 
-      // Cột Nhân viên – sticky left-0, nền trắng
+      // Cột Nhân viên – sticky left-0
       const tdName = document.createElement("td");
-      tdName.className =
-        "sticky left-0 z-10 bg-white w-[260px] min-w-[260px] px-4 py-2 text-left font-medium text-slate-900 border-r border-slate-100 max-w-[260px]";
+      tdName.className = `sticky left-[${leftName}px] z-10 bg-white w-[260px] min-w-[260px] px-4 py-2 text-left font-medium text-slate-900 border-r border-slate-100 max-w-[260px]`;
       tdName.innerHTML = `
         <div class="flex items-center gap-3 min-w-0">
           <div class="w-9 h-9 rounded-full bg-slate-100 flex items-center justify-center text-xs font-bold text-slate-600 uppercase border border-slate-200 flex-shrink-0">
@@ -159,25 +168,26 @@ export class HeatmapTable {
         </div>`;
       tr.appendChild(tdName);
 
-      // Cột Role – sticky left-[260px], nền trắng
+      // Cột Role – sticky left-260
       const tdRole = document.createElement("td");
-      tdRole.className =
-        "sticky left-[260px] z-10 bg-white w-[90px] min-w-[90px] px-2 py-2 border-r border-slate-100 text-sm";
+      tdRole.className = `sticky left-[${leftRole}px] z-10 bg-white w-[90px] min-w-[90px] px-2 py-2 border-r border-slate-100 text-sm`;
       tdRole.textContent = user.display_name || user.role_key || "-";
       tr.appendChild(tdRole);
 
-      // Cột Tổng
+      // Cột Tổng – sticky left-350, giữ màu nền gốc tùy theo giá trị
       const total = user.total || 0;
       const workingHours = hourEnd - hourStart + 1;
       const lowTotal = (user.low_threshold || 10) * workingHours;
       const highTotal = (user.medium_threshold || 16) * workingHours;
       const tdTotal = document.createElement("td");
-      let cls = "px-2 py-2 border-r border-slate-100 font-bold text-center ";
-      if (total === 0) cls += "bg-slate-50 text-slate-400";
-      else if (total < lowTotal) cls += "bg-red-50 text-red-800";
-      else if (total < highTotal) cls += "bg-yellow-50 text-yellow-800";
-      else cls += "bg-green-50 text-green-800";
-      tdTotal.className = cls;
+      let totalColorClass = "bg-slate-50 text-slate-400";
+      if (total > 0) {
+        if (total < lowTotal) totalColorClass = "bg-red-50 text-red-800";
+        else if (total < highTotal)
+          totalColorClass = "bg-yellow-50 text-yellow-800";
+        else totalColorClass = "bg-green-50 text-green-800";
+      }
+      tdTotal.className = `sticky left-[${leftTotal}px] z-10 ${totalColorClass} w-[90px] min-w-[90px] px-2 py-2 border-r border-slate-100 font-bold text-center`;
       tdTotal.textContent = total;
       tr.appendChild(tdTotal);
 

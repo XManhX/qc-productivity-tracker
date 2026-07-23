@@ -61,7 +61,7 @@ export class HeatmapTable {
           </span>
         </div>
       </div>
-      <div class="overflow-x-auto border border-slate-200 rounded-lg shadow-sm">
+      <div class="overflow-x-auto border border-slate-200 shadow-sm">
         <div class="max-h-[calc(100vh-16rem)] overflow-y-auto">
           <table class="w-full text-center border-collapse" id="data-table">
             <thead id="table-header" class="text-xs uppercase tracking-wider font-semibold"></thead>
@@ -107,7 +107,6 @@ export class HeatmapTable {
         statusClass = "bg-blue-50 text-blue-700";
         iconHtml = `<span class="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse"></span>`;
         label = "Đang cập nhật";
-        // Hiển thị thời gian đã loading
         if (this._lastUpdateTime) {
           const elapsed = Math.floor((now - this._lastUpdateTime) / 1000);
           timeInfo = `đã tải ${this._formatDuration(elapsed)}`;
@@ -125,7 +124,6 @@ export class HeatmapTable {
         statusClass = "bg-emerald-50 text-emerald-700";
         iconHtml = `<i data-lucide="check-circle-2" class="w-3.5 h-3.5"></i>`;
         label = "Đã cập nhật";
-        // Hiển thị đếm ngược đến lần tiếp theo
         if (this._lastUpdateTime) {
           const elapsed = Math.floor((now - this._lastUpdateTime) / 1000);
           const remaining = Math.max(0, this._refreshInterval - elapsed);
@@ -133,7 +131,7 @@ export class HeatmapTable {
         }
         break;
 
-      default: // idle
+      default:
         statusClass = "bg-slate-100 text-slate-500";
         iconHtml = `<span class="w-1.5 h-1.5 rounded-full bg-slate-400"></span>`;
         label = "Đang kết nối...";
@@ -153,17 +151,15 @@ export class HeatmapTable {
   }
 
   _formatDuration(totalSeconds) {
-    if (totalSeconds < 60) {
-      return `${totalSeconds}s`;
-    } else if (totalSeconds < 3600) {
+    if (totalSeconds < 60) return `${totalSeconds}s`;
+    if (totalSeconds < 3600) {
       const m = Math.floor(totalSeconds / 60);
       const s = totalSeconds % 60;
       return `${m}:${s.toString().padStart(2, "0")}`;
-    } else {
-      const h = Math.floor(totalSeconds / 3600);
-      const m = Math.floor((totalSeconds % 3600) / 60);
-      return `${h}:${m.toString().padStart(2, "0")}h`;
     }
+    const h = Math.floor(totalSeconds / 3600);
+    const m = Math.floor((totalSeconds % 3600) / 60);
+    return `${h}:${m.toString().padStart(2, "0")}h`;
   }
 
   destroy() {
@@ -176,11 +172,11 @@ export class HeatmapTable {
   // ==================== HEADER ====================
   _buildHeader(headerRow, hourStart, hourEnd) {
     const leftName = 0;
-    const leftRole = 260;
-    const leftTotal = 260 + 90;
+    const leftRole = 280; // 280px = width của cột Nhân viên
+    const leftTotal = 280 + 90; // 370px
 
     let html = `
-      <th class="sticky top-0 left-[${leftName}px] z-40 w-[260px] min-w-[260px] px-4 py-2 text-left font-semibold text-slate-700 bg-slate-100">
+      <th class="sticky top-0 left-[${leftName}px] z-40 w-[280px] min-w-[280px] px-4 py-2 text-left font-semibold text-slate-700 bg-slate-100">
         <button class="group flex items-center gap-1 w-full text-left" data-sort-trigger="name">
           <span class="w-full">Nhân viên</span>
           <span data-sort-icon="name"><i data-lucide="chevrons-up-down" class="w-3.5 h-3.5 text-slate-400"></i></span>
@@ -291,8 +287,8 @@ export class HeatmapTable {
     tbody.innerHTML = "";
 
     const leftName = 0;
-    const leftRole = 260;
-    const leftTotal = 350;
+    const leftRole = 280;
+    const leftTotal = 370;
 
     data.forEach((user) => {
       const tr = this._createRow(
@@ -312,8 +308,9 @@ export class HeatmapTable {
     tr.className = "hover:bg-slate-50/80 transition duration-150";
     tr.dataset.userEmail = user.email;
 
+    // Cột Nhân viên – width 280px
     const tdName = document.createElement("td");
-    tdName.className = `sticky left-[${leftName}px] z-10 bg-white w-[260px] min-w-[260px] px-4 py-2 text-left font-medium text-slate-900 border-r border-slate-100 max-w-[260px]`;
+    tdName.className = `sticky left-[${leftName}px] z-10 bg-white w-[280px] min-w-[280px] px-4 py-2 text-left font-medium text-slate-900 border-r border-slate-100 max-w-[280px]`;
     tdName.innerHTML = `
       <div class="flex items-center gap-3 min-w-0">
         <div class="w-9 h-9 rounded-full bg-slate-100 flex items-center justify-center text-xs font-bold text-slate-600 uppercase border border-slate-200 flex-shrink-0">
@@ -326,11 +323,13 @@ export class HeatmapTable {
       </div>`;
     tr.appendChild(tdName);
 
+    // Cột Role – left 280px
     const tdRole = document.createElement("td");
     tdRole.className = `sticky left-[${leftRole}px] z-10 bg-white w-[90px] min-w-[90px] px-2 py-2 border-r border-slate-100 text-sm`;
     tdRole.textContent = user.display_name || user.role_key || "-";
     tr.appendChild(tdRole);
 
+    // Cột Tổng – left 370px
     const total = user.total || 0;
     const workingHours = hourEnd - hourStart + 1;
     const lowTotal = (user.low_threshold || 10) * workingHours;
@@ -345,6 +344,7 @@ export class HeatmapTable {
     tdTotal.textContent = total;
     tr.appendChild(tdTotal);
 
+    // Các cột giờ
     for (let h = hourStart; h <= hourEnd; h++) {
       const count = user.hourly?.[h] || 0;
       const td = document.createElement("td");
@@ -373,7 +373,7 @@ export class HeatmapTable {
   _diffUpdate(newData, hourStart, hourEnd) {
     const tbody = this.container.querySelector("#dashboard-body");
     const oldDataMap = new Map(this._previousData.map((u) => [u.email, u]));
-    const leftTotal = 350;
+    const leftTotal = 370; // cập nhật leftTotal mới
 
     newData.forEach((user) => {
       const tr = tbody.querySelector(`tr[data-user-email="${user.email}"]`);
@@ -482,16 +482,12 @@ export class HeatmapTable {
   _getHourCellClass(count, lowThreshold, mediumThreshold) {
     let base =
       "px-3 py-4 border-l border-slate-100 transition-colors text-center ";
-    if (count === 0) {
-      return base + "bg-slate-50 text-slate-300";
-    }
-    if (count < lowThreshold) {
+    if (count === 0) return base + "bg-slate-50 text-slate-300";
+    if (count < lowThreshold)
       return base + "bg-red-50 text-red-700 font-medium";
-    } else if (count < mediumThreshold) {
+    if (count < mediumThreshold)
       return base + "bg-yellow-50 text-yellow-700 font-semibold";
-    } else {
-      return base + "bg-green-50 text-green-700 font-bold";
-    }
+    return base + "bg-green-50 text-green-700 font-bold";
   }
 
   _attachSortEvents() {

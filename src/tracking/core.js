@@ -55,9 +55,8 @@ function handleCapture(action, extractedFields) {
   if (isDestroyed) return;
 
   const email = getEmail();
-  // Nếu không có email, dừng xử lý và cleanup (ẩn widget, reset)
   if (!email) {
-    log("No operator email found. Cleaning up...");
+    log("No operator email. Cleaning up.");
     cleanup();
     return;
   }
@@ -70,7 +69,6 @@ function handleCapture(action, extractedFields) {
     pendingStart = {
       startTime: new Date().toISOString(),
       fields: { ...extractedFields },
-      email,
     };
     log("Pending start set:", pendingStart);
   } else if (action === "end") {
@@ -78,14 +76,7 @@ function handleCapture(action, extractedFields) {
       log('Warning: "end" without pending start, ignoring');
       return;
     }
-    // Kiểm tra email có thay đổi so với lúc start không
-    if (email !== pendingStart.email) {
-      log(
-        `Email changed from ${pendingStart.email} to ${email}, discarding record.`,
-      );
-      pendingStart = null;
-      return;
-    }
+
     const endTime = new Date().toISOString();
     const record = buildRecord(
       currentPageType,
@@ -104,7 +95,6 @@ function handleCapture(action, extractedFields) {
         const stats = incrementLocalStat(currentPageType);
         WidgetManager.updateStats(stats);
       } else {
-        log("Record send failed, queuing");
         const pending = globalThis.GM_getValue("qc_pending_logs", []);
         pending.push(record);
         globalThis.GM_setValue("qc_pending_logs", pending);
@@ -116,7 +106,6 @@ function handleCapture(action, extractedFields) {
 function flushPendingLogs() {
   const pending = globalThis.GM_getValue("qc_pending_logs", []);
   if (!pending.length) return;
-  log("Flushing pending logs:", pending.length);
   globalThis.GM_setValue("qc_pending_logs", []);
   (async () => {
     for (const record of pending) {
@@ -163,7 +152,7 @@ async function initPage() {
     WidgetManager.setVisible(false);
     return;
   }
-  log("Initialized with email:", email);
+  log("Operator:", email);
 
   initInterceptor(pageType, handleCapture);
   WidgetManager.setVisible(true);
@@ -185,14 +174,12 @@ initPage().catch((e) => console.error("[QCTracker] Init error:", e));
 
 // Theo dõi chuyển trang SPA
 let lastUrl = location.href;
-const observer = new MutationObserver(() => {
+new MutationObserver(() => {
   if (location.href !== lastUrl) {
     lastUrl = location.href;
-    log("SPA navigation detected, reinitializing");
     initPage();
   }
-});
-observer.observe(document, { subtree: true, childList: true });
+}).observe(document, { subtree: true, childList: true });
 
 window.addEventListener("beforeunload", () => {
   flushPendingLogs();

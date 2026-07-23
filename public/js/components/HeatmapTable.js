@@ -7,7 +7,6 @@ export class HeatmapTable {
     this.container = container;
     this._renderStructure();
 
-    // Khởi tạo Pagination
     this.pagination = new Pagination(
       this.container.querySelector("#pagination-wrapper"),
       store,
@@ -18,12 +17,10 @@ export class HeatmapTable {
       },
     );
 
-    // Lưu trạng thái trước đó để so sánh khi cập nhật
     this._previousData = null;
     this._lastHourRange = null;
     this._lastSort = null;
 
-    // Lắng nghe store để render lại bảng
     store.on("update", () => {
       this._renderTable();
       refreshIcons();
@@ -67,20 +64,21 @@ export class HeatmapTable {
     const leftRole = 260;
     const leftTotal = 260 + 90;
 
+    // Thêm border-b-2 cho tất cả th, border-r cho cột cố định, border-l cho cột giờ
     let html = `
-      <th class="sticky top-0 left-[${leftName}px] z-40 w-[260px] min-w-[260px] px-4 py-2 text-left font-semibold text-slate-700 bg-slate-100">
+      <th class="sticky top-0 left-[${leftName}px] z-40 w-[260px] min-w-[260px] px-4 py-2 text-left font-semibold text-slate-700 bg-slate-100 border-b-2 border-slate-200 border-r border-slate-100">
         <button class="group flex items-center gap-1 w-full text-left" data-sort-trigger="name">
           <span class="w-full">Nhân viên</span>
           <span data-sort-icon="name"><i data-lucide="chevrons-up-down" class="w-3.5 h-3.5 text-slate-400"></i></span>
         </button>
       </th>
-      <th class="sticky top-0 left-[${leftRole}px] z-30 w-[90px] min-w-[90px] px-4 py-2 text-left font-semibold text-slate-700 bg-slate-100">
+      <th class="sticky top-0 left-[${leftRole}px] z-30 w-[90px] min-w-[90px] px-4 py-2 text-left font-semibold text-slate-700 bg-slate-100 border-b-2 border-slate-200 border-r border-slate-100">
         <button class="group flex items-center gap-1 w-full text-left" data-sort-trigger="role">
           <span class="w-full">Role</span>
           <span data-sort-icon="role"><i data-lucide="chevrons-up-down" class="w-3.5 h-3.5 text-slate-400"></i></span>
         </button>
       </th>
-      <th class="sticky top-0 left-[${leftTotal}px] z-30 w-[90px] min-w-[90px] px-4 py-4 bg-emerald-50 font-bold text-emerald-800">
+      <th class="sticky top-0 left-[${leftTotal}px] z-30 w-[90px] min-w-[90px] px-4 py-4 bg-emerald-50 font-bold text-emerald-800 border-b-2 border-slate-200 border-r border-slate-100">
         <button class="group flex items-center justify-center gap-1 w-full" data-sort-trigger="total">
           <span class="w-full">Tổng</span>
           <span data-sort-icon="total"><i data-lucide="chevrons-up-down" class="w-3.5 h-3.5 text-slate-400"></i></span>
@@ -89,7 +87,7 @@ export class HeatmapTable {
 
     for (let h = hourStart; h <= hourEnd; h++) {
       html += `
-        <th class="sticky top-0 z-20 px-3 py-4 text-slate-700 font-semibold border-l border-slate-200/50 bg-slate-100">
+        <th class="sticky top-0 z-20 px-3 py-4 text-slate-700 font-semibold border-l border-slate-200/50 bg-slate-100 border-b-2 border-slate-200">
           <button class="group flex items-center justify-center gap-1 w-full" data-sort-trigger="hour-${h}">
             <span class="w-full">${h}h</span>
             <span data-sort-icon="hour-${h}"><i data-lucide="chevrons-up-down" class="w-3.5 h-3.5 text-slate-400"></i></span>
@@ -111,7 +109,6 @@ export class HeatmapTable {
     const hourEnd = Number(f.hourEnd);
     const sortConfig = store.state.sort;
 
-    // Kiểm tra thay đổi cấu trúc (giờ hoặc sắp xếp) -> buộc render lại toàn bộ
     const hourChanged =
       !this._lastHourRange ||
       this._lastHourRange.hourStart !== hourStart ||
@@ -122,12 +119,11 @@ export class HeatmapTable {
       this._lastSort.direction !== sortConfig.direction;
 
     if (hourChanged || sortChanged) {
-      this._previousData = null; // Xóa cache để full render
+      this._previousData = null;
     }
 
     this._buildHeader(headerRow, hourStart, hourEnd);
 
-    // Xử lý trạng thái loading/error/empty
     if (store.state.loading) {
       tbody.innerHTML = `<tr><td colspan="${3 + (hourEnd - hourStart + 1)}" class="py-12 text-center text-slate-400">
         <div class="flex flex-col items-center gap-2"><div class="loading-spinner w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full"></div><span>Đang tải dữ liệu...</span></div>
@@ -153,7 +149,6 @@ export class HeatmapTable {
       return;
     }
 
-    // Sắp xếp client-side (giữ nguyên logic)
     const sorted = [...data].sort((a, b) => {
       const av = this._getSortValue(a, sortConfig.key);
       const bv = this._getSortValue(b, sortConfig.key);
@@ -162,14 +157,12 @@ export class HeatmapTable {
       return 0;
     });
 
-    // Quyết định full render hay diff update
     if (!this._previousData || this._previousData.length !== sorted.length) {
       this._fullRender(sorted, hourStart, hourEnd);
     } else {
       this._diffUpdate(sorted, hourStart, hourEnd);
     }
 
-    // Lưu trạng thái hiện tại
     this._previousData = sorted;
     this._lastHourRange = { hourStart, hourEnd };
     this._lastSort = { key: sortConfig.key, direction: sortConfig.direction };
@@ -201,9 +194,8 @@ export class HeatmapTable {
   _createRow(user, hourStart, hourEnd, leftName, leftRole, leftTotal) {
     const tr = document.createElement("tr");
     tr.className = "hover:bg-slate-50/80 transition duration-150";
-    tr.dataset.userEmail = user.email; // Dùng email làm định danh
+    tr.dataset.userEmail = user.email;
 
-    // Cột Nhân viên
     const tdName = document.createElement("td");
     tdName.className = `sticky left-[${leftName}px] z-10 bg-white w-[260px] min-w-[260px] px-4 py-2 text-left font-medium text-slate-900 border-r border-slate-100 max-w-[260px]`;
     tdName.innerHTML = `
@@ -218,13 +210,11 @@ export class HeatmapTable {
       </div>`;
     tr.appendChild(tdName);
 
-    // Cột Role
     const tdRole = document.createElement("td");
     tdRole.className = `sticky left-[${leftRole}px] z-10 bg-white w-[90px] min-w-[90px] px-2 py-2 border-r border-slate-100 text-sm`;
     tdRole.textContent = user.display_name || user.role_key || "-";
     tr.appendChild(tdRole);
 
-    // Cột Tổng
     const total = user.total || 0;
     const workingHours = hourEnd - hourStart + 1;
     const lowTotal = (user.low_threshold || 10) * workingHours;
@@ -239,7 +229,6 @@ export class HeatmapTable {
     tdTotal.textContent = total;
     tr.appendChild(tdTotal);
 
-    // Các cột giờ
     for (let h = hourStart; h <= hourEnd; h++) {
       const count = user.hourly?.[h] || 0;
       const td = document.createElement("td");
@@ -270,30 +259,26 @@ export class HeatmapTable {
     const oldDataMap = new Map(this._previousData.map((u) => [u.email, u]));
     const leftTotal = 350;
 
-    // Duyệt dữ liệu mới, cập nhật từng dòng hiện có
     newData.forEach((user) => {
       const tr = tbody.querySelector(`tr[data-user-email="${user.email}"]`);
       if (!tr) {
-        // Trường hợp hiếm: dòng mới xuất hiện (dù độ dài không đổi, email mới) -> fallback full render
         this._fullRender(newData, hourStart, hourEnd);
         return;
       }
 
       const oldUser = oldDataMap.get(user.email);
       if (!oldUser) {
-        // Không tìm thấy user cũ -> full render để an toàn
         this._fullRender(newData, hourStart, hourEnd);
         return;
       }
 
-      // Cập nhật từng ô nếu có thay đổi
       this._updateRow(tr, user, oldUser, hourStart, hourEnd, leftTotal);
     });
   }
 
   _updateRow(tr, user, oldUser, hourStart, hourEnd, leftTotal) {
     const tds = tr.children;
-    // Cột 0: Nhân viên
+
     const nameChanged =
       (user.name || user.email) !== (oldUser.name || oldUser.email) ||
       (user.name ? user.email : "") !== (oldUser.name ? oldUser.email : "");
@@ -310,7 +295,6 @@ export class HeatmapTable {
         </div>`;
     }
 
-    // Cột 1: Role
     const roleChanged =
       (user.display_name || user.role_key || "-") !==
       (oldUser.display_name || oldUser.role_key || "-");
@@ -318,7 +302,6 @@ export class HeatmapTable {
       tds[1].textContent = user.display_name || user.role_key || "-";
     }
 
-    // Cột 2: Tổng
     const totalNew = user.total || 0;
     const totalOld = oldUser.total || 0;
     if (
@@ -338,7 +321,6 @@ export class HeatmapTable {
       );
     }
 
-    // Các cột giờ (bắt đầu từ index 3)
     for (let h = hourStart; h <= hourEnd; h++) {
       const idx = 3 + (h - hourStart);
       const td = tds[idx];

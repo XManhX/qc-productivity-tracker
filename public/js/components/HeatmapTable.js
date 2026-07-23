@@ -44,32 +44,38 @@ export class HeatmapTable {
           <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span> Cập nhật trực tiếp
         </span>
       </div>
-      <div class="overflow-x-auto">
-        <table class="w-full text-center border-collapse" id="data-table">
-          <thead id="table-header" class="border-b border-slate-200 bg-slate-100 text-slate-600 text-xs uppercase tracking-wider font-semibold"></thead>
-          <tbody id="dashboard-body" class="divide-y divide-slate-100 text-sm"></tbody>
-        </table>
+      <!-- Bọc bảng trong khung cuộn để hỗ trợ sticky -->
+      <div class="overflow-x-auto border border-slate-200 rounded-lg shadow-sm">
+        <div class="max-h-[calc(100vh-16rem)] overflow-y-auto">
+          <table class="w-full text-center border-collapse" id="data-table">
+            <thead id="table-header" class="text-xs uppercase tracking-wider font-semibold"></thead>
+            <tbody id="dashboard-body" class="divide-y divide-slate-100 text-sm bg-white"></tbody>
+          </table>
+        </div>
+        <div id="pagination-wrapper"></div>
       </div>
-      <div id="pagination-wrapper"></div>
     `;
     refreshIcons();
   }
 
   _buildHeader(headerRow, hourStart, hourEnd) {
     let html = `
-      <th class="px-4 py-2 text-left font-semibold text-slate-700 hover:bg-slate-200/70" style="min-width: 220px">
+      <!-- Cột Nhân viên: sticky top + left, z-index cao nhất -->
+      <th class="sticky top-0 left-0 z-40 w-[220px] min-w-[220px] px-4 py-2 text-left font-semibold text-slate-700 bg-slate-100">
         <button class="group flex items-center gap-1 w-full text-left" data-sort-trigger="name">
           <span class="w-full">Nhân viên</span>
           <span data-sort-icon="name"><i data-lucide="chevrons-up-down" class="w-3.5 h-3.5 text-slate-400"></i></span>
         </button>
       </th>
-      <th class="px-4 py-2 text-left font-semibold text-slate-700 hover:bg-slate-200/70" style="min-width: 90px">
+      <!-- Cột Role: sticky top + left (offset = 220px), z-index 30 -->
+      <th class="sticky top-0 left-[220px] z-30 w-[90px] min-w-[90px] px-4 py-2 text-left font-semibold text-slate-700 bg-slate-100">
         <button class="group flex items-center gap-1 w-full text-left" data-sort-trigger="role">
           <span class="w-full">Role</span>
           <span data-sort-icon="role"><i data-lucide="chevrons-up-down" class="w-3.5 h-3.5 text-slate-400"></i></span>
         </button>
       </th>
-      <th class="px-4 py-4 bg-emerald-50 font-bold text-emerald-800 hover:bg-emerald-100" style="min-width: 90px">
+      <!-- Cột Tổng: chỉ sticky top -->
+      <th class="sticky top-0 z-20 w-[90px] min-w-[90px] px-4 py-4 bg-emerald-50 font-bold text-emerald-800">
         <button class="group flex items-center justify-center gap-1 w-full" data-sort-trigger="total">
           <span class="w-full">Tổng</span>
           <span data-sort-icon="total"><i data-lucide="chevrons-up-down" class="w-3.5 h-3.5 text-slate-400"></i></span>
@@ -78,7 +84,7 @@ export class HeatmapTable {
 
     for (let h = hourStart; h <= hourEnd; h++) {
       html += `
-        <th class="px-3 py-4 text-slate-700 font-semibold border-l border-slate-200/50">
+        <th class="sticky top-0 z-20 px-3 py-4 text-slate-700 font-semibold border-l border-slate-200/50 bg-slate-100">
           <button class="group flex items-center justify-center gap-1 w-full" data-sort-trigger="hour-${h}">
             <span class="w-full">${h}h</span>
             <span data-sort-icon="hour-${h}"><i data-lucide="chevrons-up-down" class="w-3.5 h-3.5 text-slate-400"></i></span>
@@ -115,7 +121,7 @@ export class HeatmapTable {
       return;
     }
 
-    const data = store.items; // sử dụng getter mới
+    const data = store.items;
     if (!data.length) {
       tbody.innerHTML = `<tr><td colspan="${3 + (hourEnd - hourStart + 1)}" class="py-12 text-center text-slate-400">
         <div class="flex flex-col items-center gap-2"><i data-lucide="inbox" class="w-10 h-10 text-slate-300"></i><span>Không có dữ liệu</span></div>
@@ -124,7 +130,6 @@ export class HeatmapTable {
     }
 
     const sortConfig = store.state.sort;
-    // Sắp xếp client-side (dự phòng, vì server đã sort)
     const sorted = [...data].sort((a, b) => {
       const av = this._getSortValue(a, sortConfig.key);
       const bv = this._getSortValue(b, sortConfig.key);
@@ -138,7 +143,11 @@ export class HeatmapTable {
       const tr = document.createElement("tr");
       tr.className = "hover:bg-slate-50/80 transition duration-150";
 
-      tr.innerHTML = `<td class="px-4 py-2 text-left font-medium text-slate-900 border-r border-slate-100 max-w-[260px]">
+      // Cột Nhân viên – sticky left-0, nền trắng
+      const tdName = document.createElement("td");
+      tdName.className =
+        "sticky left-0 z-10 bg-white w-[220px] min-w-[220px] px-4 py-2 text-left font-medium text-slate-900 border-r border-slate-100 max-w-[260px]";
+      tdName.innerHTML = `
         <div class="flex items-center gap-3 min-w-0">
           <div class="w-9 h-9 rounded-full bg-slate-100 flex items-center justify-center text-xs font-bold text-slate-600 uppercase border border-slate-200 flex-shrink-0">
             ${(user.name || user.email).substring(0, 2)}
@@ -147,13 +156,17 @@ export class HeatmapTable {
             <div class="font-semibold text-slate-800 truncate" title="${user.name || user.email}">${user.name || user.email}</div>
             <div class="text-xs text-slate-500 truncate" title="${user.name ? user.email : ""}">${user.name ? user.email : ""}</div>
           </div>
-        </div></td>`;
+        </div>`;
+      tr.appendChild(tdName);
 
+      // Cột Role – sticky left-[220px], nền trắng
       const tdRole = document.createElement("td");
-      tdRole.className = "px-2 py-2 border-r border-slate-100 text-sm";
+      tdRole.className =
+        "sticky left-[220px] z-10 bg-white w-[90px] min-w-[90px] px-2 py-2 border-r border-slate-100 text-sm";
       tdRole.textContent = user.display_name || user.role_key || "-";
       tr.appendChild(tdRole);
 
+      // Cột Tổng
       const total = user.total || 0;
       const workingHours = hourEnd - hourStart + 1;
       const lowTotal = (user.low_threshold || 10) * workingHours;

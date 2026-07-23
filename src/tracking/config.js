@@ -41,16 +41,16 @@ export const CAPTURE_CONFIGS = {
         return_tn: responseData?.data?.list?.[0]?.return_tn || "",
       }),
     },
-    {
-      path: "/api/apps/process/returninbound/judge/scan_sheet_id",
-      method: "GET",
-      action: "end",
-      successCondition: (data) => data && data.retcode === 0,
-      extractFields: (requestBody, responseData) => ({
-        is_all_judged: responseData?.data?.is_all_judged || false,
-        is_to_dispute: responseData?.data?.return_tn || false,
-      }),
-    },
+    // {
+    //   path: "/api/apps/process/returninbound/judge/scan_sheet_id",
+    //   method: "GET",
+    //   action: "end",
+    //   successCondition: (data) => data && data.retcode === 0,
+    //   extractFields: (requestBody, responseData) => ({
+    //     is_all_judged: responseData?.data?.is_all_judged || false,
+    //     is_to_dispute: responseData?.data?.return_tn || false,
+    //   }),
+    // },
     {
       path: "/api/apps/process/returninbound/judge/confirm_judge",
       method: "POST",

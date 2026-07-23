@@ -15,11 +15,10 @@ import { WidgetManager } from "./widget.js";
 const log = (...args) => DEBUG && console.log("[QCTracker Core]", ...args);
 
 let currentPageType = null;
-let currentEmail = null;
 let isDestroyed = false;
 let flushInterval = null;
 let statsInterval = null;
-let pendingStart = null;
+let pendingStart = null; // { startTime, fields, email }
 
 function sendRecord(record) {
   log("Sending record:", record);
@@ -53,18 +52,38 @@ function sendRecord(record) {
 }
 
 function handleCapture(action, extractedFields) {
-  if (isDestroyed || !currentPageType || !currentEmail) return;
+  if (isDestroyed) return;
+
+  const email = getEmail();
+  // Nếu không có email, dừng xử lý và cleanup (ẩn widget, reset)
+  if (!email) {
+    log("No operator email found. Cleaning up...");
+    cleanup();
+    return;
+  }
+  if (!currentPageType) return;
+
   log("handleCapture:", action, extractedFields);
 
   if (action === "start") {
+    // Lưu thời điểm start, fields và email lúc bắt đầu
     pendingStart = {
       startTime: new Date().toISOString(),
       fields: { ...extractedFields },
+      email,
     };
     log("Pending start set:", pendingStart);
   } else if (action === "end") {
     if (!pendingStart) {
       log('Warning: "end" without pending start, ignoring');
+      return;
+    }
+    // Kiểm tra email có thay đổi so với lúc start không
+    if (email !== pendingStart.email) {
+      log(
+        `Email changed from ${pendingStart.email} to ${email}, discarding record.`,
+      );
+      pendingStart = null;
       return;
     }
     const endTime = new Date().toISOString();
@@ -73,7 +92,7 @@ function handleCapture(action, extractedFields) {
       "complete",
       pendingStart.fields,
       extractedFields,
-      currentEmail,
+      email,
       pendingStart.startTime,
       endTime,
     );
@@ -114,8 +133,11 @@ function cleanup() {
   destroyInterceptor();
   if (flushInterval) clearInterval(flushInterval);
   if (statsInterval) clearInterval(statsInterval);
+  flushInterval = null;
+  statsInterval = null;
   WidgetManager.setVisible(false);
   pendingStart = null;
+  currentPageType = null;
 }
 
 async function initPage() {
@@ -141,11 +163,9 @@ async function initPage() {
     WidgetManager.setVisible(false);
     return;
   }
-  currentEmail = email;
-  log("Operator:", email);
+  log("Initialized with email:", email);
 
   initInterceptor(pageType, handleCapture);
-
   WidgetManager.setVisible(true);
   syncStats((stats) => WidgetManager.updateStats(stats));
 
@@ -155,6 +175,7 @@ async function initPage() {
   }, STATS_SYNC_INTERVAL_MS);
 }
 
+// Khởi tạo widget manager
 WidgetManager.init(
   (key, fallback) => globalThis.GM_getValue(key, fallback),
   (key, value) => globalThis.GM_setValue(key, value),
@@ -162,6 +183,7 @@ WidgetManager.init(
 
 initPage().catch((e) => console.error("[QCTracker] Init error:", e));
 
+// Theo dõi chuyển trang SPA
 let lastUrl = location.href;
 const observer = new MutationObserver(() => {
   if (location.href !== lastUrl) {

@@ -3,7 +3,6 @@ import {
   LOG_ENDPOINT,
   STATS_SYNC_INTERVAL_MS,
   STATS_THROTTLE_MS,
-  EMAIL_CACHE_MS,
 } from "./config.js";
 
 let lastSyncTime = 0;
@@ -11,12 +10,7 @@ let statsPromise = null;
 
 const todayKey = () => new Date().toISOString().split("T")[0];
 
-// Hàm lấy email từ localStorage/sessionStorage
 export function getEmail() {
-  const cached = globalThis.GM_getValue("user_email", "");
-  const ts = globalThis.GM_getValue("user_email_timestamp", 0);
-  if (cached && Date.now() - ts < EMAIL_CACHE_MS) return cached;
-
   const keys = [
     "user_email",
     "email",
@@ -37,12 +31,10 @@ export function getEmail() {
     } catch (e) {}
     const email = (val || "").replace(/\s+/g, " ").trim().toLowerCase();
     if (email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      globalThis.GM_setValue("user_email", email);
-      globalThis.GM_setValue("user_email_timestamp", Date.now());
       return email;
     }
   }
-  return cached || "";
+  return "";
 }
 
 async function fetchStatsFromServer(operator) {
@@ -77,7 +69,6 @@ async function fetchStatsFromServer(operator) {
 export async function syncStats(onUpdate) {
   if (statsPromise) return statsPromise;
   if (Date.now() - lastSyncTime < STATS_THROTTLE_MS) return;
-
   const operator = getEmail();
   if (!operator) return;
 

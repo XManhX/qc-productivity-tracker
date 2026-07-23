@@ -18,7 +18,7 @@ let currentPageType = null;
 let isDestroyed = false;
 let flushInterval = null;
 let statsInterval = null;
-let pendingStart = null; // { startTime, fields, email }
+let pendingStart = null; // { startTime, fields }
 
 function sendRecord(record) {
   log("Sending record:", record);

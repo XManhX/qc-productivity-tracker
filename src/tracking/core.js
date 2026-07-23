@@ -65,15 +65,14 @@ function handleCapture(action, extractedFields) {
   log("handleCapture:", action, extractedFields);
 
   if (action === "start") {
-    // Lưu thời điểm start, fields và email lúc bắt đầu
     pendingStart = {
       startTime: new Date().toISOString(),
       fields: { ...extractedFields },
     };
-    log("Pending start set:", pendingStart);
+    log("Pending start:", pendingStart);
   } else if (action === "end") {
     if (!pendingStart) {
-      log('Warning: "end" without pending start, ignoring');
+      log('"end" without pending start – ignored');
       return;
     }
 
@@ -100,6 +99,14 @@ function handleCapture(action, extractedFields) {
         globalThis.GM_setValue("qc_pending_logs", pending);
       }
     });
+  } else {
+    // Xử lý các action phụ (check, update, ...): merge vào pendingStart nếu có
+    if (pendingStart) {
+      log("Merging action", action, "into pendingStart");
+      Object.assign(pendingStart.fields, extractedFields);
+    } else {
+      log("Action", action, "ignored because no pending start");
+    }
   }
 }
 

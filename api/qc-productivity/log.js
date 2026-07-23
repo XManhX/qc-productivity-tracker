@@ -157,6 +157,8 @@ export default async function handler(req, res) {
         url: logData.url || null,
         asn: logData.asn || null,
         return_tn: logData.return_tn || null,
+        is_all_judged: logData.extra_data?.is_all_judged ?? null,
+        is_to_dispute: logData.extra_data?.is_to_dispute ?? null,
         page_start_time: logData.page_start_time || null,
         page_end_time: logData.page_end_time || null,
         extra_data: logData.extra_data || {},

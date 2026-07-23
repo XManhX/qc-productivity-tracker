@@ -22,15 +22,13 @@ async function build() {
     entryPoints: ["src/tracking/core.js"],
     bundle: true,
     format: "iife",
-    globalName: "QCTracker", // xuất ra global để debug nếu cần
-    write: false, // lấy code dạng string
+    globalName: "QCTracker",
+    write: false,
     platform: "browser",
     define: {
       __VERSION__: JSON.stringify(VERSION),
       __API_BASE_URL__: JSON.stringify(API_BASE_URL),
     },
-    // cho phép sử dụng globalThis.GM_* không bị thay đổi
-    // Không cần external vì dùng globalThis
   });
 
   const bundleCode = result.outputFiles[0].text;
@@ -41,6 +39,8 @@ async function build() {
   const outFile = path.join(outDir, "qc-productivity-tracker.user.js");
   fs.writeFileSync(outFile, finalCode, "utf8");
   console.log(`✅ Built userscript: ${outFile}`);
+  console.log(`   Version: ${VERSION}`);
+  console.log(`   API Base URL: ${API_BASE_URL}`);
 }
 
 build().catch((err) => {

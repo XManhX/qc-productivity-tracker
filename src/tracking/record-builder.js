@@ -21,7 +21,7 @@ export function buildRecord(
   const record = {
     id,
     idempotency_key: id,
-    version: "__VERSION__",
+    version: __VERSION__,
     page: pageType,
     action: action,
     operator: operatorEmail,

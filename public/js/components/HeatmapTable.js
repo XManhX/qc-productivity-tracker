@@ -59,19 +59,19 @@ export class HeatmapTable {
     let html = `
       <th class="px-4 py-2 text-left font-semibold text-slate-700 hover:bg-slate-200/70" style="min-width: 220px">
         <button class="group flex items-center gap-1 w-full text-left" data-sort-trigger="name">
-          <span>Nhân viên</span>
+          <span class="w-full">Nhân viên</span>
           <span data-sort-icon="name"><i data-lucide="chevrons-up-down" class="w-3.5 h-3.5 text-slate-400"></i></span>
         </button>
       </th>
       <th class="px-4 py-2 text-left font-semibold text-slate-700 hover:bg-slate-200/70" style="min-width: 90px">
         <button class="group flex items-center gap-1 w-full text-left" data-sort-trigger="role">
-          <span>Role</span>
+          <span class="w-full">Role</span>
           <span data-sort-icon="role"><i data-lucide="chevrons-up-down" class="w-3.5 h-3.5 text-slate-400"></i></span>
         </button>
       </th>
       <th class="px-4 py-4 bg-emerald-50 font-bold text-emerald-800 hover:bg-emerald-100" style="min-width: 90px">
         <button class="group flex items-center justify-center gap-1 w-full" data-sort-trigger="total">
-          <span>Tổng</span>
+          <span class="w-full">Tổng</span>
           <span data-sort-icon="total"><i data-lucide="chevrons-up-down" class="w-3.5 h-3.5 text-slate-400"></i></span>
         </button>
       </th>`;

@@ -543,9 +543,12 @@ export class HeatmapTable {
     const tableWrapper = this.container.querySelector("#table-wrapper");
     const exportBtn = this.container.querySelector("#btn-export-image");
 
-    if (!tableWrapper) return;
+    if (!tableWrapper) {
+      console.error("[Export] Không tìm thấy #table-wrapper");
+      return;
+    }
 
-    // Nút loading
+    // --- Bắt đầu loading ---
     const originalBtnHTML = exportBtn.innerHTML;
     exportBtn.innerHTML =
       '<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i><span>Đang xuất...</span>';
@@ -553,98 +556,94 @@ export class HeatmapTable {
     refreshIcons();
 
     try {
-      // === 1. Tạo bản sao sạch sẽ của toàn bộ bảng ===
+      // 1. Lấy kích thước thật của bảng (bao gồm phần bị scroll ngang)
+      const table = tableWrapper.querySelector("table");
+      const totalWidth = table ? table.scrollWidth : tableWrapper.scrollWidth;
+      const totalHeight = tableWrapper.scrollHeight; // toàn bộ nội dung, bỏ qua scroll dọc
+
+      // 2. Tạo clone
       const clone = tableWrapper.cloneNode(true);
-      // Đặt style cho clone để chụp toàn bộ
+      // Thiết lập style cho clone để hiển thị toàn bộ nội dung
       clone.style.position = "absolute";
       clone.style.top = "-9999px";
       clone.style.left = "0";
-      clone.style.width = "auto"; // tự động rộng đủ nội dung
+      clone.style.width = totalWidth + "px"; // rộng đúng = toàn bộ bảng
       clone.style.maxHeight = "none";
       clone.style.overflow = "visible";
-      clone.style.border = "1px solid #e2e8f0";
       clone.style.backgroundColor = "#ffffff";
+      clone.style.border = "1px solid #e2e8f0";
 
-      // Bỏ tất cả sticky, left, max-height, overflow trong clone
+      // Loại bỏ mọi sticky trong clone
       clone.querySelectorAll("*").forEach((el) => {
-        const style = getComputedStyle(el);
-        if (style.position === "sticky") {
+        const cs = window.getComputedStyle(el);
+        if (cs.position === "sticky") {
           el.style.position = "static";
           el.style.left = "auto";
         }
       });
-      // Xóa các giới hạn cuộn
+
+      // Xóa container cuộn dọc
       const scrollDiv =
         clone.querySelector("#table-scroll-container") ||
         clone.querySelector(".max-h-\\[calc\\(100vh-12rem\\)\\]");
       if (scrollDiv) {
         scrollDiv.style.maxHeight = "none";
-        scrollDiv.style.overflow = "visible";
+        scrollDiv.style.overflowY = "visible";
+        scrollDiv.style.height = "auto";
       }
-      // Xóa pagination nếu có
+
+      // Ẩn pagination
       const pagination = clone.querySelector("#pagination-wrapper");
       if (pagination) pagination.style.display = "none";
 
-      // === 2. Thay thế icon Lucide bằng text đơn giản ===
-      clone.querySelectorAll("[data-lucide]").forEach((iconEl) => {
-        // Lấy tên icon từ class hoặc data attribute (lucide thường thêm class 'lucide-xxx')
-        const iconName =
-          iconEl.getAttribute("data-lucide") ||
-          Array.from(iconEl.classList)
-            .find((c) => c.startsWith("lucide-"))
-            ?.replace("lucide-", "");
-        // Tạo span text thay thế
-        const span = document.createElement("span");
-        span.textContent = iconName ? iconName.charAt(0).toUpperCase() : "◆";
-        span.style.display = "inline-block";
-        span.style.width = "16px";
-        span.style.height = "16px";
-        span.style.textAlign = "center";
-        span.style.lineHeight = "16px";
-        iconEl.parentNode.replaceChild(span, iconEl);
-      });
-
-      // Loại bỏ các thuộc tính không cần thiết cho ảnh
-      clone.querySelectorAll("i").forEach((el) => {
-        if (el.classList.contains("lucide") || el.hasAttribute("data-lucide")) {
-          const span = document.createElement("span");
-          span.textContent = "●";
-          el.parentNode.replaceChild(span, el);
+      // 3. Thay thế toàn bộ icon Lucide (cả <i> lẫn SVG) bằng ký tự text
+      const allIconEls = clone.querySelectorAll("i, svg, [data-lucide]");
+      allIconEls.forEach((icon) => {
+        // Chỉ xử lý các element có vẻ là icon (dựa vào class hoặc data attribute)
+        const isLucide =
+          icon.hasAttribute("data-lucide") ||
+          icon.classList.contains("lucide") ||
+          icon.tagName === "svg";
+        if (isLucide) {
+          const textNode = document.createTextNode("●"); // dùng dấu chấm tròn đơn giản
+          icon.replaceWith(textNode);
         }
       });
 
-      // Đưa clone vào DOM để html2canvas render được font, style...
+      // 4. Đưa clone vào DOM để render
       document.body.appendChild(clone);
 
-      // Chờ một tick để font kịp áp dụng
-      await new Promise((resolve) => setTimeout(resolve, 200));
+      // Chờ 1 chút để font load
+      await new Promise((r) => setTimeout(r, 200));
 
-      // === 3. Chụp ảnh clone ===
+      // 5. Chụp clone với html2canvas
       const canvas = await html2canvas(clone, {
         backgroundColor: "#ffffff",
-        scale: 2,
+        scale: 2, // độ phân giải gấp đôi
         useCORS: true,
         allowTaint: true,
         logging: false,
-        // Đảm bảo chụp đúng toàn bộ nội dung, không bị cắt
-        width: clone.scrollWidth,
-        height: clone.scrollHeight,
-        windowWidth: clone.scrollWidth,
-        windowHeight: clone.scrollHeight,
+        // Không cần width/height thủ công, html2canvas tự lấy offsetWidth/Height của clone.
+        // Vì clone đã có width cố định = totalWidth, nó sẽ chụp đúng toàn bộ.
       });
 
-      // Xóa clone khỏi DOM
+      // 6. Dọn dẹp clone và tải file
       document.body.removeChild(clone);
-
-      // Tải xuống
       const link = document.createElement("a");
       const dateStr = new Date().toISOString().slice(0, 10);
       link.download = `QC_Heatmap_${dateStr}.png`;
       link.href = canvas.toDataURL("image/png");
       link.click();
+
+      console.log(
+        "[Export] Xuất ảnh thành công! Kích thước:",
+        canvas.width,
+        "x",
+        canvas.height,
+      );
     } catch (error) {
-      console.error("Lỗi xuất ảnh:", error);
-      alert("Xuất ảnh thất bại: " + error.message);
+      console.error("[Export] Lỗi:", error);
+      alert("Xuất ảnh thất bại. Vui lòng kiểm tra Console.");
     } finally {
       // Khôi phục nút
       exportBtn.innerHTML = originalBtnHTML;

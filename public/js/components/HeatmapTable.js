@@ -551,11 +551,11 @@ export class HeatmapTable {
     refreshIcons();
 
     try {
-      // 1. Lấy dữ liệu hiện tại từ store
       const { filters, sort } = store.state;
       const hourStart = Number(filters.hourStart);
       const hourEnd = Number(filters.hourEnd);
-      // Sắp xếp giống bảng đang hiển thị (nếu cần)
+
+      // Sắp xếp giống bảng hiển thị
       const sortedData = [...store.items].sort((a, b) => {
         const av = this._getSortValue(a, sort.key);
         const bv = this._getSortValue(b, sort.key);
@@ -564,7 +564,6 @@ export class HeatmapTable {
         return 0;
       });
 
-      // 2. Tạo container tạm, nằm ngoài màn hình
       const container = document.createElement("div");
       container.style.position = "absolute";
       container.style.top = "-9999px";
@@ -573,26 +572,24 @@ export class HeatmapTable {
       container.style.padding = "12px";
       container.style.fontFamily = "Inter, sans-serif";
 
-      // 3. Dựng bảng HTML thuần
       let html = `<table style="border-collapse: collapse; width: auto; font-size: 13px;">`;
+
       // Header
       html += `<thead><tr style="background: #f1f5f9; font-weight: 600; text-align: center;">`;
-      html += `<th style="border: 1px solid #cbd5e1; padding: 8px 12px; min-width: 200px; text-align: left;">Nhân viên</th>`;
-      html += `<th style="border: 1px solid #cbd5e1; padding: 8px 12px; min-width: 80px; text-align: left;">Role</th>`;
-      html += `<th style="border: 1px solid #cbd5e1; padding: 8px 12px; min-width: 80px; background: #ecfdf5; font-weight: 700;">Tổng</th>`;
+      html += `<th style="vertical-align: middle; border: 1px solid #cbd5e1; padding: 8px 12px; min-width: 200px; text-align: left;">Nhân viên</th>`;
+      html += `<th style="vertical-align: middle; border: 1px solid #cbd5e1; padding: 8px 12px; min-width: 80px; text-align: left;">Role</th>`;
+      html += `<th style="vertical-align: middle; border: 1px solid #cbd5e1; padding: 8px 12px; min-width: 80px; background: #ecfdf5; font-weight: 700;">Tổng</th>`;
       for (let h = hourStart; h <= hourEnd; h++) {
-        html += `<th style="border: 1px solid #cbd5e1; padding: 8px 12px; min-width: 55px;">${h}h</th>`;
+        html += `<th style="vertical-align: middle; border: 1px solid #cbd5e1; padding: 8px 12px; min-width: 55px;">${h}h</th>`;
       }
       html += `</tr></thead><tbody>`;
 
-      // Dữ liệu từng dòng
       const workingHours = hourEnd - hourStart + 1;
       sortedData.forEach((user) => {
         const lowTotal = (user.low_threshold || 10) * workingHours;
         const highTotal = (user.medium_threshold || 16) * workingHours;
         const total = user.total || 0;
 
-        // Màu nền cột Tổng
         let totalBg = "#f8fafc";
         if (total > 0) {
           if (total < lowTotal) totalBg = "#fee2e2";
@@ -604,14 +601,14 @@ export class HeatmapTable {
         // Cột Nhân viên
         const name = user.name || user.email;
         const email = user.name ? user.email : "";
-        html += `<td style="border: 1px solid #e2e8f0; padding: 8px 12px; text-align: left;">
-                <div style="font-weight: 500;">${name}</div>
-                ${email ? `<div style="font-size: 11px; color: #64748b;">${email}</div>` : ""}
-              </td>`;
+        html += `<td style="vertical-align: middle; border: 1px solid #e2e8f0; padding: 8px 12px; text-align: left;">
+              <div style="font-weight: 500;">${name}</div>
+              ${email ? `<div style="font-size: 11px; color: #64748b;">${email}</div>` : ""}
+            </td>`;
         // Cột Role
-        html += `<td style="border: 1px solid #e2e8f0; padding: 8px 12px;">${user.display_name || user.role_key || "-"}</td>`;
+        html += `<td style="vertical-align: middle; border: 1px solid #e2e8f0; padding: 8px 12px; text-align: left;">${user.display_name || user.role_key || "-"}</td>`;
         // Cột Tổng
-        html += `<td style="border: 1px solid #e2e8f0; padding: 8px 12px; text-align: center; font-weight: bold; background: ${totalBg};">${total}</td>`;
+        html += `<td style="vertical-align: middle; border: 1px solid #e2e8f0; padding: 8px 12px; text-align: center; font-weight: bold; background: ${totalBg};">${total}</td>`;
 
         // Các cột giờ
         for (let h = hourStart; h <= hourEnd; h++) {
@@ -632,9 +629,9 @@ export class HeatmapTable {
               color = "#166534";
             }
           }
-          html += `<td style="border: 1px solid #e2e8f0; padding: 8px 12px; text-align: center; background: ${bg}; color: ${color};">
-                  ${count === 0 ? "-" : count}
-                </td>`;
+          html += `<td style="vertical-align: middle; border: 1px solid #e2e8f0; padding: 8px 12px; text-align: center; background: ${bg}; color: ${color};">
+                ${count === 0 ? "-" : count}
+              </td>`;
         }
         html += `</tr>`;
       });
@@ -643,10 +640,8 @@ export class HeatmapTable {
       container.innerHTML = html;
       document.body.appendChild(container);
 
-      // Chờ render
       await new Promise((r) => setTimeout(r, 100));
 
-      // 4. Chụp ảnh bảng vừa tạo
       const canvas = await html2canvas(container.firstElementChild, {
         backgroundColor: "#ffffff",
         scale: 2,
@@ -657,7 +652,6 @@ export class HeatmapTable {
 
       document.body.removeChild(container);
 
-      // 5. Tải file
       const link = document.createElement("a");
       const dateStr = new Date().toISOString().slice(0, 10);
       link.download = `QC_Heatmap_${dateStr}.png`;

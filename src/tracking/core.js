@@ -118,7 +118,7 @@ function flushPendingLogs() {
     for (const record of pending) {
       try {
         await sendRecord(record);
-      } catch (e) {}
+      } catch (e) { }
     }
   })();
 }

@@ -659,6 +659,34 @@ export class HeatmapTable {
 
       await new Promise((r) => setTimeout(r, 100));
 
+      // MỞ TAB MỚI ĐỂ XEM TRƯỚC HTML (chỉ chạy 1 lần, có thể comment lại sau)
+      const previewWindow = window.open("", "_blank", "width=1200,height=800");
+      previewWindow.document.write(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="UTF-8">
+          <title>Xem trước bảng Heatmap</title>
+          <style>
+            body {
+              font-family: Inter, sans-serif;
+              padding: 20px;
+              background: #f8fafc;
+              display: flex;
+              justify-content: center;
+              align-items: flex-start;
+              min-height: 100vh;
+            }
+            /* Các style đã có trong inline nên không cần thêm */
+          </style>
+        </head>
+        <body>
+          ${container.firstElementChild.outerHTML}
+        </body>
+        </html>
+      `);
+      previewWindow.document.close();
+
       const canvas = await html2canvas(container.firstElementChild, {
         backgroundColor: "#ffffff",
         scale: 2,

@@ -55,11 +55,22 @@ export class HeatmapTable {
             <span class="text-slate-400 italic ml-2">(ngưỡng theo từng role)</span>
           </div>
         </div>
-        <div id="live-update-status" class="flex items-center gap-2 text-xs font-medium">
-          <span class="flex items-center gap-1.5 bg-slate-100 text-slate-500 px-2.5 py-1 rounded-full">
-            <span class="w-1.5 h-1.5 rounded-full bg-slate-400"></span> Đang kết nối...
-          </span>
-        </div>
+        <div class="flex items-center gap-3">
+          <!-- NÚT XUẤT ẢNH -->
+          <button id="btn-export-image" 
+                  class="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg 
+                        bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 
+                        hover:border-slate-300 transition-colors shadow-sm"
+                  title="Xuất toàn bộ bảng thành ảnh PNG">
+            <i data-lucide="camera" class="w-4 h-4"></i>
+            <span>Xuất ảnh</span>
+          </button>
+          <div id="live-update-status" class="flex items-center gap-2 text-xs font-medium">
+            <span class="flex items-center gap-1.5 bg-slate-100 text-slate-500 px-2.5 py-1 rounded-full">
+              <span class="w-1.5 h-1.5 rounded-full bg-slate-400"></span> Đang kết nối...
+            </span>
+          </div>
+        </div>  
       </div>
       <div class="overflow-x-auto border border-slate-200 shadow-sm">
         <div class="max-h-[calc(100vh-12rem)] overflow-y-auto">
@@ -72,6 +83,11 @@ export class HeatmapTable {
       </div>
     `;
     refreshIcons();
+    // Gán sự kiện cho nút xuất ảnh
+    const exportBtn = this.container.querySelector("#btn-export-image");
+    if (exportBtn) {
+      exportBtn.addEventListener("click", () => this.exportToImage());
+    }
   }
 
   // ==================== LIVE UPDATE STATUS ====================
@@ -521,5 +537,74 @@ export class HeatmapTable {
       return Number(row.hourly?.[hr] || 0);
     }
     return row[key] ?? "";
+  }
+
+  async exportToImage() {
+    const tableWrapper = this.container.querySelector("#table-wrapper");
+    const scrollContainer = this.container.querySelector(
+      "#table-scroll-container",
+    );
+    const paginationWrapper = this.container.querySelector(
+      "#pagination-wrapper",
+    );
+
+    if (!tableWrapper) return;
+
+    // Hiển thị trạng thái đang xử lý
+    const exportBtn = this.container.querySelector("#btn-export-image");
+    const originalBtnHTML = exportBtn.innerHTML;
+    exportBtn.innerHTML = `<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i><span>Đang xuất...</span>`;
+    exportBtn.disabled = true;
+    refreshIcons();
+
+    try {
+      // 1. Lưu lại trạng thái scroll và style hiện tại
+      const originalMaxHeight = scrollContainer.style.maxHeight;
+      const originalOverflowY = scrollContainer.style.overflowY;
+      const originalScrollTop = scrollContainer.scrollTop;
+      const paginationDisplay = paginationWrapper
+        ? paginationWrapper.style.display
+        : "";
+
+      // 2. Tạm thời bỏ giới hạn chiều cao và ẩn pagination (nếu có) để chụp toàn bộ
+      scrollContainer.style.maxHeight = "none";
+      scrollContainer.style.overflowY = "visible";
+      scrollContainer.scrollTop = 0;
+      if (paginationWrapper) {
+        paginationWrapper.style.display = "none";
+      }
+
+      // 3. Chụp toàn bộ phần tử table-wrapper (bao gồm header và tất cả dòng)
+      const canvas = await html2canvas(tableWrapper, {
+        backgroundColor: "#ffffff",
+        scale: 2, // độ phân giải cao
+        useCORS: true,
+        allowTaint: true,
+        logging: false,
+      });
+
+      // 4. Tạo file tải xuống
+      const link = document.createElement("a");
+      const dateStr = new Date().toISOString().slice(0, 10);
+      link.download = `QC_Heatmap_${dateStr}.png`;
+      link.href = canvas.toDataURL("image/png");
+      link.click();
+    } catch (error) {
+      console.error("Lỗi xuất ảnh:", error);
+      alert("Không thể xuất ảnh, vui lòng thử lại.");
+    } finally {
+      // 5. Khôi phục trạng thái ban đầu
+      scrollContainer.style.maxHeight = originalMaxHeight;
+      scrollContainer.style.overflowY = originalOverflowY;
+      scrollContainer.scrollTop = originalScrollTop;
+      if (paginationWrapper) {
+        paginationWrapper.style.display = paginationDisplay;
+      }
+
+      // Khôi phục nút
+      exportBtn.innerHTML = originalBtnHTML;
+      exportBtn.disabled = false;
+      refreshIcons();
+    }
   }
 }

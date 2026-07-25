@@ -543,7 +543,6 @@ export class HeatmapTable {
     const exportBtn = this.container.querySelector("#btn-export-image");
     if (!exportBtn) return;
 
-    // Loading
     const originalHTML = exportBtn.innerHTML;
     exportBtn.innerHTML =
       '<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i><span>Đang xuất...</span>';
@@ -571,19 +570,19 @@ export class HeatmapTable {
       container.style.padding = "12px";
       container.style.fontFamily = "Inter, sans-serif";
 
-      let html = `<table style="border-collapse: collapse; width: auto; font-size: 13px;">`;
+      // Các style chung cho ô
+      const cellStyle =
+        "vertical-align: middle; line-height: 1.3; padding: 8px 12px; border: 1px solid #e2e8f0; height: 38px;";
+      const headerStyle =
+        "vertical-align: middle; line-height: 1.3; padding: 8px 12px; border: 1px solid #cbd5e1; background: #f1f5f9; font-weight: 600; text-align: center; height: 38px;";
 
-      // Header
-      html += `<thead><tr style="background: #f1f5f9; font-weight: 600; text-align: center;">`;
-      html += `<th style="border: 1px solid #cbd5e1; padding: 8px 12px; min-width: 200px;">
-               <div style="display: flex; align-items: center; justify-content: flex-start; height: 100%;">Nhân viên</div></th>`;
-      html += `<th style="border: 1px solid #cbd5e1; padding: 8px 12px; min-width: 80px;">
-               <div style="display: flex; align-items: center; justify-content: flex-start; height: 100%;">Role</div></th>`;
-      html += `<th style="border: 1px solid #cbd5e1; padding: 8px 12px; min-width: 80px; background: #ecfdf5; font-weight: 700;">
-               <div style="display: flex; align-items: center; justify-content: center; height: 100%;">Tổng</div></th>`;
+      let html = `<table style="border-collapse: collapse; width: auto; font-size: 13px;">`;
+      html += `<thead><tr>`;
+      html += `<th style="${headerStyle} text-align: left; min-width: 200px;">Nhân viên</th>`;
+      html += `<th style="${headerStyle} text-align: left; min-width: 80px;">Role</th>`;
+      html += `<th style="${headerStyle} background: #ecfdf5; font-weight: 700; min-width: 80px;">Tổng</th>`;
       for (let h = hourStart; h <= hourEnd; h++) {
-        html += `<th style="border: 1px solid #cbd5e1; padding: 8px 12px; min-width: 55px;">
-                <div style="display: flex; align-items: center; justify-content: center; height: 100%;">${h}h</div></th>`;
+        html += `<th style="${headerStyle} min-width: 55px;">${h}h</th>`;
       }
       html += `</tr></thead><tbody>`;
 
@@ -594,36 +593,39 @@ export class HeatmapTable {
         const total = user.total || 0;
 
         let totalBg = "#f8fafc";
+        let totalColor = "#94a3b8";
         if (total > 0) {
-          if (total < lowTotal) totalBg = "#fee2e2";
-          else if (total < highTotal) totalBg = "#fef9c3";
-          else totalBg = "#dcfce7";
+          if (total < lowTotal) {
+            totalBg = "#fee2e2";
+            totalColor = "#991b1b";
+          } else if (total < highTotal) {
+            totalBg = "#fef9c3";
+            totalColor = "#854d0e";
+          } else {
+            totalBg = "#dcfce7";
+            totalColor = "#166534";
+          }
         }
 
         html += `<tr>`;
-        // Cột Nhân viên (căn trái, hiển thị tên & email nếu có)
+        // Cột Nhân viên – bọc trong span inline-block để căn giữa khối 2 dòng
         const name = user.name || user.email;
         const email = user.name ? user.email : "";
-        html += `<td style="border: 1px solid #e2e8f0; padding: 8px 12px; text-align: left;">
-                <div style="display: flex; align-items: center; justify-content: flex-start; height: 100%; gap: 8px;">
-                  <div>
-                    <div style="font-weight: 500;">${name}</div>
-                    ${email ? `<div style="font-size: 11px; color: #64748b;">${email}</div>` : ""}
-                  </div>
-                </div>
+        html += `<td style="${cellStyle} text-align: left; min-width: 200px;">
+                <span style="display: inline-block; vertical-align: middle; line-height: 1.2;">
+                  <div style="font-weight: 500;">${name}</div>
+                  ${email ? `<div style="font-size: 11px; color: #64748b;">${email}</div>` : ""}
+                </span>
               </td>`;
-        // Cột Role (căn trái)
-        html += `<td style="border: 1px solid #e2e8f0; padding: 8px 12px;">
-                <div style="display: flex; align-items: center; justify-content: flex-start; height: 100%;">${user.display_name || user.role_key || "-"}</div></td>`;
-        // Cột Tổng (căn giữa, có màu nền)
-        html += `<td style="border: 1px solid #e2e8f0; padding: 8px 12px; text-align: center; font-weight: bold; background: ${totalBg};">
-                <div style="display: flex; align-items: center; justify-content: center; height: 100%;">${total}</div></td>`;
-
-        // Các cột giờ (căn giữa)
+        // Role
+        html += `<td style="${cellStyle} text-align: left; min-width: 80px;">${user.display_name || user.role_key || "-"}</td>`;
+        // Tổng
+        html += `<td style="${cellStyle} text-align: center; font-weight: bold; background: ${totalBg}; color: ${totalColor}; min-width: 80px;">${total}</td>`;
+        // Giờ
         for (let h = hourStart; h <= hourEnd; h++) {
           const count = user.hourly?.[h] || 0;
-          let bg = "#f8fafc";
-          let color = "#94a3b8";
+          let bg = "#f8fafc",
+            color = "#94a3b8";
           if (count > 0) {
             const lt = user.low_threshold || 10;
             const mt = user.medium_threshold || 16;
@@ -638,8 +640,7 @@ export class HeatmapTable {
               color = "#166534";
             }
           }
-          html += `<td style="border: 1px solid #e2e8f0; padding: 8px 12px; text-align: center; background: ${bg}; color: ${color};">
-                  <div style="display: flex; align-items: center; justify-content: center; height: 100%;">${count === 0 ? "-" : count}</div></td>`;
+          html += `<td style="${cellStyle} text-align: center; background: ${bg}; color: ${color}; min-width: 55px;">${count === 0 ? "-" : count}</td>`;
         }
         html += `</tr>`;
       });
@@ -648,36 +649,14 @@ export class HeatmapTable {
       container.innerHTML = html;
       document.body.appendChild(container);
 
+      // (Có thể bỏ comment để xem preview)
+      // const previewWindow = window.open("", "_blank", "width=1200,height=800");
+      // previewWindow.document.write(`...`);
+      // previewWindow.document.close();
+
       await new Promise((r) => setTimeout(r, 100));
 
-      // MỞ TAB MỚI ĐỂ XEM TRƯỚC HTML (chỉ chạy 1 lần, có thể comment lại sau)
-      const previewWindow = window.open("", "_blank", "width=1200,height=800");
-      previewWindow.document.write(`
-        <!DOCTYPE html>
-        <html>
-        <head>
-          <meta charset="UTF-8">
-          <title>Xem trước bảng Heatmap</title>
-          <style>
-            body {
-              font-family: Inter, sans-serif;
-              padding: 20px;
-              background: #f8fafc;
-              display: flex;
-              justify-content: center;
-              align-items: flex-start;
-              min-height: 100vh;
-            }
-            /* Các style đã có trong inline nên không cần thêm */
-          </style>
-        </head>
-        <body>
-          ${container.firstElementChild.outerHTML}
-        </body>
-        </html>
-      `);
-      previewWindow.document.close();
-
+      // Sử dụng onclone để áp dụng style cuối cùng trước khi render (đảm bảo height được tính đúng)
       const canvas = await html2canvas(container.firstElementChild, {
         backgroundColor: "#ffffff",
         scale: 2,

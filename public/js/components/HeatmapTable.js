@@ -1,4 +1,3 @@
-import html2canvas from "html2canvas";
 import { store } from "../store/DashboardStore.js";
 import { refreshIcons } from "../utils/icons.js";
 import { Pagination } from "./Pagination.js";

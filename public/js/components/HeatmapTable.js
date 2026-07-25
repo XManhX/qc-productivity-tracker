@@ -570,21 +570,21 @@ export class HeatmapTable {
       container.style.padding = "12px";
       container.style.fontFamily = "Inter, sans-serif";
 
-      // Style mặc định cho tất cả ô: căn giữa ngang + dọc
-      const cellStyle =
-        "border: 1px solid #cbd5e1; padding: 8px 12px; text-align: center; vertical-align: middle;";
-      // Style riêng cho cột Nhân viên (căn trái)
-      const nameCellStyle =
-        "border: 1px solid #cbd5e1; padding: 8px 12px; text-align: left; vertical-align: middle;";
+      // Style cơ bản cho td/th
+      const cellOuterStyle =
+        "border: 1px solid #cbd5e1; padding: 8px 12px; height: 56px;";
+      // Style cho div bên trong để căn giữa
+      const flexCenterStyle =
+        "display: flex; align-items: center; justify-content: center; height: 100%; width: 100%;";
 
       let html = `<table style="border-collapse: collapse; width: auto; font-size: 13px;">`;
       // Header
       html += `<thead><tr style="background: #f1f5f9; font-weight: 600;">`;
-      html += `<th style="${nameCellStyle} min-width: 200px;">Nhân viên</th>`;
-      html += `<th style="${cellStyle} min-width: 80px;">Role</th>`;
-      html += `<th style="${cellStyle} min-width: 80px; background: #ecfdf5; font-weight: 700;">Tổng</th>`;
+      html += `<th style="${cellOuterStyle} min-width: 200px;"><div style="${flexCenterStyle}">Nhân viên</div></th>`;
+      html += `<th style="${cellOuterStyle} min-width: 80px;"><div style="${flexCenterStyle}">Role</div></th>`;
+      html += `<th style="${cellOuterStyle} min-width: 80px; background: #ecfdf5; font-weight: 700;"><div style="${flexCenterStyle}">Tổng</div></th>`;
       for (let h = hourStart; h <= hourEnd; h++) {
-        html += `<th style="${cellStyle} min-width: 55px;">${h}h</th>`;
+        html += `<th style="${cellOuterStyle} min-width: 55px;"><div style="${flexCenterStyle}">${h}h</div></th>`;
       }
       html += `</tr></thead><tbody>`;
 
@@ -602,19 +602,24 @@ export class HeatmapTable {
         }
 
         html += `<tr>`;
-        // Cột Nhân viên – dùng nameCellStyle
+
+        // Cột Nhân viên – bọc flex, chứa tên và email
         const name = user.name || user.email;
         const email = user.name ? user.email : "";
-        html += `<td style="${nameCellStyle} min-width: 200px;">
-                  <div style="font-weight: 500;">${name}</div>
-                  ${email ? `<div style="font-size: 11px; color: #64748b;">${email}</div>` : ""}
+        html += `<td style="${cellOuterStyle} min-width: 200px;">
+                  <div style="${flexCenterStyle} flex-direction: column;">
+                    <span style="font-weight: 500;">${name}</span>
+                    ${email ? `<span style="font-size: 11px; color: #64748b;">${email}</span>` : ""}
+                  </div>
                 </td>`;
-        // Cột Role – dùng cellStyle (căn giữa)
-        html += `<td style="${cellStyle}">${user.display_name || user.role_key || "-"}</td>`;
-        // Cột Tổng – dùng cellStyle với màu nền riêng
-        html += `<td style="${cellStyle} background: ${totalBg}; font-weight: bold;">${total}</td>`;
 
-        // Các cột giờ – dùng cellStyle và thay đổi màu nền/chữ
+        // Role
+        html += `<td style="${cellOuterStyle}"><div style="${flexCenterStyle}">${user.display_name || user.role_key || "-"}</div></td>`;
+
+        // Tổng
+        html += `<td style="${cellOuterStyle} background: ${totalBg};"><div style="${flexCenterStyle}; font-weight: bold;">${total}</div></td>`;
+
+        // Các giờ
         for (let h = hourStart; h <= hourEnd; h++) {
           const count = user.hourly?.[h] || 0;
           let bg = "#f8fafc";
@@ -633,7 +638,7 @@ export class HeatmapTable {
               color = "#166534";
             }
           }
-          html += `<td style="${cellStyle} background: ${bg}; color: ${color};">${count === 0 ? "-" : count}</td>`;
+          html += `<td style="${cellOuterStyle} background: ${bg};"><div style="${flexCenterStyle} color: ${color};">${count === 0 ? "-" : count}</div></td>`;
         }
         html += `</tr>`;
       });

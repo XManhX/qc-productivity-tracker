@@ -540,113 +540,136 @@ export class HeatmapTable {
   }
 
   async exportToImage() {
-    const tableWrapper = this.container.querySelector("#table-wrapper");
     const exportBtn = this.container.querySelector("#btn-export-image");
+    if (!exportBtn) return;
 
-    if (!tableWrapper) {
-      console.error("[Export] Không tìm thấy #table-wrapper");
-      return;
-    }
-
-    // --- Bắt đầu loading ---
-    const originalBtnHTML = exportBtn.innerHTML;
+    // --- Loading ---
+    const originalHTML = exportBtn.innerHTML;
     exportBtn.innerHTML =
       '<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i><span>Đang xuất...</span>';
     exportBtn.disabled = true;
     refreshIcons();
 
     try {
-      // 1. Lấy kích thước thật của bảng (bao gồm phần bị scroll ngang)
-      const table = tableWrapper.querySelector("table");
-      const totalWidth = table ? table.scrollWidth : tableWrapper.scrollWidth;
-      const totalHeight = tableWrapper.scrollHeight; // toàn bộ nội dung, bỏ qua scroll dọc
-
-      // 2. Tạo clone
-      const clone = tableWrapper.cloneNode(true);
-      // Thiết lập style cho clone để hiển thị toàn bộ nội dung
-      clone.style.position = "absolute";
-      clone.style.top = "-9999px";
-      clone.style.left = "0";
-      clone.style.width = totalWidth + "px"; // rộng đúng = toàn bộ bảng
-      clone.style.maxHeight = "none";
-      clone.style.overflow = "visible";
-      clone.style.backgroundColor = "#ffffff";
-      clone.style.border = "1px solid #e2e8f0";
-
-      // Loại bỏ mọi sticky trong clone
-      clone.querySelectorAll("*").forEach((el) => {
-        const cs = window.getComputedStyle(el);
-        if (cs.position === "sticky") {
-          el.style.position = "static";
-          el.style.left = "auto";
-        }
+      // 1. Lấy dữ liệu hiện tại từ store
+      const { filters, sort } = store.state;
+      const hourStart = Number(filters.hourStart);
+      const hourEnd = Number(filters.hourEnd);
+      // Sắp xếp giống bảng đang hiển thị (nếu cần)
+      const sortedData = [...store.items].sort((a, b) => {
+        const av = this._getSortValue(a, sort.key);
+        const bv = this._getSortValue(b, sort.key);
+        if (av < bv) return sort.direction === "asc" ? -1 : 1;
+        if (av > bv) return sort.direction === "asc" ? 1 : -1;
+        return 0;
       });
 
-      // Xóa container cuộn dọc
-      const scrollDiv =
-        clone.querySelector("#table-scroll-container") ||
-        clone.querySelector(".max-h-\\[calc\\(100vh-12rem\\)\\]");
-      if (scrollDiv) {
-        scrollDiv.style.maxHeight = "none";
-        scrollDiv.style.overflowY = "visible";
-        scrollDiv.style.height = "auto";
+      // 2. Tạo container tạm, nằm ngoài màn hình
+      const container = document.createElement("div");
+      container.style.position = "absolute";
+      container.style.top = "-9999px";
+      container.style.left = "0";
+      container.style.backgroundColor = "#ffffff";
+      container.style.padding = "12px";
+      container.style.fontFamily = "Inter, sans-serif"; // dùng font chính
+
+      // 3. Dựng bảng HTML thuần
+      let html = `<table style="border-collapse: collapse; width: auto; font-size: 13px;">`;
+      // Header
+      html += `<thead><tr style="background: #f1f5f9; font-weight: 600; text-align: center;">`;
+      html += `<th style="border: 1px solid #cbd5e1; padding: 8px 12px; min-width: 200px; text-align: left;">Nhân viên</th>`;
+      html += `<th style="border: 1px solid #cbd5e1; padding: 8px 12px; min-width: 80px; text-align: left;">Role</th>`;
+      html += `<th style="border: 1px solid #cbd5e1; padding: 8px 12px; min-width: 80px; background: #ecfdf5; font-weight: 700;">Tổng</th>`;
+      for (let h = hourStart; h <= hourEnd; h++) {
+        html += `<th style="border: 1px solid #cbd5e1; padding: 8px 12px; min-width: 55px;">${h}h</th>`;
       }
+      html += `</tr></thead><tbody>`;
 
-      // Ẩn pagination
-      const pagination = clone.querySelector("#pagination-wrapper");
-      if (pagination) pagination.style.display = "none";
+      // Dữ liệu từng dòng
+      const workingHours = hourEnd - hourStart + 1;
+      sortedData.forEach((user) => {
+        const lowTotal = (user.low_threshold || 10) * workingHours;
+        const highTotal = (user.medium_threshold || 16) * workingHours;
+        const total = user.total || 0;
 
-      // 3. Thay thế toàn bộ icon Lucide (cả <i> lẫn SVG) bằng ký tự text
-      const allIconEls = clone.querySelectorAll("i, svg, [data-lucide]");
-      allIconEls.forEach((icon) => {
-        // Chỉ xử lý các element có vẻ là icon (dựa vào class hoặc data attribute)
-        const isLucide =
-          icon.hasAttribute("data-lucide") ||
-          icon.classList.contains("lucide") ||
-          icon.tagName === "svg";
-        if (isLucide) {
-          const textNode = document.createTextNode("●"); // dùng dấu chấm tròn đơn giản
-          icon.replaceWith(textNode);
+        // Màu nền cột Tổng
+        let totalBg = "#f8fafc";
+        if (total > 0) {
+          if (total < lowTotal) totalBg = "#fee2e2";
+          else if (total < highTotal) totalBg = "#fef9c3";
+          else totalBg = "#dcfce7";
         }
+
+        html += `<tr>`;
+        // Cột Nhân viên
+        const name = user.name || user.email;
+        const email = user.name ? user.email : "";
+        html += `<td style="border: 1px solid #e2e8f0; padding: 8px 12px; text-align: left;">
+                <div style="font-weight: 500;">${name}</div>
+                ${email ? `<div style="font-size: 11px; color: #64748b;">${email}</div>` : ""}
+              </td>`;
+        // Cột Role
+        html += `<td style="border: 1px solid #e2e8f0; padding: 8px 12px;">${user.display_name || user.role_key || "-"}</td>`;
+        // Cột Tổng
+        html += `<td style="border: 1px solid #e2e8f0; padding: 8px 12px; text-align: center; font-weight: bold; background: ${totalBg};">${total}</td>`;
+
+        // Các cột giờ
+        for (let h = hourStart; h <= hourEnd; h++) {
+          const count = user.hourly?.[h] || 0;
+          let bg = "#f8fafc";
+          let color = "#94a3b8";
+          if (count > 0) {
+            const lt = user.low_threshold || 10;
+            const mt = user.medium_threshold || 16;
+            if (count < lt) {
+              bg = "#fee2e2";
+              color = "#991b1b";
+            } else if (count < mt) {
+              bg = "#fef9c3";
+              color = "#854d0e";
+            } else {
+              bg = "#dcfce7";
+              color = "#166534";
+            }
+          }
+          html += `<td style="border: 1px solid #e2e8f0; padding: 8px 12px; text-align: center; background: ${bg}; color: ${color};">
+                  ${count === 0 ? "-" : count}
+                </td>`;
+        }
+        html += `</tr>`;
       });
 
-      // 4. Đưa clone vào DOM để render
-      document.body.appendChild(clone);
+      html += `</tbody></table>`;
+      container.innerHTML = html;
+      document.body.appendChild(container);
 
-      // Chờ 1 chút để font load
-      await new Promise((r) => setTimeout(r, 200));
+      // Chờ render
+      await new Promise((r) => setTimeout(r, 100));
 
-      // 5. Chụp clone với html2canvas
-      const canvas = await html2canvas(clone, {
+      // 4. Chụp ảnh bảng vừa tạo
+      const canvas = await html2canvas(container.firstElementChild, {
         backgroundColor: "#ffffff",
-        scale: 2, // độ phân giải gấp đôi
+        scale: 2,
         useCORS: true,
         allowTaint: true,
         logging: false,
-        // Không cần width/height thủ công, html2canvas tự lấy offsetWidth/Height của clone.
-        // Vì clone đã có width cố định = totalWidth, nó sẽ chụp đúng toàn bộ.
       });
 
-      // 6. Dọn dẹp clone và tải file
-      document.body.removeChild(clone);
+      document.body.removeChild(container);
+
+      // 5. Tải file
       const link = document.createElement("a");
       const dateStr = new Date().toISOString().slice(0, 10);
       link.download = `QC_Heatmap_${dateStr}.png`;
       link.href = canvas.toDataURL("image/png");
       link.click();
 
-      console.log(
-        "[Export] Xuất ảnh thành công! Kích thước:",
-        canvas.width,
-        "x",
-        canvas.height,
-      );
+      console.log("[Export] Ảnh đã tạo thành công!");
     } catch (error) {
       console.error("[Export] Lỗi:", error);
-      alert("Xuất ảnh thất bại. Vui lòng kiểm tra Console.");
+      alert("Xuất ảnh thất bại, vui lòng thử lại.");
     } finally {
-      // Khôi phục nút
-      exportBtn.innerHTML = originalBtnHTML;
+      exportBtn.innerHTML = originalHTML;
       exportBtn.disabled = false;
       refreshIcons();
     }

@@ -543,6 +543,7 @@ export class HeatmapTable {
     const exportBtn = this.container.querySelector("#btn-export-image");
     if (!exportBtn) return;
 
+    // --- Loading ---
     const originalHTML = exportBtn.innerHTML;
     exportBtn.innerHTML =
       '<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i><span>Đang xuất...</span>';
@@ -550,10 +551,11 @@ export class HeatmapTable {
     refreshIcons();
 
     try {
+      // 1. Lấy dữ liệu hiện tại từ store
       const { filters, sort } = store.state;
       const hourStart = Number(filters.hourStart);
       const hourEnd = Number(filters.hourEnd);
-
+      // Sắp xếp giống bảng đang hiển thị (nếu cần)
       const sortedData = [...store.items].sort((a, b) => {
         const av = this._getSortValue(a, sort.key);
         const bv = this._getSortValue(b, sort.key);
@@ -562,6 +564,7 @@ export class HeatmapTable {
         return 0;
       });
 
+      // 2. Tạo container tạm, nằm ngoài màn hình
       const container = document.createElement("div");
       container.style.position = "absolute";
       container.style.top = "-9999px";
@@ -570,62 +573,51 @@ export class HeatmapTable {
       container.style.padding = "12px";
       container.style.fontFamily = "Inter, sans-serif";
 
-      // Các style chung cho ô
-      const cellStyle =
-        "vertical-align: middle; line-height: 1.3; padding: 8px 12px; border: 1px solid #e2e8f0; height: 38px;";
-      const headerStyle =
-        "vertical-align: middle; line-height: 1.3; padding: 8px 12px; border: 1px solid #cbd5e1; background: #f1f5f9; font-weight: 600; text-align: center; height: 38px;";
-
+      // 3. Dựng bảng HTML thuần
       let html = `<table style="border-collapse: collapse; width: auto; font-size: 13px;">`;
-      html += `<thead><tr>`;
-      html += `<th style="${headerStyle} text-align: left; min-width: 200px;">Nhân viên</th>`;
-      html += `<th style="${headerStyle} text-align: left; min-width: 80px;">Role</th>`;
-      html += `<th style="${headerStyle} background: #ecfdf5; font-weight: 700; min-width: 80px;">Tổng</th>`;
+      // Header
+      html += `<thead><tr style="background: #f1f5f9; font-weight: 600; text-align: center;">`;
+      html += `<th style="border: 1px solid #cbd5e1; padding: 8px 12px; min-width: 200px; text-align: left;">Nhân viên</th>`;
+      html += `<th style="border: 1px solid #cbd5e1; padding: 8px 12px; min-width: 80px; text-align: left;">Role</th>`;
+      html += `<th style="border: 1px solid #cbd5e1; padding: 8px 12px; min-width: 80px; background: #ecfdf5; font-weight: 700;">Tổng</th>`;
       for (let h = hourStart; h <= hourEnd; h++) {
-        html += `<th style="${headerStyle} min-width: 55px;">${h}h</th>`;
+        html += `<th style="border: 1px solid #cbd5e1; padding: 8px 12px; min-width: 55px;">${h}h</th>`;
       }
       html += `</tr></thead><tbody>`;
 
+      // Dữ liệu từng dòng
       const workingHours = hourEnd - hourStart + 1;
       sortedData.forEach((user) => {
         const lowTotal = (user.low_threshold || 10) * workingHours;
         const highTotal = (user.medium_threshold || 16) * workingHours;
         const total = user.total || 0;
 
+        // Màu nền cột Tổng
         let totalBg = "#f8fafc";
-        let totalColor = "#94a3b8";
         if (total > 0) {
-          if (total < lowTotal) {
-            totalBg = "#fee2e2";
-            totalColor = "#991b1b";
-          } else if (total < highTotal) {
-            totalBg = "#fef9c3";
-            totalColor = "#854d0e";
-          } else {
-            totalBg = "#dcfce7";
-            totalColor = "#166534";
-          }
+          if (total < lowTotal) totalBg = "#fee2e2";
+          else if (total < highTotal) totalBg = "#fef9c3";
+          else totalBg = "#dcfce7";
         }
 
         html += `<tr>`;
-        // Cột Nhân viên – bọc trong span inline-block để căn giữa khối 2 dòng
+        // Cột Nhân viên
         const name = user.name || user.email;
         const email = user.name ? user.email : "";
-        html += `<td style="${cellStyle} text-align: left; min-width: 200px;">
-                <span style="display: inline-block; vertical-align: middle; line-height: 1.2;">
-                  <div style="font-weight: 500;">${name}</div>
-                  ${email ? `<div style="font-size: 11px; color: #64748b;">${email}</div>` : ""}
-                </span>
+        html += `<td style="border: 1px solid #e2e8f0; padding: 8px 12px; text-align: left;">
+                <div style="font-weight: 500;">${name}</div>
+                ${email ? `<div style="font-size: 11px; color: #64748b;">${email}</div>` : ""}
               </td>`;
-        // Role
-        html += `<td style="${cellStyle} text-align: left; min-width: 80px;">${user.display_name || user.role_key || "-"}</td>`;
-        // Tổng
-        html += `<td style="${cellStyle} text-align: center; font-weight: bold; background: ${totalBg}; color: ${totalColor}; min-width: 80px;">${total}</td>`;
-        // Giờ
+        // Cột Role
+        html += `<td style="border: 1px solid #e2e8f0; padding: 8px 12px;">${user.display_name || user.role_key || "-"}</td>`;
+        // Cột Tổng
+        html += `<td style="border: 1px solid #e2e8f0; padding: 8px 12px; text-align: center; font-weight: bold; background: ${totalBg};">${total}</td>`;
+
+        // Các cột giờ
         for (let h = hourStart; h <= hourEnd; h++) {
           const count = user.hourly?.[h] || 0;
-          let bg = "#f8fafc",
-            color = "#94a3b8";
+          let bg = "#f8fafc";
+          let color = "#94a3b8";
           if (count > 0) {
             const lt = user.low_threshold || 10;
             const mt = user.medium_threshold || 16;
@@ -640,7 +632,9 @@ export class HeatmapTable {
               color = "#166534";
             }
           }
-          html += `<td style="${cellStyle} text-align: center; background: ${bg}; color: ${color}; min-width: 55px;">${count === 0 ? "-" : count}</td>`;
+          html += `<td style="border: 1px solid #e2e8f0; padding: 8px 12px; text-align: center; background: ${bg}; color: ${color};">
+                  ${count === 0 ? "-" : count}
+                </td>`;
         }
         html += `</tr>`;
       });
@@ -649,14 +643,10 @@ export class HeatmapTable {
       container.innerHTML = html;
       document.body.appendChild(container);
 
-      // (Có thể bỏ comment để xem preview)
-      // const previewWindow = window.open("", "_blank", "width=1200,height=800");
-      // previewWindow.document.write(`...`);
-      // previewWindow.document.close();
-
+      // Chờ render
       await new Promise((r) => setTimeout(r, 100));
 
-      // Sử dụng onclone để áp dụng style cuối cùng trước khi render (đảm bảo height được tính đúng)
+      // 4. Chụp ảnh bảng vừa tạo
       const canvas = await html2canvas(container.firstElementChild, {
         backgroundColor: "#ffffff",
         scale: 2,
@@ -667,6 +657,7 @@ export class HeatmapTable {
 
       document.body.removeChild(container);
 
+      // 5. Tải file
       const link = document.createElement("a");
       const dateStr = new Date().toISOString().slice(0, 10);
       link.download = `QC_Heatmap_${dateStr}.png`;

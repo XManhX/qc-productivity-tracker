@@ -541,49 +541,102 @@ export class HeatmapTable {
 
   async exportToImage() {
     const tableWrapper = this.container.querySelector("#table-wrapper");
-    const scrollContainer = this.container.querySelector(
-      "#table-scroll-container",
-    );
-    const paginationWrapper = this.container.querySelector(
-      "#pagination-wrapper",
-    );
+    const exportBtn = this.container.querySelector("#btn-export-image");
 
     if (!tableWrapper) return;
 
-    // Hiển thị trạng thái đang xử lý
-    const exportBtn = this.container.querySelector("#btn-export-image");
+    // Nút loading
     const originalBtnHTML = exportBtn.innerHTML;
-    exportBtn.innerHTML = `<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i><span>Đang xuất...</span>`;
+    exportBtn.innerHTML =
+      '<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i><span>Đang xuất...</span>';
     exportBtn.disabled = true;
     refreshIcons();
 
     try {
-      // 1. Lưu lại trạng thái scroll và style hiện tại
-      const originalMaxHeight = scrollContainer.style.maxHeight;
-      const originalOverflowY = scrollContainer.style.overflowY;
-      const originalScrollTop = scrollContainer.scrollTop;
-      const paginationDisplay = paginationWrapper
-        ? paginationWrapper.style.display
-        : "";
+      // === 1. Tạo bản sao sạch sẽ của toàn bộ bảng ===
+      const clone = tableWrapper.cloneNode(true);
+      // Đặt style cho clone để chụp toàn bộ
+      clone.style.position = "absolute";
+      clone.style.top = "-9999px";
+      clone.style.left = "0";
+      clone.style.width = "auto"; // tự động rộng đủ nội dung
+      clone.style.maxHeight = "none";
+      clone.style.overflow = "visible";
+      clone.style.border = "1px solid #e2e8f0";
+      clone.style.backgroundColor = "#ffffff";
 
-      // 2. Tạm thời bỏ giới hạn chiều cao và ẩn pagination (nếu có) để chụp toàn bộ
-      scrollContainer.style.maxHeight = "none";
-      scrollContainer.style.overflowY = "visible";
-      scrollContainer.scrollTop = 0;
-      if (paginationWrapper) {
-        paginationWrapper.style.display = "none";
+      // Bỏ tất cả sticky, left, max-height, overflow trong clone
+      clone.querySelectorAll("*").forEach((el) => {
+        const style = getComputedStyle(el);
+        if (style.position === "sticky") {
+          el.style.position = "static";
+          el.style.left = "auto";
+        }
+      });
+      // Xóa các giới hạn cuộn
+      const scrollDiv =
+        clone.querySelector("#table-scroll-container") ||
+        clone.querySelector(".max-h-\\[calc\\(100vh-12rem\\)\\]");
+      if (scrollDiv) {
+        scrollDiv.style.maxHeight = "none";
+        scrollDiv.style.overflow = "visible";
       }
+      // Xóa pagination nếu có
+      const pagination = clone.querySelector("#pagination-wrapper");
+      if (pagination) pagination.style.display = "none";
 
-      // 3. Chụp toàn bộ phần tử table-wrapper (bao gồm header và tất cả dòng)
-      const canvas = await html2canvas(tableWrapper, {
+      // === 2. Thay thế icon Lucide bằng text đơn giản ===
+      clone.querySelectorAll("[data-lucide]").forEach((iconEl) => {
+        // Lấy tên icon từ class hoặc data attribute (lucide thường thêm class 'lucide-xxx')
+        const iconName =
+          iconEl.getAttribute("data-lucide") ||
+          Array.from(iconEl.classList)
+            .find((c) => c.startsWith("lucide-"))
+            ?.replace("lucide-", "");
+        // Tạo span text thay thế
+        const span = document.createElement("span");
+        span.textContent = iconName ? iconName.charAt(0).toUpperCase() : "◆";
+        span.style.display = "inline-block";
+        span.style.width = "16px";
+        span.style.height = "16px";
+        span.style.textAlign = "center";
+        span.style.lineHeight = "16px";
+        iconEl.parentNode.replaceChild(span, iconEl);
+      });
+
+      // Loại bỏ các thuộc tính không cần thiết cho ảnh
+      clone.querySelectorAll("i").forEach((el) => {
+        if (el.classList.contains("lucide") || el.hasAttribute("data-lucide")) {
+          const span = document.createElement("span");
+          span.textContent = "●";
+          el.parentNode.replaceChild(span, el);
+        }
+      });
+
+      // Đưa clone vào DOM để html2canvas render được font, style...
+      document.body.appendChild(clone);
+
+      // Chờ một tick để font kịp áp dụng
+      await new Promise((resolve) => setTimeout(resolve, 200));
+
+      // === 3. Chụp ảnh clone ===
+      const canvas = await html2canvas(clone, {
         backgroundColor: "#ffffff",
-        scale: 2, // độ phân giải cao
+        scale: 2,
         useCORS: true,
         allowTaint: true,
         logging: false,
+        // Đảm bảo chụp đúng toàn bộ nội dung, không bị cắt
+        width: clone.scrollWidth,
+        height: clone.scrollHeight,
+        windowWidth: clone.scrollWidth,
+        windowHeight: clone.scrollHeight,
       });
 
-      // 4. Tạo file tải xuống
+      // Xóa clone khỏi DOM
+      document.body.removeChild(clone);
+
+      // Tải xuống
       const link = document.createElement("a");
       const dateStr = new Date().toISOString().slice(0, 10);
       link.download = `QC_Heatmap_${dateStr}.png`;
@@ -591,16 +644,8 @@ export class HeatmapTable {
       link.click();
     } catch (error) {
       console.error("Lỗi xuất ảnh:", error);
-      alert("Không thể xuất ảnh, vui lòng thử lại.");
+      alert("Xuất ảnh thất bại: " + error.message);
     } finally {
-      // 5. Khôi phục trạng thái ban đầu
-      scrollContainer.style.maxHeight = originalMaxHeight;
-      scrollContainer.style.overflowY = originalOverflowY;
-      scrollContainer.scrollTop = originalScrollTop;
-      if (paginationWrapper) {
-        paginationWrapper.style.display = paginationDisplay;
-      }
-
       // Khôi phục nút
       exportBtn.innerHTML = originalBtnHTML;
       exportBtn.disabled = false;

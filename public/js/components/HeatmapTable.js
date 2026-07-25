@@ -1,3 +1,4 @@
+import html2canvas from "html2canvas";
 import { store } from "../store/DashboardStore.js";
 import { refreshIcons } from "../utils/icons.js";
 import { Pagination } from "./Pagination.js";
@@ -72,8 +73,8 @@ export class HeatmapTable {
           </div>
         </div>  
       </div>
-      <div class="overflow-x-auto border border-slate-200 shadow-sm">
-        <div class="max-h-[calc(100vh-12rem)] overflow-y-auto">
+      <div class="overflow-x-auto border border-slate-200 shadow-sm" id="table-wrapper">
+        <div class="max-h-[calc(100vh-12rem)] overflow-y-auto" id="table-scroll-container">
           <table class="w-full text-center border-collapse" id="data-table">
             <thead id="table-header" class="text-xs uppercase tracking-wider font-semibold"></thead>
             <tbody id="dashboard-body" class="divide-y divide-slate-100 text-sm bg-white"></tbody>

@@ -62,7 +62,7 @@ export class HeatmapTable {
         </div>
       </div>
       <div class="overflow-x-auto border border-slate-200 shadow-sm">
-        <div class="max-h-[calc(100vh-16rem)] overflow-y-auto">
+        <div class="max-h-[calc(100vh-12rem)] overflow-y-auto">
           <table class="w-full text-center border-collapse" id="data-table">
             <thead id="table-header" class="text-xs uppercase tracking-wider font-semibold"></thead>
             <tbody id="dashboard-body" class="divide-y divide-slate-100 text-sm bg-white"></tbody>

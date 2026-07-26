@@ -1,7 +1,8 @@
 // api/qc-productivity/send-hourly-report.js
 import { createClient } from "@supabase/supabase-js";
-import puppeteer from 'puppeteer-core';
-import chromium from '@sparticuz/chromium';
+// Tạm thời comment các import không cần thiết để fix lỗi Vercel
+// import puppeteer from 'puppeteer-core';
+// import chromium from '@sparticuz/chromium';
 
 const supabase = createClient(
     process.env.SUPABASE_URL,

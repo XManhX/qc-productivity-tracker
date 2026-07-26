@@ -13,15 +13,56 @@ const VN_OFFSET = 7 * 60 * 60 * 1000;
 const DEFAULT_LOW = 10;
 const DEFAULT_MEDIUM = 16;
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+const CONFIG_CACHE_MS = 300_000;
 
 // ---------- Cache ----------
-let configCache = null;
-let configCacheTime = 0;
+let cachedConfig = null;
+let configFetchedAt = 0;
 
-// ==================== CONFIG ====================
-async function getReportConfig() {
+// ==================== CONFIG PARSER ====================
+/**
+ * Chuẩn hóa cấu hình từ DB.
+ * @param {object} raw - Dữ liệu thô từ qc_alert_config
+ */
+function parseReportConfig(raw) {
+  // Các trường dùng cho báo cáo
+  const reportEnabled = raw?.report_enabled ?? true;
+  const reportHourStart = raw?.report_hour_start ?? 8;
+  const reportHourEnd = raw?.report_hour_end ?? 20;
+  const reportMinute = raw?.report_minute ?? 10;      // chưa dùng, để sẵn
+  const onlyWorkdays = raw?.report_only_workdays ?? true;
+  const webhook = raw?.report_seatalk_webhook_url || raw?.seatalk_webhook_url || null;
+
+  // Các trường ca làm việc (có thể cần cho logic khác trong tương lai)
+  const workStartHour = raw?.work_start_hour ?? 8;
+  const workEndHour = raw?.work_end_hour ?? 20;
+  const breakStartHour = raw?.break_start_hour ?? 12;
+  const breakStartMin = raw?.break_start_min ?? 30;
+  const breakEndHour = raw?.break_end_hour ?? 13;
+  const breakEndMin = raw?.break_end_min ?? 30;
+
+  return {
+    reportEnabled,
+    reportHourStart,
+    reportHourEnd,
+    reportMinute,
+    onlyWorkdays,
+    webhook,
+    // ca làm việc
+    workStartHour,
+    workEndHour,
+    breakStartHour,
+    breakStartMin,
+    breakEndHour,
+    breakEndMin,
+  };
+}
+
+async function getConfig() {
   const now = Date.now();
-  if (configCache && now - configCacheTime < 300_000) return configCache;
+  if (cachedConfig && now - configFetchedAt < CONFIG_CACHE_MS) {
+    return cachedConfig;
+  }
 
   const { data, error } = await supabase
     .from("qc_alert_config")
@@ -30,9 +71,11 @@ async function getReportConfig() {
     .single();
 
   if (error) throw new Error(`Lỗi lấy cấu hình: ${error.message}`);
-  configCache = data;
-  configCacheTime = now;
-  return data;
+
+  const parsed = parseReportConfig(data);
+  cachedConfig = parsed;
+  configFetchedAt = now;
+  return parsed;
 }
 
 // ==================== UTILS ====================
@@ -48,6 +91,13 @@ const capitalizeName = (name) => {
 const getTodayVN = () => {
   const d = new Date(Date.now() + VN_OFFSET);
   return d.toISOString().split("T")[0];
+};
+
+const isWorkdayVN = () => {
+  // const d = new Date(Date.now() + VN_OFFSET);
+  // const day = d.getDay(); // 0=CN, 6=T7
+  // return day >= 1 && day <= 5;
+  return true;
 };
 
 const delay = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -168,25 +218,77 @@ function buildHTML(users, date, displayName, hStart, hEnd, roleMap) {
 <head><meta charset="UTF-8">
 <style>
   *{margin:0;padding:0;box-sizing:border-box;}
-  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#fff;padding:20px;}
-  .card{max-width:1100px;margin:0 auto;background:#fff;border-radius:12px;padding:24px;box-shadow:0 4px 12px rgba(0,0,0,0.05);}
-  .title{font-size:26px;font-weight:700;color:#1e293b;margin-bottom:8px;}
-  .meta{display:flex;gap:24px;font-size:14px;color:#64748b;background:#f8fafc;padding:8px 16px;border-radius:8px;margin-bottom:20px;}
-  table{border-collapse:separate;border-spacing:0;font-size:13px;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;width:auto;}
-  th{background:#f1f5f9;font-weight:600;color:#475569;padding:10px 14px;border-bottom:1px solid #cbd5e1;text-align:center;}
-  td{padding:8px 12px;text-align:center;border-bottom:1px solid #e2e8f0;}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+    background:#f1f5f9;
+    padding:30px;
+    display:flex;
+    justify-content:center;
+  }
+  .card{
+    background:#fff;
+    border-radius:16px;
+    box-shadow:0 8px 30px rgba(0,0,0,0.06);
+    padding:32px;
+    max-width:fit-content;
+    overflow-x:auto;
+  }
+  .title{
+    font-size:28px;
+    font-weight:700;
+    color:#0f172a;
+    margin-bottom:12px;
+    white-space:nowrap;
+  }
+  .meta{
+    display:flex;
+    gap:28px;
+    font-size:14px;
+    color:#475569;
+    background:#f8fafc;
+    padding:10px 20px;
+    border-radius:10px;
+    margin-bottom:24px;
+    white-space:nowrap;
+  }
+  table{
+    border-collapse:separate;
+    border-spacing:0;
+    font-size:13px;
+    border:1px solid #e2e8f0;
+    border-radius:10px;
+    overflow:hidden;
+    table-layout:auto;
+  }
+  th{
+    background:#f1f5f9;
+    font-weight:600;
+    color:#334155;
+    padding:12px 14px;
+    border-bottom:2px solid #cbd5e1;
+    text-align:center;
+    white-space:nowrap;
+    position:sticky;
+    top:0;
+  }
+  td{
+    padding:10px 14px;
+    text-align:center;
+    border-bottom:1px solid #e2e8f0;
+    white-space:nowrap;
+  }
   tr:last-child td{border-bottom:none;}
-  .user-cell{text-align:left;min-width:200px;}
-  .user-name{font-weight:600;color:#1e293b;}
-  .user-email{font-size:11px;color:#94a3b8;}
-  .total-header{background:#ecfdf5;font-weight:700;color:#065f46;}
+  .user-cell{text-align:left; min-width:180px;}
+  .user-name{font-weight:600; color:#0f172a;}
+  .user-email{font-size:11px; color:#64748b; margin-top:2px;}
+  .total-header{background:#ecfdf5; font-weight:700; color:#065f46;}
 </style></head>
 <body>
 <div class="card">
-  <div class="title">📊 Báo cáo năng suất - ${displayName} - ${date}</div>
+  <div class="title">📊 Báo cáo năng suất – ${displayName} – ${date}</div>
   <div class="meta">
-    <div>👥 ${sorted.length} nhân viên</div>
-    <div>⏰ ${hStart}:00 - ${hEnd}:00</div>
+    <span>👥 ${sorted.length} nhân viên</span>
+    <span>⏰ ${hStart}:00 – ${hEnd}:00</span>
   </div>
   <table>
     <thead>
@@ -249,15 +351,21 @@ export default async function handler(req, res) {
 
   try {
     console.log("[INFO] Bắt đầu gửi báo cáo...");
-    const cfg = await getReportConfig();
-    if (!cfg?.report_enabled) {
+
+    // 1. Lấy và parse config
+    const cfg = await getConfig();
+    if (!cfg.reportEnabled) {
       return res.json({ success: false, reason: "Báo cáo đang tắt." });
     }
+    if (cfg.onlyWorkdays && !isWorkdayVN()) {
+      return res.json({ success: false, reason: "Hôm nay không phải ngày làm việc." });
+    }
 
-    const hStart = cfg.report_hour_start ?? 9;
-    const hEnd = cfg.report_hour_end ?? 18;
+    const hStart = cfg.reportHourStart;
+    const hEnd = cfg.reportHourEnd;
     const date = getTodayVN();
 
+    // 2. Lấy dữ liệu
     const { userMap, roleKeys } = await fetchActiveUsers();
     if (userMap.size === 0) return res.json({ success: false, reason: "Không có user active." });
 
@@ -265,8 +373,11 @@ export default async function handler(req, res) {
     await mergeStats(date, userMap);
 
     const withData = [...userMap.values()].filter(u => u.total > 0);
-    if (withData.length === 0) return res.json({ success: true, message: "Không có dữ liệu năng suất." });
+    if (withData.length === 0) {
+      return res.json({ success: true, message: "Không có dữ liệu năng suất." });
+    }
 
+    // 3. Nhóm theo role_key
     const groups = new Map();
     withData.forEach((u) => {
       const rk = u.role_key;
@@ -274,9 +385,11 @@ export default async function handler(req, res) {
       groups.get(rk).push(u);
     });
 
-    const webhook = cfg.report_seatalk_webhook_url || cfg.seatalk_webhook_url;
-    if (!webhook) return res.json({ success: false, reason: "Thiếu webhook URL." });
+    if (!cfg.webhook) {
+      return res.json({ success: false, reason: "Thiếu webhook URL." });
+    }
 
+    // 4. Sinh ảnh và gửi
     const sent = [];
     for (const [rk, users] of groups.entries()) {
       const { display_name: dn } = roleDetails.get(rk) || { display_name: rk };
@@ -286,12 +399,13 @@ export default async function handler(req, res) {
         console.warn(`[WARN] Ảnh ${dn} quá lớn, bỏ qua.`);
         continue;
       }
-      await sendImage(webhook, b64);
+      await sendImage(cfg.webhook, b64);
       console.log(`[OK] Đã gửi ${dn}`);
       sent.push(dn);
       await delay(1200);
     }
 
+    // 5. Ghi log
     await supabase.from("qc_report_logs").insert({
       report_type: "hourly_image_per_role",
       content_text: `Đã gửi ${sent.length} ảnh: ${sent.join(", ")}`,
@@ -300,6 +414,7 @@ export default async function handler(req, res) {
     }).catch((e) => console.warn("Ghi log lỗi:", e.message));
 
     return res.json({ success: true, message: `Đã gửi ${sent.length} role`, roles: sent, date });
+
   } catch (err) {
     console.error("[FATAL]", err);
     await supabase.from("qc_report_logs").insert({

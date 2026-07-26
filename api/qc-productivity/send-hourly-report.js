@@ -179,40 +179,40 @@ function generateHeatmapHTML(data, hourStart, hourEnd, reportDate) {
 }
 
 // Chụp ảnh từ HTML với Puppeteer
-async function htmlToImage(html) {
-    let browser;
-    // Xử lý môi trường: trên Vercel (production) dùng @sparticuz/chromium, local dùng puppeteer có sẵn
-    if (process.env.VERCEL_ENV === "production") {
-        browser = await puppeteer.launch({
-            args: [...chromium.args, '--no-sandbox', '--disable-setuid-sandbox'],
-            executablePath: await chromium.executablePath,
-            headless: chromium.headless,
-            defaultViewport: { width: 1920, height: 1080 }
-        });
-    } else {
-        // Môi trường development local
-        browser = await puppeteer.launch({
-            headless: true,
-            defaultViewport: { width: 1920, height: 1080 }
-        });
-    }
+// async function htmlToImage(html) {
+//     let browser;
+//     // Xử lý môi trường: trên Vercel (production) dùng @sparticuz/chromium, local dùng puppeteer có sẵn
+//     if (process.env.VERCEL_ENV === "production") {
+//         browser = await puppeteer.launch({
+//             args: [...chromium.args, '--no-sandbox', '--disable-setuid-sandbox'],
+//             executablePath: await chromium.executablePath,
+//             headless: chromium.headless,
+//             defaultViewport: { width: 1920, height: 1080 }
+//         });
+//     } else {
+//         // Môi trường development local
+//         browser = await puppeteer.launch({
+//             headless: true,
+//             defaultViewport: { width: 1920, height: 1080 }
+//         });
+//     }
 
-    const page = await browser.newPage();
-    await page.setContent(html, { waitUntil: 'networkidle0', timeout: 30000 });
+//     const page = await browser.newPage();
+//     await page.setContent(html, { waitUntil: 'networkidle0', timeout: 30000 });
 
-    // Chờ bảng render xong
-    await new Promise(r => setTimeout(r, 500));
+//     // Chờ bảng render xong
+//     await new Promise(r => setTimeout(r, 500));
 
-    const table = await page.$('table');
-    const screenshot = await table.screenshot({
-        type: 'png',
-        scale: 2,
-        omitBackground: false
-    });
+//     const table = await page.$('table');
+//     const screenshot = await table.screenshot({
+//         type: 'png',
+//         scale: 2,
+//         omitBackground: false
+//     });
 
-    await browser.close();
-    return screenshot;
-}
+//     await browser.close();
+//     return screenshot;
+// }
 
 // Gửi webhook text đến SeaTalk
 async function sendSeaTalkTextWebhook(webhookUrl, content, reportTime) {

@@ -34,7 +34,7 @@
 }
 
 /* Delta badge */
-#heatmap-container .delta-badge {
+#heatmap-table .delta-badge {
   position: absolute;
   top: -8px;
   right: 2px;
@@ -49,13 +49,13 @@
   background: white;
   box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.1);
 }
-#heatmap-container .delta-increase {
+#heatmap-table .delta-increase {
   color: #16a34a;
 }
-#heatmap-container .delta-decrease {
+#heatmap-table .delta-decrease {
   color: #dc2626;
 }
-#heatmap-container .delta-neutral {
+#heatmap-table .delta-neutral {
   color: #64748b;
 }
 @keyframes deltaFadeOut {
@@ -73,6 +73,6 @@
   }
 }
 /* FLIP transition */
-#heatmap-container tr.flip-animate {
+#heatmap-table tr.flip-animate {
   transition: transform 0.3s ease;
 }

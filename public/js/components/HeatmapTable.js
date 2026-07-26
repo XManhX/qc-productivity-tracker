@@ -118,50 +118,46 @@ export class HeatmapTable {
   // ==================== GIAO DIỆN ====================
   _renderStructure() {
     this.container.innerHTML = `
-      <div id="heatmap-container">
-        <div class="px-4 py-2 border-b border-slate-100 bg-slate-50 flex items-center justify-between">
-          <div>
-            <h2 class="font-bold text-slate-800 flex items-center gap-2">
-              <i data-lucide="grid" class="text-slate-400 w-5 h-5"></i> Bảng Thống Kê Sản Lượng Từng Giờ
-            </h2>
-            <div class="flex items-center gap-3 mt-1.5 text-xs text-slate-600">
-              <span class="text-slate-400">Chú thích:</span>
-              <span class="inline-flex items-center gap-1"><span class="legend-dot bg-red-50 border-red-200"></span> Thấp</span>
-              <span class="inline-flex items-center gap-1"><span class="legend-dot bg-yellow-50 border-yellow-200"></span> Trung bình</span>
-              <span class="inline-flex items-center gap-1"><span class="legend-dot bg-green-50 border-green-200"></span> Tốt</span>
-              <span class="text-slate-400 italic ml-2">(ngưỡng dựa trên giờ có sản lượng thực tế, đã trừ 1h nghỉ nếu có)</span>
-            </div>
+      <div class="px-4 py-2 border-b border-slate-100 bg-slate-50 flex items-center justify-between">
+        <div>
+          <h2 class="font-bold text-slate-800 flex items-center gap-2">
+            <i data-lucide="grid" class="text-slate-400 w-5 h-5"></i> Bảng Thống Kê Sản Lượng Từng Giờ
+          </h2>
+          <div class="flex items-center gap-3 mt-1.5 text-xs text-slate-600">
+            <span class="text-slate-400">Chú thích:</span>
+            <span class="inline-flex items-center gap-1"><span class="legend-dot bg-red-50 border-red-200"></span> Thấp</span>
+            <span class="inline-flex items-center gap-1"><span class="legend-dot bg-yellow-50 border-yellow-200"></span> Trung bình</span>
+            <span class="inline-flex items-center gap-1"><span class="legend-dot bg-green-50 border-green-200"></span> Tốt</span>
+            <span class="text-slate-400 italic ml-2">(ngưỡng dựa trên giờ có sản lượng thực tế, đã trừ 1h nghỉ nếu có)</span>
           </div>
-          <div class="flex items-center gap-3">
-            <button id="btn-export-image" 
-                    class="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg 
-                          bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 
-                          hover:border-slate-300 transition-colors shadow-sm"
-                    title="Xuất toàn bộ bảng thành ảnh PNG">
-              <i data-lucide="camera" class="w-4 h-4"></i>
-              <span>Xuất ảnh</span>
-            </button>
-            <div id="live-update-status" class="flex items-center gap-2 text-xs font-medium">
-              <span class="flex items-center gap-1.5 bg-slate-100 text-slate-500 px-2.5 py-1 rounded-full">
-                <span class="w-1.5 h-1.5 rounded-full bg-slate-400"></span> Đang kết nối...
-              </span>
-            </div>
-          </div>  
         </div>
-        <div class="overflow-x-auto border border-slate-200 shadow-sm" id="table-wrapper">
-          <div class="max-h-[calc(100vh-12rem)] overflow-y-auto" id="table-scroll-container">
-            <table class="w-full text-center border-collapse" id="data-table">
-              <thead id="table-header" class="text-xs uppercase tracking-wider font-semibold"></thead>
-              <tbody id="dashboard-body" class="divide-y divide-slate-100 text-sm bg-white"></tbody>
-            </table>
+        <div class="flex items-center gap-3">
+          <button id="btn-export-image" 
+                  class="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg 
+                        bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 
+                        hover:border-slate-300 transition-colors shadow-sm"
+                  title="Xuất toàn bộ bảng thành ảnh PNG">
+            <i data-lucide="camera" class="w-4 h-4"></i>
+            <span>Xuất ảnh</span>
+          </button>
+          <div id="live-update-status" class="flex items-center gap-2 text-xs font-medium">
+            <span class="flex items-center gap-1.5 bg-slate-100 text-slate-500 px-2.5 py-1 rounded-full">
+              <span class="w-1.5 h-1.5 rounded-full bg-slate-400"></span> Đang kết nối...
+            </span>
           </div>
-          <div id="pagination-wrapper"></div>
+        </div>  
+      </div>
+      <div class="overflow-x-auto border border-slate-200 shadow-sm" id="table-wrapper">
+        <div class="max-h-[calc(100vh-12rem)] overflow-y-auto" id="table-scroll-container">
+          <table class="w-full text-center border-collapse" id="data-table">
+            <thead id="table-header" class="text-xs uppercase tracking-wider font-semibold"></thead>
+            <tbody id="dashboard-body" class="divide-y divide-slate-100 text-sm bg-white"></tbody>
+          </table>
         </div>
+        <div id="pagination-wrapper"></div>
       </div>
     `;
-
     refreshIcons();
-
     const exportBtn = this.container.querySelector("#btn-export-image");
     if (exportBtn) {
       exportBtn.addEventListener("click", () => this.exportToImage());

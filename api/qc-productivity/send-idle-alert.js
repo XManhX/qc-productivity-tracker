@@ -2,14 +2,13 @@ import { createClient } from "@supabase/supabase-js";
 import XLSX from "xlsx";
 
 // ========== SUPABASE CLIENT ==========
-// Dùng SERVICE_ROLE_KEY để đủ quyền ghi (upsert report, update alert sent)
 const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_SERVICE_ROLE_KEY
 );
 
 // ========== CONSTANTS & UTILS ==========
-const VN_OFFSET = 7 * 3600 * 1000; // UTC+7 in ms
+const VN_OFFSET = 7 * 3600 * 1000;
 
 function getTodayVN() {
   const now = new Date(Date.now() + VN_OFFSET);
@@ -58,7 +57,7 @@ function getPeriodOfDay() {
   return vnHour < 12 ? "morning" : "afternoon";
 }
 
-// Hàm tính idle cho CẢNH BÁO (từ lastLog đến now, loại trừ giờ nghỉ trưa)
+// Hàm tính idle cho CẢNH BÁO
 function calcIdleMinutes(lastLogMs, nowMs, workStartMs, workEndMs, breakStartMs, breakEndMs) {
   if (nowMs < workStartMs || nowMs >= workEndMs) return 0;
   if (nowMs >= breakStartMs && nowMs < breakEndMs) return 0;
@@ -75,12 +74,11 @@ function calcIdleMinutes(lastLogMs, nowMs, workStartMs, workEndMs, breakStartMs,
   return Math.max(0, Math.floor(idleMs / 60000));
 }
 
-// Hàm tính idle cho BÁO CÁO (giữa hai log liên tiếp, có tính overlap break)
+// Hàm tính idle cho BÁO CÁO
 function calcIdleBetweenLogs(lastLogMs, currentLogMs, workStartMs, workEndMs, breakStartMs, breakEndMs) {
   if (lastLogMs === 0 || currentLogMs <= lastLogMs) return 0;
 
   let idleMs = currentLogMs - lastLogMs;
-  // Trừ đi thời gian nghỉ trưa nếu có overlap
   if (breakStartMs && breakEndMs && lastLogMs < breakEndMs && currentLogMs > breakStartMs) {
     const overlapStart = Math.max(lastLogMs, breakStartMs);
     const overlapEnd = Math.min(currentLogMs, breakEndMs);
@@ -365,7 +363,6 @@ function generateExcelBuffer(reportData, reportType) {
   return wb;
 }
 
-// Hàm lấy config cho báo cáo (có thể lấy từ DB)
 async function getConfigForReport() {
   const { data, error } = await supabase
     .from("qc_alert_config")
@@ -373,7 +370,6 @@ async function getConfigForReport() {
     .eq("id", 1)
     .single();
   if (error || !data) {
-    // fallback
     return {
       work_start_hour: 8, work_start_min: 0, work_start_buffer_minutes: 0,
       work_end_hour: 17, work_end_min: 0, work_end_buffer_minutes: 0,
@@ -390,10 +386,9 @@ async function getDailyReport(dateStr, skipCache = false) {
     if (cached) return cached;
   }
 
-  const startDate = `${dateStr}T00:00:00+07:00`; // dùng +07:00 cho chính xác
+  const startDate = `${dateStr}T00:00:00+07:00`;
   const endDate = `${dateStr}T23:59:59+07:00`;
 
-  // Lấy tất cả log trong ngày
   const { data: logs } = await supabase
     .from("qc_logs")
     .select("operator, created_at")
@@ -401,12 +396,10 @@ async function getDailyReport(dateStr, skipCache = false) {
     .lte("created_at", endDate)
     .order("created_at", { ascending: true });
 
-  // Lấy danh sách QC active (giống bảng qc_users)
   const { data: users } = await supabase.from("qc_users").select("email, name, is_active");
   const activeUsers = (users || []).filter(u => u.is_active);
 
   const config = await getConfigForReport();
-  // Tạo timestamp cho ngày cụ thể
   const dateBase = new Date(`${dateStr}T00:00:00+07:00`).getTime();
 
   const workStartMs = dateBase + config.work_start_hour * 3600000 + config.work_start_min * 60000;
@@ -414,7 +407,6 @@ async function getDailyReport(dateStr, skipCache = false) {
   const breakStartMs = dateBase + config.break_start_hour * 3600000 + config.break_start_min * 60000;
   const breakEndMs = dateBase + config.break_end_hour * 3600000 + config.break_end_min * 60000;
 
-  // Khởi tạo stats
   const userStats = {};
   activeUsers.forEach(user => {
     userStats[user.email] = {
@@ -428,7 +420,6 @@ async function getDailyReport(dateStr, skipCache = false) {
     };
   });
 
-  // Gom log theo email
   const logsByUser = {};
   (logs || []).forEach(log => {
     if (!logsByUser[log.operator]) logsByUser[log.operator] = [];
@@ -438,7 +429,6 @@ async function getDailyReport(dateStr, skipCache = false) {
   let total_alerts_sent = 0;
   let total_idle_minutes = 0;
 
-  // Duyệt từng user
   for (const email of Object.keys(userStats)) {
     const timestamps = logsByUser[email] || [];
     userStats[email].log_count = timestamps.length;
@@ -461,13 +451,12 @@ async function getDailyReport(dateStr, skipCache = false) {
     total_idle_minutes += userStats[email].total_idle_minutes;
   }
 
-  const totalWorkMinutes = activeUsers.length * (config.work_end_hour * 60 + config.work_end_min - (config.work_start_hour * 60 + config.work_start_min));
+  const totalWorkMinutes = activeUsers.length * ((config.work_end_hour * 60 + config.work_end_min) - (config.work_start_hour * 60 + config.work_start_min));
   const totalWorkHours = Math.round(totalWorkMinutes / 60 * 10) / 10;
   const totalIdleHours = Math.round(total_idle_minutes / 60 * 10) / 10;
   const idlePercent = totalWorkMinutes > 0 ? Math.round((total_idle_minutes / totalWorkMinutes) * 100) : 0;
   const avgIdlePerPerson = activeUsers.length > 0 ? Math.round(total_idle_minutes / activeUsers.length) : 0;
 
-  // Giờ cao điểm idle
   const hourCounts = Array(24).fill(0);
   (logs || []).forEach(log => {
     const hour = new Date(log.created_at).getHours();
@@ -526,7 +515,6 @@ async function getDailyReportForPeriod(startDateStr, endDateStr) {
     { total_work_hours: 0, total_idle_hours: 0, total_alerts_sent: 0 }
   );
 
-  // Gộp user details từ tất cả các ngày
   const allUserStats = {};
   for (const day of days) {
     const dayReport = await getDailyReport(day.date, true);
@@ -562,6 +550,7 @@ async function getWeeklyReport(endDateStr, skipCache = false) {
   const endStr = endDate.toISOString().split("T")[0];
 
   const thisWeek = await getDailyReportForPeriod(startStr, endStr);
+
   const prevStart = new Date(startDate);
   prevStart.setDate(prevStart.getDate() - 7);
   const prevEnd = new Date(endDate);
@@ -647,7 +636,7 @@ async function getMonthlyReport(year, month, skipCache = false) {
   const savedMinutes = lastIdleMinutes - currentIdleMinutes;
   const savedHours = Math.round((savedMinutes / 60) * 10) / 10;
   const savedFTE = Math.round((savedHours / 160) * 100) / 100;
-  const savedSalary = savedHours * 50; // giả định 50k/giờ
+  const savedSalary = savedHours * 50;
 
   const recommendations = [];
   if (thisMonth.summary?.idle_percent > 15) {
@@ -687,6 +676,81 @@ async function getMonthlyReport(year, month, skipCache = false) {
 
   await saveCachedReport("monthly", reportKey, report);
   return report;
+}
+
+// ========== GỬI BÁO CÁO LÊN SEATALK ==========
+function buildReportMessage(report, type) {
+  const s = report.summary;
+  const nowStr = new Date().toLocaleString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" });
+
+  let message = "";
+
+  if (type === "daily") {
+    message += `📊 **BÁO CÁO NGÀY** - ${s.report_date}\n`;
+    message += `⏰ ${nowStr}\n\n`;
+    message += `👥 QC online: ${s.active_count}/${s.total_qc} (${s.percent_active}%)\n`;
+    message += `⏳ Tổng idle: ${s.total_idle_hours} giờ (${s.idle_percent}%)\n`;
+    message += `🔔 Cảnh báo đã gửi: ${s.total_alerts_sent}\n\n`;
+    if (report.needs_attention && report.needs_attention.length > 0) {
+      message += `⚠️ Cần chú ý:\n`;
+      report.needs_attention.slice(0, 3).forEach((u, i) => {
+        message += `${i + 1}. ${capitalizeName(u.name)} - ${u.total_idle_minutes} phút\n`;
+      });
+    }
+  } else if (type === "weekly") {
+    message += `📈 **BÁO CÁO TUẦN** (${s.week_start} → ${s.week_end})\n`;
+    message += `⏰ ${nowStr}\n\n`;
+    message += `⏳ Tổng idle: ${s.total_idle_hours} giờ (${s.idle_percent}%)\n`;
+    message += `📉 Cải thiện: ${s.improvement_from_last_week}% so với tuần trước\n`;
+    message += `👥 QC xuất sắc (<60p): ${report.user_classification.excellent_count} (${report.user_classification.excellent_percent}%)\n`;
+    message += `🆘 Cần hỗ trợ (>180p): ${report.user_classification.needs_support_count}\n`;
+    if (report.ranking && report.ranking.length > 0) {
+      message += `\n🏆 Top 3 chăm chỉ:\n`;
+      report.ranking.slice(0, 3).forEach((u, i) => {
+        message += `${i + 1}. ${capitalizeName(u.name)} - ${u.total_idle_minutes} phút\n`;
+      });
+    }
+  } else if (type === "monthly") {
+    message += `📅 **BÁO CÁO THÁNG** ${s.month}/${s.year}\n`;
+    message += `⏰ ${nowStr}\n\n`;
+    message += `⏳ Tổng idle: ${s.total_idle_hours} giờ (${s.idle_percent}%)\n`;
+    message += `📉 Cải thiện so với tháng trước: ${s.improvement_over_last_month}%\n`;
+    message += `💰 Tiết kiệm ước tính: ${s.saved_hours} giờ (~${s.estimated_salary_saved_million} triệu VNĐ)\n`;
+    message += `🎯 Mục tiêu tháng sau: idle < ${s.target_next_month}%\n`;
+    if (report.top_performers && report.top_performers.length > 0) {
+      message += `\n🌟 Tiêu biểu:\n`;
+      report.top_performers.slice(0, 5).forEach((u, i) => {
+        message += `${i + 1}. ${capitalizeName(u.name)} - ${u.total_idle_minutes} phút\n`;
+      });
+    }
+    if (report.recommendations && report.recommendations.length > 0) {
+      message += `\n💡 Gợi ý:\n`;
+      report.recommendations.forEach(r => message += `• ${r}\n`);
+    }
+  }
+
+  message += `\n🤖 Hệ thống tự động QC Monitor`;
+  return message;
+}
+
+async function sendReportToSeatalk(report, type) {
+  const config = await getAlertConfig();
+  const webhookUrl = config.seatalk_webhook_url || process.env.SEATALK_ALERT_WEBHOOK_URL;
+  if (!webhookUrl || webhookUrl.includes("xxx")) {
+    console.log("Webhook not configured, would send report:", report.summary);
+    return true; // giả lập thành công
+  }
+  const message = buildReportMessage(report, type);
+  const res = await fetch(webhookUrl, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ tag: "text", text: { format: 1, content: message } }),
+  });
+  if (!res.ok) {
+    console.error("Send report to Seatalk failed:", await res.text());
+    return false;
+  }
+  return true;
 }
 
 // ========== MAIN HANDLER ==========
@@ -799,9 +863,9 @@ export default async function handler(req, res) {
       return res.status(500).json({ error: "Internal server error" });
     }
   } else if (action === "report") {
-    // ---------- TẠO BÁO CÁO ----------
+    // ---------- TẠO BÁO CÁO (VÀ GỬI NẾU CÓ send=true) ----------
     try {
-      const { date, year, month, type = "daily", force = "false", export_excel = "false" } = req.query;
+      const { date, year, month, type = "daily", force = "false", export_excel = "false", send = "false" } = req.query;
       const skipCache = force === "true";
 
       let report;
@@ -822,6 +886,13 @@ export default async function handler(req, res) {
         fileName = `qc-monthly-report-${currentYear}-${String(currentMonth).padStart(2, "0")}.xlsx`;
       }
 
+      // Nếu yêu cầu gửi báo cáo lên Seatalk
+      let sentToSeatalk = false;
+      if (send === "true") {
+        sentToSeatalk = await sendReportToSeatalk(report, type);
+      }
+
+      // Nếu yêu cầu xuất Excel
       if (export_excel === "true") {
         const wb = generateExcelBuffer(report, type);
         const buf = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
@@ -830,10 +901,12 @@ export default async function handler(req, res) {
         return res.send(buf);
       }
 
+      // Trả về JSON
       return res.status(200).json({
         success: true,
         report_type: type,
         generated_at: new Date().toISOString(),
+        sent_to_seatalk: sentToSeatalk,
         data: report,
       });
     } catch (error) {

@@ -45,11 +45,10 @@ function getTodayVN() {
     return now.toISOString().split("T")[0];
 }
 
-// Kiểm tra có phải ngày làm việc không (Thứ 2-6)
+// Kiểm tra có phải ngày làm việc không - Đã sửa để gửi tất cả các ngày
 function isWorkdayVN() {
-    const vnDate = new Date(new Date().getTime() + 7 * 60 * 60 * 1000);
-    const dayOfWeek = vnDate.getDay(); // 0: Chủ Nhật, 1-6: Thứ 2-Thứ 7
-    return dayOfWeek >= 1 && dayOfWeek <= 5;
+    // Luôn trả về true để gửi báo cáo tất cả các ngày trong tuần
+    return true;
 }
 
 // Hàm xử lý logs thành định dạng heatmap giống client

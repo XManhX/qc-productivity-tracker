@@ -355,12 +355,13 @@ export default async function handler(req, res) {
             console.log("Không có webhook URL cấu hình, bỏ qua gửi SeaTalk");
         }
 
-        // Ghi log thành công
+        // Ghi log thành công (bỏ qua lỗi nếu bảng chưa tồn tại)
         await supabase.from("qc_report_logs").insert({
             report_type: "hourly_text",
             content_text: reportContent,
-            sent_at: new Date().toISOString()
-        });
+            sent_at: new Date().toISOString(),
+            status: "success"
+        }).catch(logErr => console.warn("Không thể ghi log thành công:", logErr.message));
 
         return res.json({
             success: true,

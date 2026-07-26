@@ -6,12 +6,18 @@ export class HeatmapTable {
   constructor(container) {
     this.container = container;
 
+    // Các giá trị sticky left cố định
     this._leftName = 0;
     this._leftRole = 280;
     this._leftTotal = 370;
 
+    // Debounce cập nhật (NEW)
+    this._debounceDelay = 300; // ms
+    this._debounceTimer = null;
+
     this._renderStructure();
 
+    // Pagination
     this.pagination = new Pagination(
       this.container.querySelector("#pagination-wrapper"),
       store,
@@ -22,26 +28,23 @@ export class HeatmapTable {
       },
     );
 
+    // Trạng thái cho cập nhật động
     this._previousData = null;
-    this._previousUserMap = null;
-    this._rowMap = null;
+    this._previousUserMap = null; // Map<email, user>
+    this._rowMap = null; // Map<email, HTMLTableRowElement>
     this._lastHourRange = null;
     this._lastSort = null;
 
+    // Live update indicator
     this._lastUpdateTime = null;
     this._updateStatus = "idle";
-    this._refreshInterval = 120;
+    this._refreshInterval = 60; // giây
     this._statusTimer = null;
 
-    // Debounce
-    this._pendingRender = false;
-    this._renderTimeoutId = null;
-    this._DEBOUNCE_MS = 200;
+    // Inject style cho delta badge (NEW)
+    this._injectDeltaStyles();
 
-    // FLIP
-    this._enableFlip = true; // tắt nếu không cần
-    this._debugFlip = true; // log ra console để kiểm tra
-
+    // Sử dụng debounce khi store update (NEW)
     store.on("update", () => {
       this._handleStoreUpdate();
       this._scheduleRender();
@@ -105,13 +108,13 @@ export class HeatmapTable {
 
     let effectiveHours = activeHours;
     if (hasFullBreak && activeHours > 1) {
-      effectiveHours = activeHours - 1; // trừ 1 giờ nghỉ trưa
+      effectiveHours = activeHours - 1;
     }
 
     return { displayTotal: rawTotal, effectiveHours };
   }
 
-  // ==================== UI ====================
+  // ==================== GIAO DIỆN ====================
   _renderStructure() {
     this.container.innerHTML = `
       <div class="px-4 py-2 border-b border-slate-100 bg-slate-50 flex items-center justify-between">
@@ -128,15 +131,20 @@ export class HeatmapTable {
           </div>
         </div>
         <div class="flex items-center gap-3">
-          <button id="btn-export-image" class="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 hover:border-slate-300 transition-colors shadow-sm">
-            <i data-lucide="camera" class="w-4 h-4"></i><span>Xuất ảnh</span>
+          <button id="btn-export-image" 
+                  class="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg 
+                        bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 
+                        hover:border-slate-300 transition-colors shadow-sm"
+                  title="Xuất toàn bộ bảng thành ảnh PNG">
+            <i data-lucide="camera" class="w-4 h-4"></i>
+            <span>Xuất ảnh</span>
           </button>
           <div id="live-update-status" class="flex items-center gap-2 text-xs font-medium">
             <span class="flex items-center gap-1.5 bg-slate-100 text-slate-500 px-2.5 py-1 rounded-full">
               <span class="w-1.5 h-1.5 rounded-full bg-slate-400"></span> Đang kết nối...
             </span>
           </div>
-        </div>
+        </div>  
       </div>
       <div class="overflow-x-auto border border-slate-200 shadow-sm" id="table-wrapper">
         <div class="max-h-[calc(100vh-12rem)] overflow-y-auto" id="table-scroll-container">
@@ -149,9 +157,10 @@ export class HeatmapTable {
       </div>
     `;
     refreshIcons();
-    this.container
-      .querySelector("#btn-export-image")
-      ?.addEventListener("click", () => this.exportToImage());
+    const exportBtn = this.container.querySelector("#btn-export-image");
+    if (exportBtn) {
+      exportBtn.addEventListener("click", () => this.exportToImage());
+    }
   }
 
   // ==================== LIVE UPDATE STATUS ====================
@@ -244,10 +253,72 @@ export class HeatmapTable {
       clearInterval(this._statusTimer);
       this._statusTimer = null;
     }
-    if (this._renderTimeoutId) {
-      clearTimeout(this._renderTimeoutId);
-      this._renderTimeoutId = null;
+    if (this._debounceTimer) {
+      // NEW
+      clearTimeout(this._debounceTimer);
+      this._debounceTimer = null;
     }
+  }
+
+  // ==================== DEBOUNCE (NEW) ====================
+  _scheduleRender() {
+    if (this._debounceTimer) {
+      clearTimeout(this._debounceTimer);
+    }
+    this._debounceTimer = setTimeout(() => {
+      this._debounceTimer = null;
+      this._renderTable();
+    }, this._debounceDelay);
+  }
+
+  // ==================== DELTA STYLES (NEW) ====================
+  _injectDeltaStyles() {
+    if (document.getElementById("heatmap-delta-styles")) return;
+    const style = document.createElement("style");
+    style.id = "heatmap-delta-styles";
+    style.textContent = `
+      @keyframes fadeOutUp {
+        0% { opacity: 1; transform: translateY(0); }
+        100% { opacity: 0; transform: translateY(-12px); }
+      }
+      .delta-badge {
+        position: absolute;
+        top: -2px;
+        right: 2px;
+        font-size: 0.7rem;
+        font-weight: 700;
+        padding: 0 3px;
+        border-radius: 4px;
+        animation: fadeOutUp 2s forwards;
+        z-index: 50;
+        pointer-events: none;
+      }
+      .delta-increase {
+        background-color: #dcfce7;
+        color: #166534;
+      }
+      .delta-decrease {
+        background-color: #fee2e2;
+        color: #991b1b;
+      }
+    `;
+    document.head.appendChild(style);
+  }
+
+  _showDelta(td, delta) {
+    // Xóa badge cũ nếu có
+    const existing = td.querySelector(".delta-badge");
+    if (existing) existing.remove();
+
+    if (delta === 0) return;
+
+    const badge = document.createElement("span");
+    badge.className = `delta-badge ${delta > 0 ? "delta-increase" : "delta-decrease"}`;
+    badge.textContent = delta > 0 ? `↑+${delta}` : `↓-${delta}`;
+    td.appendChild(badge);
+
+    // Tự xóa sau khi animation kết thúc
+    badge.addEventListener("animationend", () => badge.remove());
   }
 
   // ==================== HEADER ====================
@@ -302,47 +373,46 @@ export class HeatmapTable {
     this._updateSortIcons();
   }
 
-  // ==================== RENDER CHÍNH (debounce) ====================
-  _scheduleRender() {
-    if (this._pendingRender) return;
-    this._pendingRender = true;
-    if (this._renderTimeoutId) clearTimeout(this._renderTimeoutId);
-    this._renderTimeoutId = setTimeout(() => {
-      this._pendingRender = false;
-      this._renderTimeoutId = null;
-      this._renderTable();
-    }, this._DEBOUNCE_MS);
-  }
-
+  // ==================== RENDER BẢNG CHÍNH ====================
   _renderTable() {
     const headerRow = this.container.querySelector("#table-header");
     const tbody = this.container.querySelector("#dashboard-body");
-    const { hourStart, hourEnd } = store.state.filters;
-    const hS = Number(hourStart),
-      hE = Number(hourEnd);
+    const f = store.state.filters;
+    const hourStart = Number(f.hourStart);
+    const hourEnd = Number(f.hourEnd);
     const sortConfig = store.state.sort;
 
     const hourChanged =
       !this._lastHourRange ||
-      this._lastHourRange.hourStart !== hS ||
-      this._lastHourRange.hourEnd !== hE;
-    this._buildHeader(headerRow, hS, hE);
+      this._lastHourRange.hourStart !== hourStart ||
+      this._lastHourRange.hourEnd !== hourEnd;
+
+    this._buildHeader(headerRow, hourStart, hourEnd);
+
     const data = store.items;
 
     if (store.state.loading && !data.length) {
-      tbody.innerHTML = `<tr><td colspan="${3 + (hE - hS + 1)}" class="py-12 text-center text-slate-400">Đang tải...</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="${3 + (hourEnd - hourStart + 1)}" class="py-12 text-center text-slate-400">
+        <div class="flex flex-col items-center gap-2"><div class="loading-spinner w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full"></div><span>Đang tải dữ liệu...</span></div>
+      </td></tr>`;
       this._rowMap = null;
       this._previousUserMap = null;
       return;
     }
+
     if (store.state.error && !data.length) {
-      tbody.innerHTML = `<tr><td colspan="${3 + (hE - hS + 1)}" class="py-12 text-center text-rose-500">Lỗi: ${store.state.error}</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="${3 + (hourEnd - hourStart + 1)}" class="py-12 text-rose-500 text-center">
+        <i data-lucide="alert-triangle" class="w-10 h-10 mx-auto"></i><span>Lỗi: ${store.state.error}</span>
+      </td></tr>`;
       this._rowMap = null;
       this._previousUserMap = null;
       return;
     }
+
     if (!data.length) {
-      tbody.innerHTML = `<tr><td colspan="${3 + (hE - hS + 1)}" class="py-12 text-center text-slate-400">Không có dữ liệu</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="${3 + (hourEnd - hourStart + 1)}" class="py-12 text-center text-slate-400">
+        <div class="flex flex-col items-center gap-2"><i data-lucide="inbox" class="w-10 h-10 text-slate-300"></i><span>Không có dữ liệu</span></div>
+      </td></tr>`;
       this._rowMap = null;
       this._previousUserMap = null;
       return;
@@ -351,166 +421,79 @@ export class HeatmapTable {
     const sorted = [...data].sort((a, b) => {
       const av = this._getSortValue(a, sortConfig.key);
       const bv = this._getSortValue(b, sortConfig.key);
-      return sortConfig.direction === "asc"
-        ? av < bv
-          ? -1
-          : av > bv
-            ? 1
-            : 0
-        : av > bv
-          ? -1
-          : av < bv
-            ? 1
-            : 0;
+      if (av < bv) return sortConfig.direction === "asc" ? -1 : 1;
+      if (av > bv) return sortConfig.direction === "asc" ? 1 : -1;
+      return 0;
     });
 
     if (hourChanged || !this._rowMap) {
-      this._fullRender(sorted, hS, hE);
+      this._fullRender(sorted, hourStart, hourEnd);
       this._buildRowMap();
     } else {
-      this._syncTable(sorted, hS, hE); // <--- dùng FLIP mới
+      this._syncTable(sorted, hourStart, hourEnd);
     }
 
     this._previousUserMap = new Map(sorted.map((u) => [u.email, u]));
-    this._lastHourRange = { hourStart: hS, hourEnd: hE };
+    this._lastHourRange = { hourStart, hourEnd };
     this._lastSort = { key: sortConfig.key, direction: sortConfig.direction };
+
     refreshIcons();
   }
 
   _fullRender(data, hourStart, hourEnd) {
     const tbody = this.container.querySelector("#dashboard-body");
     tbody.innerHTML = "";
-    data.forEach((user) =>
-      tbody.appendChild(this._createRow(user, hourStart, hourEnd)),
-    );
+    data.forEach((user) => {
+      const tr = this._createRow(user, hourStart, hourEnd);
+      tbody.appendChild(tr);
+    });
   }
 
   _buildRowMap() {
     this._rowMap = new Map();
     this.container
       .querySelectorAll("#dashboard-body tr[data-user-email]")
-      .forEach((tr) => this._rowMap.set(tr.dataset.userEmail, tr));
+      .forEach((tr) => {
+        this._rowMap.set(tr.dataset.userEmail, tr);
+      });
   }
 
-  // ==================== SYNC + FLIP (phiên bản đã sửa) ====================
   _syncTable(sortedData, hourStart, hourEnd) {
     const tbody = this.container.querySelector("#dashboard-body");
     const oldUserMap = this._previousUserMap || new Map();
 
-    // 1. Lưu vị trí cũ của tất cả hàng hiện tại TRƯỚC KHI thay đổi DOM
-    const oldRects = new Map();
-    tbody.querySelectorAll("tr[data-user-email]").forEach((tr) => {
-      oldRects.set(tr.dataset.userEmail, tr.getBoundingClientRect());
-    });
-
-    // 2. Xác định các hàng sẽ bị xóa
-    const newEmails = new Set(sortedData.map((u) => u.email));
-    const toRemove = [];
-    tbody.querySelectorAll("tr[data-user-email]").forEach((tr) => {
-      if (!newEmails.has(tr.dataset.userEmail)) toRemove.push(tr);
-    });
-    toRemove.forEach((tr) => {
-      tr.remove();
-      this._rowMap.delete(tr.dataset.userEmail);
-    });
-
-    // 3. Di chuyển / tạo mới các hàng theo thứ tự sortedData (chưa cập nhật nội dung)
     for (const user of sortedData) {
       let tr = this._rowMap.get(user.email);
       if (!tr) {
         tr = this._createRow(user, hourStart, hourEnd);
         this._rowMap.set(user.email, tr);
-      }
-      tbody.appendChild(tr); // đưa về cuối → thứ tự đúng
-    }
-
-    // 4. Lấy vị trí mới sau khi sắp xếp
-    const newRects = new Map();
-    tbody.querySelectorAll("tr[data-user-email]").forEach((tr) => {
-      newRects.set(tr.dataset.userEmail, tr.getBoundingClientRect());
-    });
-
-    // 5. Tìm các hàng có sự thay đổi vị trí
-    const animatingRows = [];
-    tbody.querySelectorAll("tr[data-user-email]").forEach((tr) => {
-      const email = tr.dataset.userEmail;
-      const oldRect = oldRects.get(email);
-      const newRect = newRects.get(email);
-      if (oldRect && newRect) {
-        const deltaY = oldRect.top - newRect.top;
-        if (Math.abs(deltaY) > 0.5) {
-          animatingRows.push({ tr, deltaY });
+      } else {
+        const oldUser = oldUserMap.get(user.email);
+        if (oldUser) {
+          this._updateRow(tr, user, oldUser, hourStart, hourEnd);
+        } else {
+          this._updateRowComplete(tr, user, hourStart, hourEnd);
         }
       }
-    });
-
-    if (this._debugFlip) {
-      console.log(
-        `[FLIP] ${animatingRows.length} hàng sẽ được animate`,
-        animatingRows.map((r) => r.tr.dataset.userEmail),
-      );
+      tbody.appendChild(tr);
     }
 
-    // Nếu không có hàng nào di chuyển, cập nhật nội dung ngay và kết thúc
-    if (animatingRows.length === 0) {
-      this._applyContentUpdates(sortedData, hourStart, hourEnd, oldUserMap);
-      return;
-    }
-
-    // 6. Áp dụng transform ngược để đưa hàng về vị trí cũ
-    animatingRows.forEach(({ tr, deltaY }) => {
-      tr.style.willChange = "transform";
-      tr.style.transform = `translateY(${deltaY}px)`;
-      tr.classList.add("flip-animate");
-    });
-
-    // 7. Force reflow để trình duyệt ghi nhận transform khởi đầu
-    tbody.offsetHeight; // eslint-disable-line no-unused-expressions
-
-    // 8. Bắt đầu animation: xóa transform, hàng sẽ trượt về vị trí mới
-    requestAnimationFrame(() => {
-      animatingRows.forEach(({ tr }) => {
-        tr.style.transform = "";
-      });
-    });
-
-    // 9. Khi animation kết thúc, dọn dẹp và cập nhật nội dung
-    const cleanup = () => {
-      animatingRows.forEach(({ tr }) => {
-        tr.classList.remove("flip-animate");
-        tr.style.willChange = "";
-        tr.style.transform = "";
-      });
-      this._applyContentUpdates(sortedData, hourStart, hourEnd, oldUserMap);
-    };
-
-    if (animatingRows.length > 0) {
-      const firstRow = animatingRows[0].tr;
-      const onTransitionEnd = () => {
-        cleanup();
-        firstRow.removeEventListener("transitionend", onTransitionEnd);
-      };
-      firstRow.addEventListener("transitionend", onTransitionEnd);
-      // fallback an toàn
-      setTimeout(cleanup, 400);
-    }
-  }
-
-  // Cập nhật nội dung sau khi FLIP hoàn tất
-  _applyContentUpdates(sortedData, hourStart, hourEnd, oldUserMap) {
-    for (const user of sortedData) {
-      const tr = this._rowMap.get(user.email);
-      if (!tr) continue;
-      const oldUser = oldUserMap.get(user.email);
-      if (oldUser) {
-        this._updateRow(tr, user, oldUser, hourStart, hourEnd);
-      } else {
-        this._updateRowComplete(tr, user, hourStart, hourEnd);
+    const newEmails = new Set(sortedData.map((u) => u.email));
+    const rowsToRemove = [];
+    tbody.querySelectorAll("tr[data-user-email]").forEach((tr) => {
+      if (!newEmails.has(tr.dataset.userEmail)) {
+        rowsToRemove.push(tr);
       }
-    }
+    });
+    rowsToRemove.forEach((tr) => {
+      tr.remove();
+      this._rowMap.delete(tr.dataset.userEmail);
+    });
   }
 
   _updateRowComplete(tr, user, hourStart, hourEnd) {
+    // Cập nhật toàn bộ hàng (không có oldUser) – giống như _createRow nhưng không tạo mới
+    // Để tránh trùng lặp code, ta có thể dùng _createRow rồi thay thế, nhưng ở đây ta ghi đè trực tiếp các td.
     const tds = tr.children;
     tds[0].innerHTML = `
       <div class="flex items-center gap-3 min-w-0">
@@ -537,7 +520,7 @@ export class HeatmapTable {
       lowTotal,
       highTotal,
     );
-    tds[2].title = `Tổng ước tính cho ${effectiveHours} giờ làm việc thực tế`;
+    tds[2].title = `Tổng ước tính cho ${effectiveHours} giờ làm việc thực tế (đã trừ 1h nghỉ trưa nếu có)`;
 
     for (let h = hourStart; h <= hourEnd; h++) {
       const idx = 3 + (h - hourStart);
@@ -549,19 +532,21 @@ export class HeatmapTable {
         user.low_threshold || 10,
         user.medium_threshold || 16,
       );
-      td.removeAttribute("title");
       if (count > 0) {
+        const lt = user.low_threshold || 10;
+        const mt = user.medium_threshold || 16;
         td.title =
-          count < (user.low_threshold || 10)
-            ? `Thấp`
-            : count < (user.medium_threshold || 16)
-              ? `Trung bình`
-              : `Tốt`;
+          count < lt
+            ? `Thấp (< ${lt})`
+            : count < mt
+              ? `Trung bình (${lt}-${mt - 1})`
+              : `Tốt (≥ ${mt})`;
+      } else {
+        td.removeAttribute("title");
       }
     }
   }
 
-  // ==================== TẠO HÀNG ====================
   _createRow(user, hourStart, hourEnd) {
     const tr = document.createElement("tr");
     tr.className = "hover:bg-slate-50/80 transition duration-150";
@@ -588,7 +573,7 @@ export class HeatmapTable {
     tdRole.textContent = user.display_name || user.role_key || "-";
     tr.appendChild(tdRole);
 
-    // Cột Tổng
+    // Cột Tổng (thêm class relative để chứa delta badge)
     const { displayTotal, effectiveHours } = this._computeDisplayTotal(
       user,
       hourStart,
@@ -597,24 +582,16 @@ export class HeatmapTable {
     const lowTotal = (user.low_threshold || 10) * effectiveHours;
     const highTotal = (user.medium_threshold || 16) * effectiveHours;
     const tdTotal = document.createElement("td");
-    tdTotal.className = this._getTotalCellClass(
-      displayTotal,
-      lowTotal,
-      highTotal,
-    );
+    tdTotal.className = `${this._getTotalCellClass(displayTotal, lowTotal, highTotal)} relative`; // thêm relative
     tdTotal.textContent = displayTotal;
-    tdTotal.title = `Tổng ước tính cho ${effectiveHours} giờ làm việc thực tế`;
+    tdTotal.title = `Tổng ước tính cho ${effectiveHours} giờ làm việc thực tế (đã trừ 1h nghỉ trưa nếu có)`;
     tr.appendChild(tdTotal);
 
-    // Các cột giờ
+    // Các cột giờ (cũng thêm relative)
     for (let h = hourStart; h <= hourEnd; h++) {
       const count = user.hourly?.[h] || 0;
       const td = document.createElement("td");
-      td.className = this._getHourCellClass(
-        count,
-        user.low_threshold || 10,
-        user.medium_threshold || 16,
-      );
+      td.className = `${this._getHourCellClass(count, user.low_threshold || 10, user.medium_threshold || 16)} relative`; // thêm relative
       td.textContent = count === 0 ? "-" : count;
       if (count > 0) {
         const lt = user.low_threshold || 10;
@@ -632,11 +609,10 @@ export class HeatmapTable {
     return tr;
   }
 
-  // ==================== CẬP NHẬT HÀNG (delta) ====================
   _updateRow(tr, user, oldUser, hourStart, hourEnd) {
     const tds = tr.children;
 
-    // Tên
+    // Cập nhật tên
     const nameChanged =
       (user.name || user.email) !== (oldUser.name || oldUser.email) ||
       (user.name ? user.email : "") !== (oldUser.name ? oldUser.email : "");
@@ -661,7 +637,7 @@ export class HeatmapTable {
       tds[1].textContent = user.display_name || user.role_key || "-";
     }
 
-    // Tổng
+    // Tổng và delta
     const { displayTotal: totalNew, effectiveHours: effNew } =
       this._computeDisplayTotal(user, hourStart, hourEnd);
     const { displayTotal: totalOld } = this._computeDisplayTotal(
@@ -673,13 +649,18 @@ export class HeatmapTable {
       user.low_threshold !== oldUser.low_threshold ||
       user.medium_threshold !== oldUser.medium_threshold;
 
-    if (totalNew !== totalOld || thresholdsChanged) {
-      const delta = totalNew - totalOld;
-      this._updateCellWithDelta(tds[2], totalNew, delta, true);
+    const totalChanged = totalNew !== totalOld || thresholdsChanged;
+    if (totalChanged) {
       const lowTotal = (user.low_threshold || 10) * effNew;
       const highTotal = (user.medium_threshold || 16) * effNew;
-      tds[2].className = this._getTotalCellClass(totalNew, lowTotal, highTotal);
-      tds[2].title = `Tổng ước tính cho ${effNew} giờ làm việc thực tế`;
+      tds[2].textContent = totalNew;
+      tds[2].className = `${this._getTotalCellClass(totalNew, lowTotal, highTotal)} relative`;
+      tds[2].title = `Tổng ước tính cho ${effNew} giờ làm việc thực tế (đã trừ 1h nghỉ trưa nếu có)`;
+
+      // Delta cho tổng (chỉ khi giá trị thay đổi, không phải do threshold)
+      if (totalNew !== totalOld) {
+        this._showDelta(tds[2], totalNew - totalOld);
+      }
     }
 
     // Từng giờ
@@ -688,19 +669,10 @@ export class HeatmapTable {
       const td = tds[idx];
       const newCount = user.hourly?.[h] || 0;
       const oldCount = oldUser.hourly?.[h] || 0;
-      if (newCount !== oldCount || thresholdsChanged) {
-        const delta = newCount - oldCount;
-        this._updateCellWithDelta(
-          td,
-          newCount === 0 ? "-" : newCount,
-          delta,
-          false,
-        );
-        td.className = this._getHourCellClass(
-          newCount,
-          user.low_threshold || 10,
-          user.medium_threshold || 16,
-        );
+      const countChanged = newCount !== oldCount || thresholdsChanged;
+      if (countChanged) {
+        td.textContent = newCount === 0 ? "-" : newCount;
+        td.className = `${this._getHourCellClass(newCount, user.low_threshold || 10, user.medium_threshold || 16)} relative`;
         if (newCount > 0) {
           const lt = user.low_threshold || 10;
           const mt = user.medium_threshold || 16;
@@ -713,33 +685,15 @@ export class HeatmapTable {
         } else {
           td.removeAttribute("title");
         }
+
+        // Delta cho giờ (chỉ khi giá trị thay đổi)
+        if (newCount !== oldCount) {
+          this._showDelta(td, newCount - oldCount);
+        }
       }
     }
   }
 
-  _updateCellWithDelta(td, displayValue, delta, isTotal = false) {
-    // Xóa badge cũ
-    const oldBadge = td.querySelector(".delta-badge");
-    if (oldBadge) oldBadge.remove();
-
-    td.textContent = displayValue;
-    if (delta !== 0 && displayValue !== "-") {
-      const badge = document.createElement("span");
-      badge.className = "delta-badge";
-      const arrow = delta > 0 ? "▲" : "▼";
-      badge.textContent = `${arrow} ${Math.abs(delta)}`;
-      badge.classList.add(delta > 0 ? "delta-increase" : "delta-decrease");
-      if (isTotal) {
-        td.style.position = "relative";
-      }
-      td.appendChild(badge);
-      setTimeout(() => {
-        if (badge.parentNode === td) badge.remove();
-      }, 3000);
-    }
-  }
-
-  // ==================== CLASS HELPERS ====================
   _getTotalCellClass(total, lowTotal, highTotal) {
     let colorClass = "bg-slate-50 text-slate-400";
     if (total > 0) {
@@ -877,7 +831,9 @@ export class HeatmapTable {
               color = "#166534";
             }
           }
-          html += `<td style="border: 1px solid #e2e8f0; padding: 8px 12px; text-align: center; background: ${bg}; color: ${color};">${count === 0 ? "-" : count}</td>`;
+          html += `<td style="border: 1px solid #e2e8f0; padding: 8px 12px; text-align: center; background: ${bg}; color: ${color};">
+                  ${count === 0 ? "-" : count}
+                </td>`;
         }
         html += `</tr>`;
       });

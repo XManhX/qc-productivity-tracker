@@ -16,7 +16,6 @@
     "node": "24.x"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.39.0",
-    "node-html-to-image": "^6.2.0"
+    "@supabase/supabase-js": "^2.39.0"
   }
 }

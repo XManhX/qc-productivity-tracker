@@ -24,11 +24,6 @@ export class AlertConfigForm {
       return;
     }
 
-    if (error) {
-      this.container.innerHTML = `<p class="text-red-500 text-sm">Lỗi: ${error}</p>`;
-      return;
-    }
-
     if (!config) {
       this.container.innerHTML = `<p class="text-red-500 text-sm">Không có dữ liệu cấu hình.</p>`;
       return;

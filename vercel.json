@@ -53,11 +53,5 @@
       "source": "/api/(.*)",
       "destination": "/api/qc-productivity/$1"
     }
-  ],
-  "crons": [
-    {
-      "path": "/api/send-hourly-report",
-      "schedule": "10 * * * *"
-    }
   ]
 }

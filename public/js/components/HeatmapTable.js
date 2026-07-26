@@ -60,7 +60,7 @@ export class HeatmapTable {
    * Giả định năng suất phân bố đều, không xóa dữ liệu gốc.
    */
   _computeDisplayTotal(user, hourStart, hourEnd) {
-    const totalHours = hourEnd - hourStart + 1;
+    const totalHours = hourEnd - hourStart;
 
     // Tổng thực tế từ tất cả các giờ trong khung
     let rawTotal = 0;

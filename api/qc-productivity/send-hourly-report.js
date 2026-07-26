@@ -195,7 +195,7 @@ async function mergeStats(targetDate, userMap) {
 // ==================== IMAGE ====================
 function buildHTML(users, date, displayName, hStart, hEnd, roleMap) {
   const sorted = [...users].sort((a, b) => b.total - a.total);
-  const wHours = hEnd - hStart + 1;
+  const wHours = hEnd - hStart;
 
   const cellStyle = (cnt, low, med) => {
     if (!cnt) return "background:#f8fafc; color:#cbd5e1;";
@@ -365,7 +365,7 @@ async function generateImage(users, date, displayName, hStart, hEnd, roleMap) {
     await page.setContent(html, { waitUntil: "networkidle0", timeout: 15000 });
 
     // Tính toán chiều rộng viewport để chứa toàn bộ bảng
-    const wHours = hEnd - hStart + 1;
+    const wHours = hEnd - hStart;
     const colWidths = 50 + 200 + 90 + wHours * 60; // STT, Nhân viên, Tổng, các cột giờ
     const padding = 120; // padding của body + card
     const viewportWidth = Math.max(800, colWidths + padding);

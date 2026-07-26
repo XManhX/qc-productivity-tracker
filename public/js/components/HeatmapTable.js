@@ -347,7 +347,7 @@ export class HeatmapTable {
 
     // Cột Tổng – left 370px
     const total = user.total || 0;
-    const workingHours = hourEnd - hourStart + 1;
+    const workingHours = hourEnd - hourStart;
     const lowTotal = (user.low_threshold || 10) * workingHours;
     const highTotal = (user.medium_threshold || 16) * workingHours;
     const tdTotal = document.createElement("td");
@@ -441,7 +441,7 @@ export class HeatmapTable {
       user.low_threshold !== oldUser.low_threshold ||
       user.medium_threshold !== oldUser.medium_threshold
     ) {
-      const workingHours = hourEnd - hourStart + 1;
+      const workingHours = hourEnd - hourStart;
       const lowTotal = (user.low_threshold || 10) * workingHours;
       const highTotal = (user.medium_threshold || 16) * workingHours;
       tds[2].textContent = totalNew;
@@ -586,7 +586,7 @@ export class HeatmapTable {
       html += `</tr></thead><tbody>`;
 
       // Dữ liệu từng dòng
-      const workingHours = hourEnd - hourStart + 1;
+      const workingHours = hourEnd - hourStart;
       sortedData.forEach((user) => {
         const lowTotal = (user.low_threshold || 10) * workingHours;
         const highTotal = (user.medium_threshold || 16) * workingHours;

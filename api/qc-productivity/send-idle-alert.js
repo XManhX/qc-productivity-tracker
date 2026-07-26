@@ -884,7 +884,6 @@ async function sendReportToSeatalk(report, type) {
 export default async function handler(req, res) {
   // ---------- XÁC THỰC ----------
   const secret = req.headers["x-cron-secret"];
-  console.log("Received secret:", secret, "Expected:", process.env.CRON_SECRET);
   if (secret !== process.env.CRON_SECRET) {
     return res.status(401).json({ error: "Unauthorized" });
   }

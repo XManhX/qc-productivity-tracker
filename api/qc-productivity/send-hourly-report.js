@@ -343,7 +343,7 @@ export default async function handler(req, res) {
             const name = (user.name || user.email).substring(0, 22);
             reportContent += `${(index + 1).toString().padEnd(5)}${name.padEnd(25)}${(user.total || 0).toString().padEnd(8)}\n`;
         });
-        reportContent += "```\n";
+        // reportContent += "```\n";
         // reportContent += `\n🔗 Xem chi tiết tại: https://qc-productivity-tracker.vercel.app`;
 
         // Gửi báo cáo đến SeaTalk

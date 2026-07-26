@@ -100,37 +100,60 @@ function capitalizeName(name) {
     .join(" ");
 }
 
-// ========== THƯ VIỆN CÂU TỪ SIÊU KHỔNG LỒ ==========
+function getPeriodOfDay() {
+  const vnHour = new Date(Date.now() + VN_OFFSET).getHours();
+  return vnHour < 12 ? "morning" : "afternoon";
+}
 
-const GREETINGS = [
+// ========== THƯ VIỆN CÂU TỪ ==========
+
+const GREETINGS_GENERAL = [
   "🤗 Xin chào cả nhà yêu quý!",
-  "☀️ Chúc mọi người một buổi làm việc tràn đầy năng lượng!",
-  "🌻 Cả nhà ơi, cùng nhau giữ nhịp làm việc nào!",
-  "⏰ Điểm danh sự tập trung buổi chiều!",
-  "🍀 Một lời nhắc nhẹ nhàng cho buổi làm việc hiệu quả!",
-  "🌈 Cùng nhau giữ vững phong độ nào các chiến binh QC!",
-  "🎯 Tập trung cao độ – thành công sẽ đến!",
-  "😊 Hế lô cả team, chúc mọi người một buổi chiều thật suôn sẻ!",
-  "💐 Gửi ngàn lời chúc tốt đẹp nhất đến team mình!",
-  "🚀 Nào, cùng tăng tốc cho buổi chiều năng suất!",
-  "🍂 Một lời nhắc nhỏ xinh từ hệ thống, đừng giận nhé!",
-  "🎈 Cùng kiểm tra nhịp độ làm việc một chút nha cả nhà!",
-  "🌞 Chào buổi chiều, hy vọng mọi người vẫn đầy nhiệt huyết!",
-  "🍭 Nhẹ nhàng như que kẹo, mình nhắc nhau cùng tập trung nào!",
   "💖 Cả nhà thân mến, cùng giúp nhau giữ vững tinh thần nhé!",
   "✨ Một ngày mới, một cơ hội mới, đừng để thời gian trôi qua lãng phí!",
   "🌱 Hãy cùng nhau vun đắp cho buổi làm việc thêm xanh tươi!",
   "🍃 Cùng hít thở thật sâu và quay lại công việc thôi nào!",
   "🕊️ Nhẹ nhàng như làn gió, mình nhắc nhau cùng cố gắng!",
   "🏵️ Xin chào những con ong chăm chỉ của tổ QC!",
-  "🎋 Chúc team một buổi chiều nhiều may mắn và ít bug!",
-  "🌼 Dù nắng hay mưa, chúng ta vẫn làm việc hết mình!",
-  "🍀 Chào buổi chiều, chúc team không bị ngủ gật!",
+  "🍀 Chào team, chúc mọi người một buổi làm việc hiệu quả!",
   "🧋 Trà sữa thì ngọt, nhưng công việc còn ngọt hơn, cùng làm nào!",
   "💎 Mỗi bạn là một viên ngọc, hãy tỏa sáng trong công việc!",
   "🌠 Cùng hướng tới những vì sao, bắt đầu bằng việc tập trung nhé!",
   "🎪 Chào mừng đến với rạp xiếc QC, tiết mục hôm nay: quay lại làm việc!",
-  "🥁 Trống điểm danh buổi chiều, ai đang online giơ tay lên!",
+  "🥁 Trống điểm danh, ai đang online giơ tay lên!",
+  "😊 Hế lô cả team, chúc mọi người một buổi làm việc thật suôn sẻ!",
+  "💐 Gửi ngàn lời chúc tốt đẹp nhất đến team mình!",
+  "🚀 Nào, cùng tăng tốc cho một buổi làm việc năng suất!",
+  "🍂 Một lời nhắc nhỏ xinh từ hệ thống, đừng giận nhé!",
+  "🎈 Cùng kiểm tra nhịp độ làm việc một chút nha cả nhà!",
+  "🌼 Dù nắng hay mưa, chúng ta vẫn làm việc hết mình!",
+  "🎋 Chúc team một buổi làm việc nhiều may mắn và ít bug!",
+  "🍀 Một lời nhắc nhẹ nhàng cho buổi làm việc hiệu quả!",
+  "🌈 Cùng nhau giữ vững phong độ nào các chiến binh QC!",
+  "🎯 Tập trung cao độ – thành công sẽ đến!",
+];
+
+const GREETINGS_MORNING = [
+  "☀️ Chúc mọi người một buổi sáng tràn đầy năng lượng!",
+  "🌞 Chào buổi sáng, hy vọng mọi người đầy nhiệt huyết!",
+  "🌻 Chào buổi sáng, cùng nhau giữ nhịp làm việc nào!",
+  "☕ Buổi sáng tốt lành, một ngày làm việc hiệu quả bắt đầu từ đây!",
+  "🥐 Ăn sáng no nê chưa nào? Vào guồng công việc thôi!",
+  "🌅 Mặt trời đã lên cao, tập trung làm việc nào các bạn!",
+  "🍳 Một bữa sáng ngon lành, một ngày làm việc tuyệt vời!",
+  "🧃 Sẵn sàng cho một buổi sáng bùng nổ nào!",
+];
+
+const GREETINGS_AFTERNOON = [
+  "⏰ Điểm danh sự tập trung buổi chiều!",
+  "🌞 Chào buổi chiều, hy vọng mọi người vẫn đầy nhiệt huyết!",
+  "🍭 Nhẹ nhàng như que kẹo, mình nhắc nhau cùng tập trung nào!",
+  "🍃 Buổi chiều mát mẻ, làm việc thật hăng say nhé!",
+  "🌇 Chiều tà buông xuống, đừng để công việc trôi theo mây!",
+  "🧉 Một ly trà đá buổi chiều cho tỉnh táo, rồi làm tiếp nào!",
+  "☀️ Nắng chiều vẫn rực rỡ, tinh thần mình cũng phải rực rỡ theo!",
+  "🌆 Hoàng hôn sắp đến, nhưng deadline thì không chờ, cố lên!",
+  "🍪 Bánh quy buổi chiều ai mua nào? Nhớ quay lại làm việc nha!",
 ];
 
 const MAIN_MESSAGES = [
@@ -234,12 +257,17 @@ function randomItem(arr) {
 
 function buildFriendlyMessage(displayUsers, eligibleUsers, config) {
   const nowStr = new Date().toLocaleString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" });
+  const period = getPeriodOfDay();
 
-  const greeting = randomItem(GREETINGS);
+  // Chọn câu chào phù hợp buổi
+  const periodGreetings = period === "morning" ? GREETINGS_MORNING : GREETINGS_AFTERNOON;
+  const allGreetings = [...GREETINGS_GENERAL, ...periodGreetings];
+  const greeting = randomItem(allGreetings);
+
   const mainMsg = randomItem(MAIN_MESSAGES);
   const closing = randomItem(CLOSINGS);
   const footer = randomItem(CLOSING_FOOTER);
-  const note = Math.random() < 0.35 ? `\n\n${randomItem(SMALL_NOTES)}` : ""; // 35% thêm mẹo nhỏ
+  const note = Math.random() < 0.35 ? `\n\n${randomItem(SMALL_NOTES)}` : "";
 
   let message = `${greeting}\n`;
   message += `⏰ ${nowStr}\n\n`;

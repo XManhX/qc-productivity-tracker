@@ -60,6 +60,12 @@ export default async function handler(req, res) {
           cooldown_minutes: body.cooldown_minutes,
           max_users_per_message: body.max_users_per_message,
           seatalk_webhook_url: body.seatalk_webhook_url || null,
+          report_seatalk_webhook_url: body.report_seatalk_webhook_url || null,
+          report_enabled: body.report_enabled !== undefined ? body.report_enabled : true,
+          report_hour_start: body.report_hour_start || 9,
+          report_hour_end: body.report_hour_end || 18,
+          report_minute: body.report_minute || 10,
+          report_only_workdays: body.report_only_workdays !== undefined ? body.report_only_workdays : true,
           updated_at: new Date().toISOString(),
         })
         .eq("id", 1);

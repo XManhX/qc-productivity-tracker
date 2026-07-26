@@ -31,7 +31,7 @@ export class AlertConfigForm {
     // Tạo form HTML
     const html = `
       <form id="alert-config-form" class="space-y-6">
-        <h2 class="text-xl font-semibold text-slate-700">Cấu hình cảnh báo idle</h2>
+        <h2 class="text-xl font-semibold text-slate-700">Cấu hình hệ thống</h2>
 
         <!-- Giờ làm việc -->
         <fieldset class="border rounded-lg p-4">
@@ -108,11 +108,56 @@ export class AlertConfigForm {
           </div>
 
           <div>
-            <label class="block text-sm font-medium text-slate-500">Seatalk Webhook URL</label>
+            <label class="block text-sm font-medium text-slate-500">Seatalk Webhook URL (cảnh báo idle)</label>
             <input type="url" name="seatalk_webhook_url" value="${config.seatalk_webhook_url || ""}" 
                   class="w-full form-input rounded-md border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                   placeholder="https://seatalkwebhook..."
             >
+          </div>
+          <div class="mt-4">
+            <label class="block text-sm font-medium text-slate-500">Seatalk Webhook URL (báo cáo tổng hợp)</label>
+            <input type="url" name="report_seatalk_webhook_url" value="${config.report_seatalk_webhook_url || ""}" 
+                  class="w-full form-input rounded-md border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                  placeholder="https://seatalkwebhook..."
+            >
+          </div>
+        </fieldset>
+
+        <!-- Cấu hình báo cáo -->
+        <fieldset class="border rounded-lg p-4">
+          <legend class="text-lg font-medium text-slate-600 px-2">Cấu hình báo cáo tổng hợp</legend>
+          <div class="grid grid-cols-2 gap-4 mt-2">
+            <div>
+              <label class="flex items-center space-x-2">
+                <input type="checkbox" name="report_enabled" ${config.report_enabled ? "checked" : ""} 
+                       class="rounded border-slate-300 text-blue-600 focus:ring-blue-500">
+                <span class="text-sm font-medium text-slate-500">Bật báo cáo tự động</span>
+              </label>
+            </div>
+            <div>
+              <label class="flex items-center space-x-2">
+                <input type="checkbox" name="report_only_workdays" ${config.report_only_workdays ? "checked" : ""} 
+                       class="rounded border-slate-300 text-blue-600 focus:ring-blue-500">
+                <span class="text-sm font-medium text-slate-500">Chỉ gửi vào ngày làm việc</span>
+              </label>
+            </div>
+          </div>
+          <div class="grid grid-cols-3 gap-4 mt-4">
+            <div>
+              <label class="block text-sm font-medium text-slate-500">Giờ bắt đầu gửi báo cáo</label>
+              <input type="number" name="report_hour_start" value="${config.report_hour_start}" min="0" max="23" 
+                     class="w-full form-input rounded-md border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-slate-500">Giờ kết thúc gửi báo cáo</label>
+              <input type="number" name="report_hour_end" value="${config.report_hour_end}" min="0" max="23" 
+                     class="w-full form-input rounded-md border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-slate-500">Phút gửi báo cáo</label>
+              <input type="number" name="report_minute" value="${config.report_minute}" min="0" max="59" 
+                     class="w-full form-input rounded-md border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+            </div>
           </div>
         </fieldset>
 
@@ -161,13 +206,37 @@ export class AlertConfigForm {
         "idle_threshold_minutes",
         "cooldown_minutes",
         "max_users_per_message",
-        "seatalk_webhook_url",
       ];
-      fields.forEach((f) => {
+      // Xử lý các trường số
+      const numberFields = [
+        "work_start_hour",
+        "work_start_min",
+        "work_end_hour",
+        "work_end_min",
+        "work_start_buffer_minutes",
+        "work_end_buffer_minutes",
+        "break_start_hour",
+        "break_start_min",
+        "break_end_hour",
+        "break_end_min",
+        "idle_threshold_minutes",
+        "cooldown_minutes",
+        "max_users_per_message",
+        "report_hour_start",
+        "report_hour_end",
+        "report_minute",
+      ];
+      numberFields.forEach((f) => {
         data[f] = parseInt(formData.get(f), 10);
       });
 
+      // Xử lý các trường URL
       data["seatalk_webhook_url"] = formData.get("seatalk_webhook_url") || "";
+      data["report_seatalk_webhook_url"] = formData.get("report_seatalk_webhook_url") || "";
+
+      // Xử lý các trường boolean (checkbox)
+      data["report_enabled"] = formData.get("report_enabled") === "on";
+      data["report_only_workdays"] = formData.get("report_only_workdays") === "on";
 
       const result = await this.store.saveConfig(data);
       const toast = document.getElementById("toast");

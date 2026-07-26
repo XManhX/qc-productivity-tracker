@@ -5,6 +5,12 @@ import { Pagination } from "./Pagination.js";
 export class HeatmapTable {
   constructor(container) {
     this.container = container;
+
+    // Các giá trị sticky left cố định
+    this._leftName = 0;
+    this._leftRole = 280;
+    this._leftTotal = 370;
+
     this._renderStructure();
 
     // Pagination
@@ -18,8 +24,10 @@ export class HeatmapTable {
       },
     );
 
-    // Trạng thái cho diff update
+    // Trạng thái cho cập nhật động
     this._previousData = null;
+    this._previousUserMap = null; // Map<email, user> để so sánh thay đổi
+    this._rowMap = null; // Map<email, HTMLTableRowElement>
     this._lastHourRange = null;
     this._lastSort = null;
 
@@ -39,6 +47,7 @@ export class HeatmapTable {
     this._updateStatusDisplay();
   }
 
+  // ==================== WORK & BREAK CONFIG ====================
   _getWorkConfig() {
     const cfg = store.getAlertConfig();
     if (cfg) {
@@ -66,16 +75,10 @@ export class HeatmapTable {
     return { startHour: 12, startMin: 30, endHour: 13, endMin: 30 };
   }
 
-  /**
-   * Tính tổng hiển thị & số giờ làm việc thực tế cho một user.
-   * Dựa trên số giờ có sản lượng (activeHours) trong khung giờ hiển thị.
-   * Nếu khung giờ bao trọn giờ nghỉ trưa thì trừ 1 giờ khỏi activeHours.
-   */
   _computeDisplayTotal(user, hourStart, hourEnd) {
     let rawTotal = 0;
     let activeHours = 0;
 
-    // Duyệt từng giờ trong khung hiển thị (inclusive)
     for (let h = hourStart; h <= hourEnd; h++) {
       const cnt = user.hourly?.[h] || 0;
       if (cnt > 0) {
@@ -91,21 +94,19 @@ export class HeatmapTable {
     const breakCfg = this._getBreakConfig();
     const breakStart = breakCfg.startHour + breakCfg.startMin / 60;
     const breakEnd = breakCfg.endHour + breakCfg.endMin / 60;
-
-    // Kiểm tra khung hiển thị có bao trọn giờ nghỉ không
     const workStart = hourStart;
-    const workEnd = hourEnd + 1; // thời điểm kết thúc (exclusive)
+    const workEnd = hourEnd + 1;
     const hasFullBreak = workStart <= breakStart && workEnd >= breakEnd;
 
     let effectiveHours = activeHours;
     if (hasFullBreak && activeHours > 1) {
-      effectiveHours = activeHours - 1; // trừ 1 giờ nghỉ trưa
+      effectiveHours = activeHours - 1;
     }
 
     return { displayTotal: rawTotal, effectiveHours };
   }
 
-  // ==================== CẤU TRÚC GIAO DIỆN ====================
+  // ==================== GIAO DIỆN ====================
   _renderStructure() {
     this.container.innerHTML = `
       <div class="px-4 py-2 border-b border-slate-100 bg-slate-50 flex items-center justify-between">
@@ -248,24 +249,20 @@ export class HeatmapTable {
 
   // ==================== HEADER ====================
   _buildHeader(headerRow, hourStart, hourEnd) {
-    const leftName = 0;
-    const leftRole = 280;
-    const leftTotal = 280 + 90;
-
     let html = `
-      <th class="sticky top-0 left-[${leftName}px] z-40 w-[280px] min-w-[280px] px-4 py-2 text-left font-semibold text-slate-700 bg-slate-100">
+      <th class="sticky top-0 left-[${this._leftName}px] z-40 w-[280px] min-w-[280px] px-4 py-2 text-left font-semibold text-slate-700 bg-slate-100">
         <button class="group flex items-center gap-1 w-full text-left" data-sort-trigger="name">
           <span class="w-full">Nhân viên</span>
           <span data-sort-icon="name"><i data-lucide="chevrons-up-down" class="w-3.5 h-3.5 text-slate-400"></i></span>
         </button>
       </th>
-      <th class="sticky top-0 left-[${leftRole}px] z-30 w-[90px] min-w-[90px] px-4 py-2 text-left font-semibold text-slate-700 bg-slate-100">
+      <th class="sticky top-0 left-[${this._leftRole}px] z-30 w-[90px] min-w-[90px] px-4 py-2 text-left font-semibold text-slate-700 bg-slate-100">
         <button class="group flex items-center gap-1 w-full text-left" data-sort-trigger="role">
           <span class="w-full">Role</span>
           <span data-sort-icon="role"><i data-lucide="chevrons-up-down" class="w-3.5 h-3.5 text-slate-400"></i></span>
         </button>
       </th>
-      <th class="sticky top-0 left-[${leftTotal}px] z-30 w-[90px] min-w-[90px] px-4 py-4 bg-emerald-50 font-bold text-emerald-800">
+      <th class="sticky top-0 left-[${this._leftTotal}px] z-30 w-[90px] min-w-[90px] px-4 py-4 bg-emerald-50 font-bold text-emerald-800">
         <button class="group flex items-center justify-center gap-1 w-full" data-sort-trigger="total">
           <span class="w-full">Tổng</span>
           <span data-sort-icon="total"><i data-lucide="chevrons-up-down" class="w-3.5 h-3.5 text-slate-400"></i></span>
@@ -302,7 +299,7 @@ export class HeatmapTable {
     this._updateSortIcons();
   }
 
-  // ==================== RENDER BẢNG ====================
+  // ==================== RENDER BẢNG CHÍNH ====================
   _renderTable() {
     const headerRow = this.container.querySelector("#table-header");
     const tbody = this.container.querySelector("#dashboard-body");
@@ -315,24 +312,19 @@ export class HeatmapTable {
       !this._lastHourRange ||
       this._lastHourRange.hourStart !== hourStart ||
       this._lastHourRange.hourEnd !== hourEnd;
-    const sortChanged =
-      !this._lastSort ||
-      this._lastSort.key !== sortConfig.key ||
-      this._lastSort.direction !== sortConfig.direction;
 
-    if (hourChanged || sortChanged) {
-      this._previousData = null;
-    }
-
+    // Xây dựng header (luôn cần vì có thể thay đổi giờ, hoặc lần đầu)
     this._buildHeader(headerRow, hourStart, hourEnd);
 
     const data = store.items;
 
+    // Trạng thái loading/error/rỗng
     if (store.state.loading && !data.length) {
       tbody.innerHTML = `<tr><td colspan="${3 + (hourEnd - hourStart + 1)}" class="py-12 text-center text-slate-400">
         <div class="flex flex-col items-center gap-2"><div class="loading-spinner w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full"></div><span>Đang tải dữ liệu...</span></div>
       </td></tr>`;
-      this._previousData = null;
+      this._rowMap = null;
+      this._previousUserMap = null;
       return;
     }
 
@@ -340,7 +332,8 @@ export class HeatmapTable {
       tbody.innerHTML = `<tr><td colspan="${3 + (hourEnd - hourStart + 1)}" class="py-12 text-rose-500 text-center">
         <i data-lucide="alert-triangle" class="w-10 h-10 mx-auto"></i><span>Lỗi: ${store.state.error}</span>
       </td></tr>`;
-      this._previousData = null;
+      this._rowMap = null;
+      this._previousUserMap = null;
       return;
     }
 
@@ -348,10 +341,12 @@ export class HeatmapTable {
       tbody.innerHTML = `<tr><td colspan="${3 + (hourEnd - hourStart + 1)}" class="py-12 text-center text-slate-400">
         <div class="flex flex-col items-center gap-2"><i data-lucide="inbox" class="w-10 h-10 text-slate-300"></i><span>Không có dữ liệu</span></div>
       </td></tr>`;
-      this._previousData = null;
+      this._rowMap = null;
+      this._previousUserMap = null;
       return;
     }
 
+    // Sắp xếp dữ liệu theo tiêu chí hiện tại
     const sorted = [...data].sort((a, b) => {
       const av = this._getSortValue(a, sortConfig.key);
       const bv = this._getSortValue(b, sortConfig.key);
@@ -360,48 +355,149 @@ export class HeatmapTable {
       return 0;
     });
 
-    if (!this._previousData || this._previousData.length !== sorted.length) {
+    // Quyết định full render hay sync
+    if (hourChanged || !this._rowMap) {
+      // Full render khi thay đổi khoảng giờ hoặc chưa có rowMap (lần đầu)
       this._fullRender(sorted, hourStart, hourEnd);
+      this._buildRowMap();
     } else {
-      this._diffUpdate(sorted, hourStart, hourEnd);
+      // Sync: chỉ di chuyển, cập nhật, thêm/xóa hàng
+      this._syncTable(sorted, hourStart, hourEnd);
     }
 
-    this._previousData = sorted;
+    // Lưu trạng thái mới
+    this._previousUserMap = new Map(sorted.map((u) => [u.email, u]));
     this._lastHourRange = { hourStart, hourEnd };
     this._lastSort = { key: sortConfig.key, direction: sortConfig.direction };
 
     refreshIcons();
   }
 
+  // ==================== FULL RENDER (vẽ toàn bộ) ====================
   _fullRender(data, hourStart, hourEnd) {
     const tbody = this.container.querySelector("#dashboard-body");
     tbody.innerHTML = "";
-
-    const leftName = 0;
-    const leftRole = 280;
-    const leftTotal = 370;
-
     data.forEach((user) => {
-      const tr = this._createRow(
-        user,
-        hourStart,
-        hourEnd,
-        leftName,
-        leftRole,
-        leftTotal,
-      );
+      const tr = this._createRow(user, hourStart, hourEnd);
       tbody.appendChild(tr);
     });
   }
 
-  _createRow(user, hourStart, hourEnd, leftName, leftRole, leftTotal) {
+  _buildRowMap() {
+    this._rowMap = new Map();
+    this.container
+      .querySelectorAll("#dashboard-body tr[data-user-email]")
+      .forEach((tr) => {
+        this._rowMap.set(tr.dataset.userEmail, tr);
+      });
+  }
+
+  // ==================== SYNC TABLE (cập nhật thông minh) ====================
+  _syncTable(sortedData, hourStart, hourEnd) {
+    const tbody = this.container.querySelector("#dashboard-body");
+    const oldUserMap = this._previousUserMap || new Map();
+
+    // 1. Di chuyển / tạo hàng theo thứ tự mới
+    for (const user of sortedData) {
+      let tr = this._rowMap.get(user.email);
+      if (!tr) {
+        // User mới xuất hiện -> tạo hàng mới
+        tr = this._createRow(user, hourStart, hourEnd);
+        this._rowMap.set(user.email, tr);
+      } else {
+        // Cập nhật nội dung nếu có thay đổi (so với dữ liệu cũ)
+        const oldUser = oldUserMap.get(user.email);
+        if (oldUser) {
+          this._updateRow(tr, user, oldUser, hourStart, hourEnd);
+        } else {
+          // Trường hợp hiếm: user không có trong map cũ, nhưng có trong rowMap (có thể do lỗi)
+          // Ta vẫn cập nhật toàn bộ để an toàn (có thể thay bằng full update nếu muốn)
+          this._updateRowComplete(tr, user, hourStart, hourEnd);
+        }
+      }
+      // Đưa hàng vào tbody (nếu đã tồn tại, appendChild sẽ di chuyển đến cuối)
+      tbody.appendChild(tr);
+    }
+
+    // 2. Xóa những hàng không còn trong danh sách mới
+    const newEmails = new Set(sortedData.map((u) => u.email));
+    const rowsToRemove = [];
+    tbody.querySelectorAll("tr[data-user-email]").forEach((tr) => {
+      if (!newEmails.has(tr.dataset.userEmail)) {
+        rowsToRemove.push(tr);
+      }
+    });
+    rowsToRemove.forEach((tr) => {
+      tr.remove();
+      this._rowMap.delete(tr.dataset.userEmail);
+    });
+  }
+
+  // Phương thức dự phòng: cập nhật toàn bộ một hàng (dùng khi không có dữ liệu cũ)
+  _updateRowComplete(tr, user, hourStart, hourEnd) {
+    // Cập nhật tên & role
+    const tds = tr.children;
+    tds[0].innerHTML = `
+      <div class="flex items-center gap-3 min-w-0">
+        <div class="w-9 h-9 rounded-full bg-slate-100 flex items-center justify-center text-xs font-bold text-slate-600 uppercase border border-slate-200 flex-shrink-0">
+          ${(user.name || user.email).substring(0, 2)}
+        </div>
+        <div class="min-w-0">
+          <div class="font-semibold text-slate-800 truncate" title="${user.name || user.email}">${user.name || user.email}</div>
+          <div class="text-xs text-slate-500 truncate" title="${user.name ? user.email : ""}">${user.name ? user.email : ""}</div>
+        </div>
+      </div>`;
+    tds[1].textContent = user.display_name || user.role_key || "-";
+
+    const { displayTotal, effectiveHours } = this._computeDisplayTotal(
+      user,
+      hourStart,
+      hourEnd,
+    );
+    const lowTotal = (user.low_threshold || 10) * effectiveHours;
+    const highTotal = (user.medium_threshold || 16) * effectiveHours;
+    tds[2].textContent = displayTotal;
+    tds[2].className = this._getTotalCellClass(
+      displayTotal,
+      lowTotal,
+      highTotal,
+    );
+    tds[2].title = `Tổng ước tính cho ${effectiveHours} giờ làm việc thực tế (đã trừ 1h nghỉ trưa nếu có)`;
+
+    for (let h = hourStart; h <= hourEnd; h++) {
+      const idx = 3 + (h - hourStart);
+      const td = tds[idx];
+      const count = user.hourly?.[h] || 0;
+      td.textContent = count === 0 ? "-" : count;
+      td.className = this._getHourCellClass(
+        count,
+        user.low_threshold || 10,
+        user.medium_threshold || 16,
+      );
+      if (count > 0) {
+        const lt = user.low_threshold || 10;
+        const mt = user.medium_threshold || 16;
+        td.title =
+          count < lt
+            ? `Thấp (< ${lt})`
+            : count < mt
+              ? `Trung bình (${lt}-${mt - 1})`
+              : `Tốt (≥ ${mt})`;
+      } else {
+        td.removeAttribute("title");
+      }
+    }
+  }
+
+  // ==================== TẠO HÀNG MỚI ====================
+  _createRow(user, hourStart, hourEnd) {
     const tr = document.createElement("tr");
     tr.className = "hover:bg-slate-50/80 transition duration-150";
     tr.dataset.userEmail = user.email;
 
     // Cột Nhân viên
     const tdName = document.createElement("td");
-    tdName.className = `sticky left-[${leftName}px] z-10 bg-white w-[280px] min-w-[280px] px-4 py-2 text-left font-medium text-slate-900 border-r border-slate-100 max-w-[280px]`;
+    tdName.className = `sticky left-[${this._leftName}px] z-10 bg-white w-[280px] min-w-[280px] px-4 py-2 text-left font-medium text-slate-900 border-r border-slate-100 max-w-[280px]`;
     tdName.innerHTML = `
       <div class="flex items-center gap-3 min-w-0">
         <div class="w-9 h-9 rounded-full bg-slate-100 flex items-center justify-center text-xs font-bold text-slate-600 uppercase border border-slate-200 flex-shrink-0">
@@ -416,7 +512,7 @@ export class HeatmapTable {
 
     // Cột Role
     const tdRole = document.createElement("td");
-    tdRole.className = `sticky left-[${leftRole}px] z-10 bg-white w-[90px] min-w-[90px] px-2 py-2 border-r border-slate-100 text-sm`;
+    tdRole.className = `sticky left-[${this._leftRole}px] z-10 bg-white w-[90px] min-w-[90px] px-2 py-2 border-r border-slate-100 text-sm`;
     tdRole.textContent = user.display_name || user.role_key || "-";
     tr.appendChild(tdRole);
 
@@ -428,16 +524,13 @@ export class HeatmapTable {
     );
     const lowTotal = (user.low_threshold || 10) * effectiveHours;
     const highTotal = (user.medium_threshold || 16) * effectiveHours;
-    const total = displayTotal;
-
     const tdTotal = document.createElement("td");
     tdTotal.className = this._getTotalCellClass(
-      total,
+      displayTotal,
       lowTotal,
       highTotal,
-      leftTotal,
     );
-    tdTotal.textContent = total;
+    tdTotal.textContent = displayTotal;
     tdTotal.title = `Tổng ước tính cho ${effectiveHours} giờ làm việc thực tế (đã trừ 1h nghỉ trưa nếu có)`;
     tr.appendChild(tdTotal);
 
@@ -467,29 +560,11 @@ export class HeatmapTable {
     return tr;
   }
 
-  _diffUpdate(newData, hourStart, hourEnd) {
-    const tbody = this.container.querySelector("#dashboard-body");
-    const oldDataMap = new Map(this._previousData.map((u) => [u.email, u]));
-    const leftTotal = 370;
-
-    newData.forEach((user) => {
-      const tr = tbody.querySelector(`tr[data-user-email="${user.email}"]`);
-      if (!tr) {
-        this._fullRender(newData, hourStart, hourEnd);
-        return;
-      }
-      const oldUser = oldDataMap.get(user.email);
-      if (!oldUser) {
-        this._fullRender(newData, hourStart, hourEnd);
-        return;
-      }
-      this._updateRow(tr, user, oldUser, hourStart, hourEnd, leftTotal);
-    });
-  }
-
-  _updateRow(tr, user, oldUser, hourStart, hourEnd, leftTotal) {
+  // ==================== CẬP NHẬT HÀNG (so sánh cũ/mới) ====================
+  _updateRow(tr, user, oldUser, hourStart, hourEnd) {
     const tds = tr.children;
 
+    // Cập nhật tên nếu thay đổi
     const nameChanged =
       (user.name || user.email) !== (oldUser.name || oldUser.email) ||
       (user.name ? user.email : "") !== (oldUser.name ? oldUser.email : "");
@@ -506,6 +581,7 @@ export class HeatmapTable {
         </div>`;
     }
 
+    // Cập nhật role
     const roleChanged =
       (user.display_name || user.role_key || "-") !==
       (oldUser.display_name || oldUser.role_key || "-");
@@ -513,6 +589,7 @@ export class HeatmapTable {
       tds[1].textContent = user.display_name || user.role_key || "-";
     }
 
+    // Cập nhật tổng
     const { displayTotal: totalNew, effectiveHours: effNew } =
       this._computeDisplayTotal(user, hourStart, hourEnd);
     const { displayTotal: totalOld } = this._computeDisplayTotal(
@@ -520,33 +597,24 @@ export class HeatmapTable {
       hourStart,
       hourEnd,
     );
-
-    if (
-      totalNew !== totalOld ||
+    const thresholdsChanged =
       user.low_threshold !== oldUser.low_threshold ||
-      user.medium_threshold !== oldUser.medium_threshold
-    ) {
+      user.medium_threshold !== oldUser.medium_threshold;
+
+    if (totalNew !== totalOld || thresholdsChanged) {
       const lowTotal = (user.low_threshold || 10) * effNew;
       const highTotal = (user.medium_threshold || 16) * effNew;
       tds[2].textContent = totalNew;
-      tds[2].className = this._getTotalCellClass(
-        totalNew,
-        lowTotal,
-        highTotal,
-        leftTotal,
-      );
+      tds[2].className = this._getTotalCellClass(totalNew, lowTotal, highTotal);
       tds[2].title = `Tổng ước tính cho ${effNew} giờ làm việc thực tế (đã trừ 1h nghỉ trưa nếu có)`;
     }
 
+    // Cập nhật từng giờ
     for (let h = hourStart; h <= hourEnd; h++) {
       const idx = 3 + (h - hourStart);
       const td = tds[idx];
       const newCount = user.hourly?.[h] || 0;
       const oldCount = oldUser.hourly?.[h] || 0;
-      const thresholdsChanged =
-        user.low_threshold !== oldUser.low_threshold ||
-        user.medium_threshold !== oldUser.medium_threshold;
-
       if (newCount !== oldCount || thresholdsChanged) {
         td.textContent = newCount === 0 ? "-" : newCount;
         td.className = this._getHourCellClass(
@@ -570,14 +638,15 @@ export class HeatmapTable {
     }
   }
 
-  _getTotalCellClass(total, lowTotal, highTotal, leftTotal) {
+  // ==================== CLASS HELPERS ====================
+  _getTotalCellClass(total, lowTotal, highTotal) {
     let colorClass = "bg-slate-50 text-slate-400";
     if (total > 0) {
       if (total < lowTotal) colorClass = "bg-red-50 text-red-800";
       else if (total < highTotal) colorClass = "bg-yellow-50 text-yellow-800";
       else colorClass = "bg-green-50 text-green-800";
     }
-    return `sticky left-[${leftTotal}px] z-10 ${colorClass} w-[90px] min-w-[90px] px-2 py-2 border-r border-slate-100 font-bold text-center`;
+    return `sticky left-[${this._leftTotal}px] z-10 ${colorClass} w-[90px] min-w-[90px] px-2 py-2 border-r border-slate-100 font-bold text-center`;
   }
 
   _getHourCellClass(count, lowThreshold, mediumThreshold) {
@@ -591,6 +660,7 @@ export class HeatmapTable {
     return base + "bg-green-50 text-green-700 font-bold";
   }
 
+  // ==================== SORT ====================
   _attachSortEvents() {
     this.container.querySelectorAll("[data-sort-trigger]").forEach((btn) => {
       btn.addEventListener("click", () =>
@@ -624,6 +694,7 @@ export class HeatmapTable {
     return row[key] ?? "";
   }
 
+  // ==================== EXPORT IMAGE ====================
   async exportToImage() {
     const exportBtn = this.container.querySelector("#btn-export-image");
     if (!exportBtn) return;

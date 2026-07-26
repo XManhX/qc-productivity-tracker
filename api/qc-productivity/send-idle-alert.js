@@ -100,7 +100,7 @@ function capitalizeName(name) {
     .join(" ");
 }
 
-// ========== THƯ VIỆN CÂU TỪ ĐA DẠNG ==========
+// ========== THƯ VIỆN CÂU TỪ SIÊU KHỔNG LỒ ==========
 
 const GREETINGS = [
   "🤗 Xin chào cả nhà yêu quý!",
@@ -117,10 +117,20 @@ const GREETINGS = [
   "🎈 Cùng kiểm tra nhịp độ làm việc một chút nha cả nhà!",
   "🌞 Chào buổi chiều, hy vọng mọi người vẫn đầy nhiệt huyết!",
   "🍭 Nhẹ nhàng như que kẹo, mình nhắc nhau cùng tập trung nào!",
-  "🍀 Chúc team mình một buổi chiều may mắn và hiệu quả!",
   "💖 Cả nhà thân mến, cùng giúp nhau giữ vững tinh thần nhé!",
   "✨ Một ngày mới, một cơ hội mới, đừng để thời gian trôi qua lãng phí!",
   "🌱 Hãy cùng nhau vun đắp cho buổi làm việc thêm xanh tươi!",
+  "🍃 Cùng hít thở thật sâu và quay lại công việc thôi nào!",
+  "🕊️ Nhẹ nhàng như làn gió, mình nhắc nhau cùng cố gắng!",
+  "🏵️ Xin chào những con ong chăm chỉ của tổ QC!",
+  "🎋 Chúc team một buổi chiều nhiều may mắn và ít bug!",
+  "🌼 Dù nắng hay mưa, chúng ta vẫn làm việc hết mình!",
+  "🍀 Chào buổi chiều, chúc team không bị ngủ gật!",
+  "🧋 Trà sữa thì ngọt, nhưng công việc còn ngọt hơn, cùng làm nào!",
+  "💎 Mỗi bạn là một viên ngọc, hãy tỏa sáng trong công việc!",
+  "🌠 Cùng hướng tới những vì sao, bắt đầu bằng việc tập trung nhé!",
+  "🎪 Chào mừng đến với rạp xiếc QC, tiết mục hôm nay: quay lại làm việc!",
+  "🥁 Trống điểm danh buổi chiều, ai đang online giơ tay lên!",
 ];
 
 const MAIN_MESSAGES = [
@@ -140,6 +150,16 @@ const MAIN_MESSAGES = [
   "Có ai đó quên mất bàn phím của mình rồi, xem danh sách nè:",
   "Chú ý, chú ý! Những bạn sau cần quay lại trận địa ngay:",
   "Đừng để đồng nghiệp phải chờ, các bạn sau cần vào việc gấp:",
+  "Ơ kìa, ai đang “thả hồn theo mây” thế này?",
+  "Cùng gọi tên những người đang thư giãn hơi lâu:",
+  "Hãy nhìn vào danh sách và tự hỏi: “Mình có đang ở đây không?”",
+  "Điểm danh những “ca sĩ” đang tạm rời sân khấu:",
+  "Đừng biến bàn làm việc thành giường ngủ, quay lại thôi!",
+  "Danh sách những bạn cần F5 bản thân ngay lập tức:",
+  "Cùng xem ai đang cần reset tinh thần làm việc:",
+  "Hệ thống báo động: một số bạn đã rời khỏi trận địa!",
+  "Mất tích tạm thời, tìm ngay những bạn sau:",
+  "Báo cáo tình hình: có người đang “ngủ đông” giữa ca làm!",
 ];
 
 const CLOSINGS = [
@@ -158,6 +178,14 @@ const CLOSINGS = [
   "🔥 Hãy để sự chuyên nghiệp dẫn lối, quay trở lại công việc nào!",
   "💎 Các bạn là những viên ngọc sáng, đừng để bụi thời gian che phủ!",
   "🎈 Nhẹ nhàng thôi, nhưng hãy hành động ngay nhé!",
+  "🍭 Một chút nhắc nhở ngọt ngào, mong mọi người quay lại!",
+  "🎀 Đừng để thành tích của team bị ảnh hưởng chỉ vì vài phút lơ là!",
+  "💪 Cùng thắt chặt dây an toàn, chuẩn bị tăng tốc!",
+  "🛎️ Chuông đã reo, mời mọi người trở lại vị trí!",
+  "🍀 Chúc team luôn giữ được nhịp làm việc ổn định!",
+  "🏅 Cùng hướng đến danh hiệu “Team chăm chỉ nhất”!",
+  "🧠 Tập trung là sức mạnh, đừng lãng phí nó!",
+  "🌊 Hãy như sóng biển, luôn tiến về phía trước!",
 ];
 
 const CLOSING_FOOTER = [
@@ -171,6 +199,13 @@ const CLOSING_FOOTER = [
   "\n\n🎯 Hẹn gặp lại ở những báo cáo thành công!",
   "\n\n💖 Teamwork makes the dream work! Cùng cố gắng nhé!",
   "\n\n🚀 Cùng bay cao nào các chiến binh!",
+  "\n\n🌻 Mỗi người một tay, việc gì cũng xong!",
+  "\n\n🍂 Thư giãn xong rồi, quay lại và tỏa sáng thôi!",
+  "\n\n💐 Chúc team buổi chiều nhiều niềm vui và ít lỗi!",
+  "\n\n🍀 Cảm ơn vì đã luôn bên nhau, cùng tiến lên!",
+  "\n\n🎈 Hãy biến những phút giây còn lại thành vàng!",
+  "\n\n☕ Nhấp một ngụm trà/cà phê, rồi làm việc thôi!",
+  "\n\n🕊️ Bình yên trong tâm hồn, hiệu quả trong công việc!",
   "",
 ];
 
@@ -183,6 +218,14 @@ const SMALL_NOTES = [
   "⌨️ Bàn phím đang chờ bạn, đừng để nó cô đơn quá lâu!",
   "📈 Chỉ cần tập trung thêm chút nữa, kết quả sẽ bất ngờ!",
   "🏃 Dậy đi lại một chút cho khỏe, nhưng nhớ quay về với công việc nha!",
+  "💬 Rủ đồng nghiệp cùng làm việc để tăng động lực!",
+  "🎯 Mục tiêu hôm nay đã đạt được bao nhiêu phần trăm rồi?",
+  "🍀 Một chút nghỉ ngơi là tốt, nhưng đừng quên deadline nhé!",
+  "🧩 Mỗi phút làm việc là một mảnh ghép thành công.",
+  "🖱️ Chuột và bàn phím đang chờ bạn trở lại!",
+  "🏆 Hãy giữ danh hiệu “Nhân viên chăm chỉ” của bạn!",
+  "⏳ Thời gian không chờ đợi ai, hãy quay lại ngay!",
+  "🍫 Thưởng cho mình một thanh socola rồi làm việc tiếp nào!",
 ];
 
 function randomItem(arr) {
@@ -196,7 +239,7 @@ function buildFriendlyMessage(displayUsers, eligibleUsers, config) {
   const mainMsg = randomItem(MAIN_MESSAGES);
   const closing = randomItem(CLOSINGS);
   const footer = randomItem(CLOSING_FOOTER);
-  const note = Math.random() < 0.3 ? `\n\n${randomItem(SMALL_NOTES)}` : ""; // 30% xác suất thêm mẹo nhỏ
+  const note = Math.random() < 0.35 ? `\n\n${randomItem(SMALL_NOTES)}` : ""; // 35% thêm mẹo nhỏ
 
   let message = `${greeting}\n`;
   message += `⏰ ${nowStr}\n\n`;

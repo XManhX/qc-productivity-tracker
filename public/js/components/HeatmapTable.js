@@ -118,7 +118,7 @@ export class HeatmapTable {
   // ==================== GIAO DIỆN ====================
   _renderStructure() {
     this.container.innerHTML = `
-      <div class="px-4 py-2 border-b border-slate-100 bg-slate-50 flex items-center justify-between">
+      <div class="px-4 py-2 border-b border-slate-100 bg-slate-50 flex items-center justify-between" id="heatmap-container">
         <div>
           <h2 class="font-bold text-slate-800 flex items-center gap-2">
             <i data-lucide="grid" class="text-slate-400 w-5 h-5"></i> Bảng Thống Kê Sản Lượng Từng Giờ

@@ -1,5 +1,5 @@
 // store/DashboardStore.js
-import { fetchDashboard, fetchRoles } from "../services/api.js";
+import { fetchDashboard, fetchRoles, fetchAlertConfig } from "../services/api.js";
 
 class DashboardStore {
   constructor() {
@@ -19,11 +19,28 @@ class DashboardStore {
       },
       sort: { key: "total", direction: "desc" },
       roles: [],
+      alertConfig: null,
       loading: false,
       error: null,
     };
     this.listeners = [];
     this._lastDateCheck = this.getTodayVN();
+  }
+
+  // Thêm method load cấu hình
+  async loadAlertConfig() {
+    try {
+      const config = await fetchAlertConfig();
+      this.state.alertConfig = config;
+      this.notify();   // để HeatmapTable tự render lại
+    } catch (err) {
+      console.error("Failed to load alert config:", err);
+    }
+  }
+
+  // Getter tiện lợi
+  getAlertConfig() {
+    return this.state.alertConfig;
   }
 
   // ========== Subscriptions ==========

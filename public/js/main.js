@@ -23,6 +23,9 @@ async function init() {
   // 2. Tải danh sách roles
   await store.loadRoles();
 
+    // Thêm dòng này – tải cấu hình giờ nghỉ trước khi render bảng
+  await store.loadAlertConfig();
+
   store.validateFilters();
   // 3. Khởi tạo các component (chúng tự subscribe store)
   new FilterBar(document.getElementById("filter-bar-container"));

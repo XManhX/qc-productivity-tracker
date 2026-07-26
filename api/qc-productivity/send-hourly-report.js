@@ -20,20 +20,14 @@ let cachedConfig = null;
 let configFetchedAt = 0;
 
 // ==================== CONFIG PARSER ====================
-/**
- * Chuẩn hóa cấu hình từ DB.
- * @param {object} raw - Dữ liệu thô từ qc_alert_config
- */
 function parseReportConfig(raw) {
-  // Các trường dùng cho báo cáo
   const reportEnabled = raw?.report_enabled ?? true;
   const reportHourStart = raw?.report_hour_start ?? 8;
   const reportHourEnd = raw?.report_hour_end ?? 20;
-  const reportMinute = raw?.report_minute ?? 10;      // chưa dùng, để sẵn
+  const reportMinute = raw?.report_minute ?? 10;
   const onlyWorkdays = raw?.report_only_workdays ?? true;
   const webhook = raw?.report_seatalk_webhook_url || raw?.seatalk_webhook_url || null;
 
-  // Các trường ca làm việc (có thể cần cho logic khác trong tương lai)
   const workStartHour = raw?.work_start_hour ?? 8;
   const workEndHour = raw?.work_end_hour ?? 20;
   const breakStartHour = raw?.break_start_hour ?? 12;
@@ -48,7 +42,6 @@ function parseReportConfig(raw) {
     reportMinute,
     onlyWorkdays,
     webhook,
-    // ca làm việc
     workStartHour,
     workEndHour,
     breakStartHour,
@@ -94,9 +87,7 @@ const getTodayVN = () => {
 };
 
 const isWorkdayVN = () => {
-  // const d = new Date(Date.now() + VN_OFFSET);
-  // const day = d.getDay(); // 0=CN, 6=T7
-  // return day >= 1 && day <= 5;
+  // Có thể sửa logic nếu cần, hiện tại luôn trả về true
   return true;
 };
 
@@ -193,9 +184,9 @@ async function mergeStats(targetDate, userMap) {
 }
 
 // ==================== IMAGE ====================
-function buildHTML(users, date, displayName, hStart, hEnd, roleMap) {
-  const sorted = [...users].sort((a, b) => b.total - a.total);
-  const wHours = hEnd - hStart;
+function buildHTML(users, date, displayName, hStart, hEnd, roleMap, effectiveHours) {
+  const sorted = [...users].sort((a, b) => b.displayTotal - a.displayTotal);
+  const wHours = hEnd - hStart; // số cột giờ hiển thị
 
   const cellStyle = (cnt, low, med) => {
     if (!cnt) return "background:#f8fafc; color:#cbd5e1;";
@@ -205,8 +196,8 @@ function buildHTML(users, date, displayName, hStart, hEnd, roleMap) {
   };
 
   const totalStyle = (t, low, med) => {
-    const lo = low * wHours;
-    const hi = med * wHours;
+    const lo = low * effectiveHours;
+    const hi = med * effectiveHours;
     if (!t) return "background:#f8fafc; color:#94a3b8;";
     if (t < lo) return "background:#fee2e2; color:#991b1b; font-weight:bold;";
     if (t < hi) return "background:#fef9c3; color:#92400e; font-weight:bold;";
@@ -320,13 +311,13 @@ function buildHTML(users, date, displayName, hStart, hEnd, roleMap) {
         <th style="width:50px;">STT</th>
         <th class="user-cell">Nhân viên</th>
         <th class="total-header" style="width:90px;">Tổng</th>
-        ${Array.from({ length: wHours }, (_, i) => `<th style="width:60px;">${hStart + i}h</th>`).join('')}
+        ${Array.from({ length: wHours }, (_, i) => `<th style="width:60px;">${hStart + i}:00</th>`).join('')}
       </tr>
     </thead>
     <tbody>
       ${sorted.map((u, idx) => {
     const { low_threshold: low, medium_threshold: med } = roleMap.get(u.role_key) || {};
-    const t = u.total || 0;
+    const t = u.displayTotal || 0; // dùng tổng đã điều chỉnh
     const name = capitalizeName(u.name) || u.email;
     const email = u.name ? u.email : '';
     const hour = u.hourly || {};
@@ -351,8 +342,8 @@ function buildHTML(users, date, displayName, hStart, hEnd, roleMap) {
 </body></html>`;
 }
 
-async function generateImage(users, date, displayName, hStart, hEnd, roleMap) {
-  const html = buildHTML(users, date, displayName, hStart, hEnd, roleMap);
+async function generateImage(users, date, displayName, hStart, hEnd, roleMap, effectiveHours) {
+  const html = buildHTML(users, date, displayName, hStart, hEnd, roleMap, effectiveHours);
   let browser = null;
   try {
     browser = await puppeteer.launch({
@@ -364,14 +355,12 @@ async function generateImage(users, date, displayName, hStart, hEnd, roleMap) {
     const page = await browser.newPage();
     await page.setContent(html, { waitUntil: "networkidle0", timeout: 15000 });
 
-    // Tính toán chiều rộng viewport để chứa toàn bộ bảng
     const wHours = hEnd - hStart;
-    const colWidths = 50 + 200 + 90 + wHours * 60; // STT, Nhân viên, Tổng, các cột giờ
-    const padding = 120; // padding của body + card
+    const colWidths = 50 + 200 + 90 + wHours * 60;
+    const padding = 120;
     const viewportWidth = Math.max(800, colWidths + padding);
     await page.setViewport({ width: viewportWidth, height: 800 });
 
-    // Chụp toàn trang (fullPage: true) để lấy hết chiều cao
     const buf = await page.screenshot({ type: "png", fullPage: true });
     return buf.toString("base64");
   } finally {
@@ -381,7 +370,6 @@ async function generateImage(users, date, displayName, hStart, hEnd, roleMap) {
 
 // ==================== MAIN ====================
 export default async function handler(req, res) {
-  // ---------- XÁC THỰC ----------
   const secret = req.headers.get("x-cron-secret");
   if (secret !== process.env.CRON_SECRET) {
     return res.status(401).json({ error: "Unauthorized" });
@@ -392,7 +380,7 @@ export default async function handler(req, res) {
   try {
     console.log("[INFO] Bắt đầu gửi báo cáo...");
 
-    // 1. Lấy và parse config
+    // 1. Lấy cấu hình
     const cfg = await getConfig();
     if (!cfg.reportEnabled) {
       return res.json({ success: false, reason: "Báo cáo đang tắt." });
@@ -405,7 +393,7 @@ export default async function handler(req, res) {
     const hEnd = cfg.reportHourEnd;
     const date = getTodayVN();
 
-    // 2. Lấy dữ liệu
+    // 2. Lấy dữ liệu người dùng và thống kê
     const { userMap, roleKeys } = await fetchActiveUsers();
     if (userMap.size === 0) return res.json({ success: false, reason: "Không có user active." });
 
@@ -417,7 +405,23 @@ export default async function handler(req, res) {
       return res.json({ success: true, message: "Không có dữ liệu năng suất." });
     }
 
-    // 3. Nhóm theo role_key
+    // 3. Tính số giờ làm việc hiệu quả (đã trừ giờ nghỉ trưa)
+    const totalHours = hEnd - hStart; // Tổng số giờ trong khung báo cáo
+    const breakStart = cfg.breakStartHour + cfg.breakStartMin / 60;
+    const breakEnd = cfg.breakEndHour + cfg.breakEndMin / 60;
+    const hasFullBreak = (hStart <= breakStart && hEnd >= breakEnd);
+    const effectiveHours = (hasFullBreak && totalHours > 1) ? totalHours - 1 : totalHours;
+
+    // Tính displayTotal cho từng user
+    withData.forEach(user => {
+      let rawTotal = 0;
+      for (let h = hStart; h < hEnd; h++) {
+        rawTotal += user.hourly?.[h] || 0;
+      }
+      user.displayTotal = Math.round(rawTotal * effectiveHours / totalHours);
+    });
+
+    // 4. Nhóm theo role_key
     const groups = new Map();
     withData.forEach((u) => {
       const rk = u.role_key;
@@ -429,12 +433,12 @@ export default async function handler(req, res) {
       return res.json({ success: false, reason: "Thiếu webhook URL." });
     }
 
-    // 4. Sinh ảnh và gửi
+    // 5. Sinh ảnh và gửi
     const sent = [];
     for (const [rk, users] of groups.entries()) {
       const { display_name: dn } = roleDetails.get(rk) || { display_name: rk };
       console.log(`[INFO] Tạo ảnh cho ${dn} (${users.length} users)`);
-      const b64 = await generateImage(users, date, dn, hStart, hEnd, roleDetails);
+      const b64 = await generateImage(users, date, dn, hStart, hEnd, roleDetails, effectiveHours);
       if (b64.length > MAX_IMAGE_BYTES) {
         console.warn(`[WARN] Ảnh ${dn} quá lớn, bỏ qua.`);
         continue;
@@ -445,7 +449,7 @@ export default async function handler(req, res) {
       await delay(1200);
     }
 
-    // 5. Ghi log
+    // 6. Ghi log
     await supabase.from("qc_report_logs").insert({
       report_type: "hourly_image_per_role",
       content_text: `Đã gửi ${sent.length} ảnh: ${sent.join(", ")}`,

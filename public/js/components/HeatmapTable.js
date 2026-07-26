@@ -38,6 +38,55 @@ export class HeatmapTable {
     this._startStatusTimer();
     this._updateStatusDisplay();
   }
+  /**
+   * Lấy cấu hình giờ nghỉ từ DashboardStore (đã tích hợp alertConfig).
+   * Fallback an toàn nếu chưa có dữ liệu.
+   */
+  _getBreakConfig() {
+    const cfg = store.getAlertConfig();
+    if (cfg) {
+      return {
+        startHour: cfg.break_start_hour ?? 12,
+        startMin: cfg.break_start_min ?? 30,
+        endHour: cfg.break_end_hour ?? 13,
+        endMin: cfg.break_end_min ?? 30,
+      };
+    }
+    return { startHour: 12, startMin: 30, endHour: 13, endMin: 30 };
+  }
+
+  /**
+   * Tính tổng hiển thị & số giờ làm việc thực tế sau khi trừ giờ nghỉ trưa.
+   * Giả định năng suất phân bố đều, không xóa dữ liệu gốc.
+   */
+  _computeDisplayTotal(user, hourStart, hourEnd) {
+    const totalHours = hourEnd - hourStart + 1;
+
+    // Tổng thực tế từ tất cả các giờ trong khung
+    let rawTotal = 0;
+    for (let h = hourStart; h <= hourEnd; h++) {
+      rawTotal += user.hourly?.[h] || 0;
+    }
+
+    const breakCfg = this._getBreakConfig();
+    const breakStart = breakCfg.startHour + breakCfg.startMin / 60; // dạng float
+    const breakEnd = breakCfg.endHour + breakCfg.endMin / 60;
+    const workStart = hourStart;
+    const workEnd = hourEnd + 1;  // thời điểm kết thúc ca
+
+    // Kiểm tra ca làm việc có bao trọn giờ nghỉ không
+    const hasFullBreak = (workStart <= breakStart && workEnd >= breakEnd);
+
+    let effectiveHours = totalHours;
+    if (hasFullBreak && totalHours > 1) {
+      effectiveHours = totalHours - 1;   // trừ đúng 1 giờ nghỉ
+    }
+
+    // Tổng hiển thị = tổng thực tế * (giờ làm việc thực tế / tổng giờ)
+    const displayTotal = Math.round(rawTotal * effectiveHours / totalHours);
+
+    return { displayTotal, effectiveHours };
+  }
 
   // ==================== CẤU TRÚC GIAO DIỆN ====================
   _renderStructure() {
@@ -215,7 +264,7 @@ export class HeatmapTable {
       html += `
         <th class="sticky top-0 z-20 px-3 py-4 text-slate-700 font-semibold border-l border-slate-200/50 bg-slate-100">
           <button class="group flex items-center justify-center gap-1 w-full" data-sort-trigger="hour-${h}">
-            <span class="w-full">${h}h</span>
+            <span class="w-full">${h}:00</span>
             <span data-sort-icon="hour-${h}"><i data-lucide="chevrons-up-down" class="w-3.5 h-3.5 text-slate-400"></i></span>
           </button>
         </th>`;
@@ -346,10 +395,10 @@ export class HeatmapTable {
     tr.appendChild(tdRole);
 
     // Cột Tổng – left 370px
-    const total = user.total || 0;
-    const workingHours = hourEnd - hourStart;
-    const lowTotal = (user.low_threshold || 10) * workingHours;
-    const highTotal = (user.medium_threshold || 16) * workingHours;
+    const { displayTotal, effectiveHours } = this._computeDisplayTotal(user, hourStart, hourEnd);
+    const lowTotal = (user.low_threshold || 10) * effectiveHours;
+    const highTotal = (user.medium_threshold || 16) * effectiveHours;
+    const total = displayTotal;   // dùng cho hiển thị và màu
     const tdTotal = document.createElement("td");
     tdTotal.className = this._getTotalCellClass(
       total,
@@ -434,23 +483,18 @@ export class HeatmapTable {
       tds[1].textContent = user.display_name || user.role_key || "-";
     }
 
-    const totalNew = user.total || 0;
-    const totalOld = oldUser.total || 0;
+    const { displayTotal: totalNew, effectiveHours: effNew } = this._computeDisplayTotal(user, hourStart, hourEnd);
+    const { displayTotal: totalOld, effectiveHours: effOld } = this._computeDisplayTotal(oldUser, hourStart, hourEnd);
+
     if (
       totalNew !== totalOld ||
       user.low_threshold !== oldUser.low_threshold ||
       user.medium_threshold !== oldUser.medium_threshold
     ) {
-      const workingHours = hourEnd - hourStart;
-      const lowTotal = (user.low_threshold || 10) * workingHours;
-      const highTotal = (user.medium_threshold || 16) * workingHours;
+      const lowTotal = (user.low_threshold || 10) * effNew;
+      const highTotal = (user.medium_threshold || 16) * effNew;
       tds[2].textContent = totalNew;
-      tds[2].className = this._getTotalCellClass(
-        totalNew,
-        lowTotal,
-        highTotal,
-        leftTotal,
-      );
+      tds[2].className = this._getTotalCellClass(totalNew, lowTotal, highTotal, leftTotal);
     }
 
     for (let h = hourStart; h <= hourEnd; h++) {
@@ -581,16 +625,16 @@ export class HeatmapTable {
       html += `<th style="border: 1px solid #cbd5e1; padding: 8px 12px; min-width: 80px; text-align: left;">Role</th>`;
       html += `<th style="border: 1px solid #cbd5e1; padding: 8px 12px; min-width: 80px; background: #ecfdf5; font-weight: 700;">Tổng</th>`;
       for (let h = hourStart; h <= hourEnd; h++) {
-        html += `<th style="border: 1px solid #cbd5e1; padding: 8px 12px; min-width: 55px;">${h}h</th>`;
+        html += `<th style="border: 1px solid #cbd5e1; padding: 8px 12px; min-width: 55px;">${h}:00</th>`;
       }
       html += `</tr></thead><tbody>`;
 
       // Dữ liệu từng dòng
-      const workingHours = hourEnd - hourStart;
       sortedData.forEach((user) => {
-        const lowTotal = (user.low_threshold || 10) * workingHours;
-        const highTotal = (user.medium_threshold || 16) * workingHours;
-        const total = user.total || 0;
+        // Tính tổng đã trừ giờ nghỉ và số giờ làm việc hiệu quả
+        const { displayTotal: total, effectiveHours } = this._computeDisplayTotal(user, hourStart, hourEnd);
+        const lowTotal = (user.low_threshold || 10) * effectiveHours;
+        const highTotal = (user.medium_threshold || 16) * effectiveHours;
 
         // Màu nền cột Tổng
         let totalBg = "#f8fafc";

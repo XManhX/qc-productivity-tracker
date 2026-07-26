@@ -7,6 +7,7 @@ const supabase = createClient(
 );
 
 const CRON_SECRET = process.env.CRON_SECRET;
+const VN_OFFSET = 7 * 3600 * 1000; // UTC+7 tính bằng ms (nhất quán với toàn project)
 
 // Cache cấu hình trong 5 phút
 let cachedConfig = null;
@@ -31,9 +32,21 @@ async function getReportConfig() {
     return data;
 }
 
-// Lấy ngày hôm nay theo múi giờ VN (UTC+7)
+/**
+ * Hàm format tên in hoa chữ đầu mỗi từ (nhất quán với send-idle-alert.js)
+ */
+const capitalizeName = (name) => {
+    if (!name) return name;
+    return name
+        .trim() // Xóa khoảng trắng thừa đầu/cuối
+        .split(/\s+/) // Tách tất cả khoảng trắng thừa giữa các từ
+        .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+        .join(" ");
+};
+
+// Lấy ngày hôm nay theo múi giờ VN (UTC+7) - nhất quán với toàn project
 function getTodayVN() {
-    const now = new Date(new Date().getTime() + 7 * 60 * 60 * 1000);
+    const now = new Date(Date.now() + VN_OFFSET);
     return now.toISOString().split("T")[0];
 }
 
@@ -161,7 +174,8 @@ export default async function handler(req, res) {
 
         // Chỉ lấy top 10 để gửi
         processedData.slice(0, 10).forEach((user, index) => {
-            const name = (user.name || user.email).substring(0, 22);
+            const displayName = user.name ? capitalizeName(user.name) : user.email;
+            const name = displayName.substring(0, 22);
             reportContent += `${(index + 1).toString().padEnd(5)}${name.padEnd(25)}${(user.total || 0).toString().padEnd(8)}\n`;
         });
         reportContent += "```\n";

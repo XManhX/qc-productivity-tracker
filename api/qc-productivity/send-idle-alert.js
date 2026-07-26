@@ -6,10 +6,19 @@ const supabase = createClient(
 );
 
 const CRON_SECRET = process.env.CRON_SECRET;
+const VN_OFFSET = 7 * 3600 * 1000; // UTC+7 tính bằng ms
 
 // Cache cấu hình trong 1 phút để tránh query DB mỗi lần cron chạy
 let cachedConfig = null;
 let lastConfigFetch = 0;
+
+/**
+ * Lấy ngày hôm nay theo múi giờ Việt Nam (nhất quán với dashboard.js)
+ */
+function getTodayVN() {
+  const now = new Date(Date.now() + VN_OFFSET);
+  return now.toISOString().split("T")[0];
+}
 
 async function getAlertConfig() {
   const now = Date.now();
@@ -27,37 +36,31 @@ async function getAlertConfig() {
   return data;
 }
 
+function createVNTimestamp(hour, min, nowMs = Date.now()) {
+  const vnDate = new Date(nowMs + VN_OFFSET);
+  vnDate.setHours(hour, min, 0, 0);
+  return vnDate.getTime() - VN_OFFSET; // Chuyển về timestamp UTC như DB
+}
+
 function getWorkTimestamps(nowMs, config) {
-  const vnDate = new Date(nowMs + 7 * 3600000);
-  const workStart = new Date(vnDate);
-  workStart.setHours(
-    config.work_start_hour,
-    config.work_start_min - config.work_start_buffer_minutes,
-    0,
-    0,
-  );
-  const workEnd = new Date(vnDate);
-  workEnd.setHours(
-    config.work_end_hour,
-    config.work_end_min + config.work_end_buffer_minutes,
-    0,
-    0,
-  );
   return {
-    workStartMs: workStart.getTime() - 7 * 3600000,
-    workEndMs: workEnd.getTime() - 7 * 3600000,
+    workStartMs: createVNTimestamp(
+      config.work_start_hour,
+      config.work_start_min - config.work_start_buffer_minutes,
+      nowMs
+    ),
+    workEndMs: createVNTimestamp(
+      config.work_end_hour,
+      config.work_end_min + config.work_end_buffer_minutes,
+      nowMs
+    )
   };
 }
 
 function getBreakTimestamps(nowMs, config) {
-  const vnDate = new Date(nowMs + 7 * 3600000);
-  const breakStart = new Date(vnDate);
-  breakStart.setHours(config.break_start_hour, config.break_start_min, 0, 0);
-  const breakEnd = new Date(vnDate);
-  breakEnd.setHours(config.break_end_hour, config.break_end_min, 0, 0);
   return {
-    breakStartMs: breakStart.getTime() - 7 * 3600000,
-    breakEndMs: breakEnd.getTime() - 7 * 3600000,
+    breakStartMs: createVNTimestamp(config.break_start_hour, config.break_start_min, nowMs),
+    breakEndMs: createVNTimestamp(config.break_end_hour, config.break_end_min, nowMs)
   };
 }
 
@@ -126,9 +129,8 @@ export default async function handler(req, res) {
         .json({ message: "Đang trong giờ nghỉ trưa, tạm dừng cảnh báo." });
     }
 
-    const vnToday = new Date(now + 7 * 3600000);
-    vnToday.setHours(0, 0, 0, 0);
-    const sinceISO = new Date(vnToday.getTime() - 7 * 3600000).toISOString();
+    const todayVN = getTodayVN(); // "YYYY-MM-DD" theo múi giờ VN
+    const sinceISO = new Date(`${todayVN}T00:00:00+07:00`).toISOString(); // Tạo ISO string đúng múi giờ
     const alertCooldown = now - config.cooldown_minutes * 60 * 1000;
 
     // Lấy user active (lấy thêm name để hiển thị thay vì email)

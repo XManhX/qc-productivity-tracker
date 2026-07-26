@@ -213,21 +213,13 @@ async function htmlToImage(html) {
     return screenshot;
 }
 
-// Gửi webhook đến SeaTalk
-async function sendSeaTalkWebhook(webhookUrl, imageUrl, reportTime) {
+// Gửi webhook text đến SeaTalk
+async function sendSeaTalkTextWebhook(webhookUrl, content, reportTime) {
     if (!webhookUrl) throw new Error("Thiếu SeaTalk webhook URL trong cấu hình");
 
     const payload = {
-        msg_type: "post",
-        content: {
-            post: {
-                title: "📊 Báo cáo năng suất QC tự động",
-                content: [
-                    [{ tag: "text", text: `Báo cáo năng suất được cập nhật lúc: ${reportTime}` }],
-                    [{ tag: "img", image_url: imageUrl }]
-                ]
-            }
-        }
+        msg_type: "text",
+        content: content
     };
 
     const response = await fetch(webhookUrl, {
@@ -243,6 +235,33 @@ async function sendSeaTalkWebhook(webhookUrl, imageUrl, reportTime) {
 
     return true;
 }
+
+// Hàm cũ gửi ảnh vẫn giữ lại nếu cần dùng sau
+// async function sendSeaTalkWebhook(webhookUrl, imageUrl, reportTime) {
+//     if (!webhookUrl) throw new Error("Thiếu SeaTalk webhook URL trong cấu hình");
+//     const payload = {
+//         msg_type: "post",
+//         content: {
+//             post: {
+//                 title: "📊 Báo cáo năng suất QC tự động",
+//                 content: [
+//                     [{ tag: "text", text: `Báo cáo năng suất được cập nhật lúc: ${reportTime}` }],
+//                     [{ tag: "img", image_url: imageUrl }]
+//                 ]
+//             }
+//         }
+//     };
+//     const response = await fetch(webhookUrl, {
+//         method: 'POST',
+//         headers: { 'Content-Type': 'application/json' },
+//         body: JSON.stringify(payload)
+//     });
+//     if (!response.ok) {
+//         const errorText = await response.text();
+//         throw new Error(`Gửi webhook SeaTalk lỗi: ${response.status} - ${errorText}`);
+//     }
+//     return true;
+// }
 
 export default async function handler(req, res) {
     // CORS
@@ -305,25 +324,45 @@ export default async function handler(req, res) {
         // 5. Tạo HTML
         const html = generateHeatmapHTML(processedData, hourStart, hourEnd, reportDate);
 
-        // 6. Chụp ảnh bảng
-        const imageBuffer = await htmlToImage(html);
+        // Tạo nội dung text báo cáo để gửi qua SeaTalk (không cần chụp ảnh)
+        let reportContent = `📊 **BÁO CÁO NĂNG SUẤT QC - ${reportDate}**\n\n`;
+        reportContent += `👥 Tổng số nhân viên hoạt động: ${processedData.length}\n`;
+        reportContent += `⏰ Giờ làm việc: ${hourStart}h - ${hourEnd}h\n\n`;
+        reportContent += `📋 **Top 10 nhân viên năng suất cao nhất:**\n`;
+        reportContent += `` + "```\n";
+        reportContent += `${"STT".padEnd(5)}${"Tên".padEnd(25)}${"Tổng".padEnd(8)}\n`;
+        reportContent += `${"-".repeat(40)}\n`;
 
-        // 7. Upload ảnh lên Supabase Storage
-        const fileName = `qc-reports/heatmap_${reportDate}_${Date.now()}.png`;
-        const { error: uploadError } = await supabaseAdmin.storage
-            .from("public")
-            .upload(fileName, imageBuffer, {
-                contentType: "image/png",
-                cacheControl: "86400" // Cache 1 ngày
-            });
+        // Chỉ lấy top 10 để gửi
+        processedData.slice(0, 10).forEach((user, index) => {
+            const name = (user.name || user.email).substring(0, 22);
+            reportContent += `${(index + 1).toString().padEnd(5)}${name.padEnd(25)}${(user.total || 0).toString().padEnd(8)}\n`;
+        });
+        reportContent += "```\n";
+        reportContent += `\n🔗 Xem chi tiết tại: https://qc-productivity-tracker.vercel.app`;
 
-        if (uploadError) throw new Error(`Upload ảnh lỗi: ${uploadError.message}`);
+        // Gửi báo cáo đến SeaTalk
+        const webhookUrl = config.report_seatalk_webhook_url || config.seatalk_webhook_url;
+        if (webhookUrl) {
+            await sendSeaTalkTextWebhook(webhookUrl, reportContent, reportTimeVN);
+            console.log("Đã gửi báo cáo text thành công đến SeaTalk!");
+        } else {
+            console.log("Không có webhook URL cấu hình, bỏ qua gửi SeaTalk");
+        }
 
-        const imageUrl = `${process.env.SUPABASE_URL}/storage/v1/object/public/public/${fileName}`;
+        // Ghi log thành công
+        await supabase.from("qc_report_logs").insert({
+            report_type: "hourly_text",
+            content_text: reportContent,
+            sent_at: new Date().toISOString()
+        });
 
-        // 8. Gửi báo cáo đến SeaTalk (ưu tiên webhook riêng cho report, nếu không có thì dùng webhook chung)
-        const webhookUrl = config.report_seatalk_webhook_url || config.seatalk_webhook_url || process.env.SEATALK_ALERT_WEBHOOK_URL;
-        await sendSeaTalkWebhook(webhookUrl, imageUrl, reportTimeVN);
+        return res.json({
+            success: true,
+            message: "Báo cáo đã được xử lý và gửi thành công đến SeaTalk",
+            reportDate,
+            totalUsers: processedData.length
+        });
 
         // Ghi log thành công
         await supabase.from("qc_report_logs").insert({

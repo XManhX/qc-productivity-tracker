@@ -319,7 +319,7 @@ function buildHTML(users, date, displayName, hStart, hEnd, roleMap) {
       <tr>
         <th style="width:50px;">STT</th>
         <th class="user-cell">Nhân viên</th>
-        <th class="total-header" style="width:90px;">Tổng SL</th>
+        <th class="total-header" style="width:90px;">Tổng</th>
         ${Array.from({ length: wHours }, (_, i) => `<th style="width:60px;">${hStart + i}h</th>`).join('')}
       </tr>
     </thead>

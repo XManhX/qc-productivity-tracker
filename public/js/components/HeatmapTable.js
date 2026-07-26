@@ -6,14 +6,12 @@ export class HeatmapTable {
   constructor(container) {
     this.container = container;
 
-    // Các giá trị sticky left cố định
     this._leftName = 0;
     this._leftRole = 280;
     this._leftTotal = 370;
 
     this._renderStructure();
 
-    // Pagination
     this.pagination = new Pagination(
       this.container.querySelector("#pagination-wrapper"),
       store,
@@ -24,28 +22,26 @@ export class HeatmapTable {
       },
     );
 
-    // Trạng thái cho cập nhật động
     this._previousData = null;
-    this._previousUserMap = null; // Map<email, user>
-    this._rowMap = null; // Map<email, HTMLTableRowElement>
+    this._previousUserMap = null;
+    this._rowMap = null;
     this._lastHourRange = null;
     this._lastSort = null;
 
-    // Live update indicator
     this._lastUpdateTime = null;
     this._updateStatus = "idle";
-    this._refreshInterval = 120; // giây
+    this._refreshInterval = 120;
     this._statusTimer = null;
 
-    // Debounce / throttle
+    // Debounce
     this._pendingRender = false;
     this._renderTimeoutId = null;
-    this._DEBOUNCE_MS = 200; // gộp các update trong 200ms
+    this._DEBOUNCE_MS = 200;
 
-    // FLIP animation
-    this._enableFlip = true; // có thể tắt nếu cần
+    // FLIP
+    this._enableFlip = true; // tắt nếu không cần
+    this._debugFlip = true; // log ra console để kiểm tra
 
-    // Đăng ký sự kiện update từ store
     store.on("update", () => {
       this._handleStoreUpdate();
       this._scheduleRender();
@@ -115,7 +111,7 @@ export class HeatmapTable {
     return { displayTotal: rawTotal, effectiveHours };
   }
 
-  // ==================== GIAO DIỆN ====================
+  // ==================== UI ====================
   _renderStructure() {
     this.container.innerHTML = `
       <div class="px-4 py-2 border-b border-slate-100 bg-slate-50 flex items-center justify-between">
@@ -132,20 +128,15 @@ export class HeatmapTable {
           </div>
         </div>
         <div class="flex items-center gap-3">
-          <button id="btn-export-image" 
-                  class="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg 
-                        bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 
-                        hover:border-slate-300 transition-colors shadow-sm"
-                  title="Xuất toàn bộ bảng thành ảnh PNG">
-            <i data-lucide="camera" class="w-4 h-4"></i>
-            <span>Xuất ảnh</span>
+          <button id="btn-export-image" class="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 hover:border-slate-300 transition-colors shadow-sm">
+            <i data-lucide="camera" class="w-4 h-4"></i><span>Xuất ảnh</span>
           </button>
           <div id="live-update-status" class="flex items-center gap-2 text-xs font-medium">
             <span class="flex items-center gap-1.5 bg-slate-100 text-slate-500 px-2.5 py-1 rounded-full">
               <span class="w-1.5 h-1.5 rounded-full bg-slate-400"></span> Đang kết nối...
             </span>
           </div>
-        </div>  
+        </div>
       </div>
       <div class="overflow-x-auto border border-slate-200 shadow-sm" id="table-wrapper">
         <div class="max-h-[calc(100vh-12rem)] overflow-y-auto" id="table-scroll-container">
@@ -158,10 +149,9 @@ export class HeatmapTable {
       </div>
     `;
     refreshIcons();
-    const exportBtn = this.container.querySelector("#btn-export-image");
-    if (exportBtn) {
-      exportBtn.addEventListener("click", () => this.exportToImage());
-    }
+    this.container
+      .querySelector("#btn-export-image")
+      ?.addEventListener("click", () => this.exportToImage());
   }
 
   // ==================== LIVE UPDATE STATUS ====================
@@ -316,7 +306,6 @@ export class HeatmapTable {
   _scheduleRender() {
     if (this._pendingRender) return;
     this._pendingRender = true;
-
     if (this._renderTimeoutId) clearTimeout(this._renderTimeoutId);
     this._renderTimeoutId = setTimeout(() => {
       this._pendingRender = false;
@@ -328,135 +317,120 @@ export class HeatmapTable {
   _renderTable() {
     const headerRow = this.container.querySelector("#table-header");
     const tbody = this.container.querySelector("#dashboard-body");
-    const f = store.state.filters;
-    const hourStart = Number(f.hourStart);
-    const hourEnd = Number(f.hourEnd);
+    const { hourStart, hourEnd } = store.state.filters;
+    const hS = Number(hourStart),
+      hE = Number(hourEnd);
     const sortConfig = store.state.sort;
 
     const hourChanged =
       !this._lastHourRange ||
-      this._lastHourRange.hourStart !== hourStart ||
-      this._lastHourRange.hourEnd !== hourEnd;
-
-    this._buildHeader(headerRow, hourStart, hourEnd);
-
+      this._lastHourRange.hourStart !== hS ||
+      this._lastHourRange.hourEnd !== hE;
+    this._buildHeader(headerRow, hS, hE);
     const data = store.items;
 
-    // Loading / Error / Empty
     if (store.state.loading && !data.length) {
-      tbody.innerHTML = `<tr><td colspan="${3 + (hourEnd - hourStart + 1)}" class="py-12 text-center text-slate-400">
-        <div class="flex flex-col items-center gap-2"><div class="loading-spinner w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full"></div><span>Đang tải dữ liệu...</span></div>
-      </td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="${3 + (hE - hS + 1)}" class="py-12 text-center text-slate-400">Đang tải...</td></tr>`;
       this._rowMap = null;
       this._previousUserMap = null;
       return;
     }
-
     if (store.state.error && !data.length) {
-      tbody.innerHTML = `<tr><td colspan="${3 + (hourEnd - hourStart + 1)}" class="py-12 text-rose-500 text-center">
-        <i data-lucide="alert-triangle" class="w-10 h-10 mx-auto"></i><span>Lỗi: ${store.state.error}</span>
-      </td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="${3 + (hE - hS + 1)}" class="py-12 text-center text-rose-500">Lỗi: ${store.state.error}</td></tr>`;
       this._rowMap = null;
       this._previousUserMap = null;
       return;
     }
-
     if (!data.length) {
-      tbody.innerHTML = `<tr><td colspan="${3 + (hourEnd - hourStart + 1)}" class="py-12 text-center text-slate-400">
-        <div class="flex flex-col items-center gap-2"><i data-lucide="inbox" class="w-10 h-10 text-slate-300"></i><span>Không có dữ liệu</span></div>
-      </td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="${3 + (hE - hS + 1)}" class="py-12 text-center text-slate-400">Không có dữ liệu</td></tr>`;
       this._rowMap = null;
       this._previousUserMap = null;
       return;
     }
 
-    // Sắp xếp dữ liệu
     const sorted = [...data].sort((a, b) => {
       const av = this._getSortValue(a, sortConfig.key);
       const bv = this._getSortValue(b, sortConfig.key);
-      if (av < bv) return sortConfig.direction === "asc" ? -1 : 1;
-      if (av > bv) return sortConfig.direction === "asc" ? 1 : -1;
-      return 0;
+      return sortConfig.direction === "asc"
+        ? av < bv
+          ? -1
+          : av > bv
+            ? 1
+            : 0
+        : av > bv
+          ? -1
+          : av < bv
+            ? 1
+            : 0;
     });
 
-    // Full render chỉ khi thay đổi phạm vi giờ hoặc chưa có rowMap
     if (hourChanged || !this._rowMap) {
-      this._fullRender(sorted, hourStart, hourEnd);
+      this._fullRender(sorted, hS, hE);
       this._buildRowMap();
     } else {
-      this._syncTable(sorted, hourStart, hourEnd);
+      this._syncTable(sorted, hS, hE); // <--- dùng FLIP mới
     }
 
     this._previousUserMap = new Map(sorted.map((u) => [u.email, u]));
-    this._lastHourRange = { hourStart, hourEnd };
+    this._lastHourRange = { hourStart: hS, hourEnd: hE };
     this._lastSort = { key: sortConfig.key, direction: sortConfig.direction };
     refreshIcons();
   }
 
-  // ==================== FULL RENDER ====================
   _fullRender(data, hourStart, hourEnd) {
     const tbody = this.container.querySelector("#dashboard-body");
     tbody.innerHTML = "";
-    data.forEach((user) => {
-      const tr = this._createRow(user, hourStart, hourEnd);
-      tbody.appendChild(tr);
-    });
+    data.forEach((user) =>
+      tbody.appendChild(this._createRow(user, hourStart, hourEnd)),
+    );
   }
 
   _buildRowMap() {
     this._rowMap = new Map();
     this.container
       .querySelectorAll("#dashboard-body tr[data-user-email]")
-      .forEach((tr) => {
-        this._rowMap.set(tr.dataset.userEmail, tr);
-      });
+      .forEach((tr) => this._rowMap.set(tr.dataset.userEmail, tr));
   }
 
-  // ==================== SYNC (FLIP + delta) ====================
+  // ==================== SYNC + FLIP (phiên bản đã sửa) ====================
   _syncTable(sortedData, hourStart, hourEnd) {
     const tbody = this.container.querySelector("#dashboard-body");
     const oldUserMap = this._previousUserMap || new Map();
 
-    // 1. Lưu vị trí cũ của TẤT CẢ hàng hiện tại trước khi làm bất cứ điều gì
+    // 1. Lưu vị trí cũ của tất cả hàng hiện tại TRƯỚC KHI thay đổi DOM
     const oldRects = new Map();
     tbody.querySelectorAll("tr[data-user-email]").forEach((tr) => {
       oldRects.set(tr.dataset.userEmail, tr.getBoundingClientRect());
     });
 
-    // 2. Tạo tập hợp email mới để xác định hàng cần xóa
+    // 2. Xác định các hàng sẽ bị xóa
     const newEmails = new Set(sortedData.map((u) => u.email));
-
-    // 3. Xóa các hàng không còn trong danh sách mới (nhưng chưa cập nhật vị trí)
-    const rowsToRemove = [];
+    const toRemove = [];
     tbody.querySelectorAll("tr[data-user-email]").forEach((tr) => {
-      if (!newEmails.has(tr.dataset.userEmail)) {
-        rowsToRemove.push(tr);
-      }
+      if (!newEmails.has(tr.dataset.userEmail)) toRemove.push(tr);
     });
-    rowsToRemove.forEach((tr) => {
+    toRemove.forEach((tr) => {
       tr.remove();
       this._rowMap.delete(tr.dataset.userEmail);
     });
 
-    // 4. Di chuyển các hàng còn lại theo thứ tự mới (chưa cập nhật nội dung)
+    // 3. Di chuyển / tạo mới các hàng theo thứ tự sortedData (chưa cập nhật nội dung)
     for (const user of sortedData) {
       let tr = this._rowMap.get(user.email);
       if (!tr) {
-        // Hàng mới – tạo và thêm vào tbody ngay
         tr = this._createRow(user, hourStart, hourEnd);
         this._rowMap.set(user.email, tr);
       }
-      // Di chuyển hàng đến cuối (theo thứ tự mới)
-      tbody.appendChild(tr);
+      tbody.appendChild(tr); // đưa về cuối → thứ tự đúng
     }
 
-    // 5. Sau khi DOM đã được sắp xếp, tính vị trí mới và áp dụng FLIP
+    // 4. Lấy vị trí mới sau khi sắp xếp
     const newRects = new Map();
     tbody.querySelectorAll("tr[data-user-email]").forEach((tr) => {
       newRects.set(tr.dataset.userEmail, tr.getBoundingClientRect());
     });
 
-    // Áp dụng animation cho những hàng có thay đổi vị trí
+    // 5. Tìm các hàng có sự thay đổi vị trí
     const animatingRows = [];
     tbody.querySelectorAll("tr[data-user-email]").forEach((tr) => {
       const email = tr.dataset.userEmail;
@@ -465,36 +439,42 @@ export class HeatmapTable {
       if (oldRect && newRect) {
         const deltaY = oldRect.top - newRect.top;
         if (Math.abs(deltaY) > 0.5) {
-          // Lưu lại để animate
           animatingRows.push({ tr, deltaY });
         }
       }
     });
 
-    // Nếu không có hàng nào di chuyển, bỏ qua animation và cập nhật nội dung ngay
+    if (this._debugFlip) {
+      console.log(
+        `[FLIP] ${animatingRows.length} hàng sẽ được animate`,
+        animatingRows.map((r) => r.tr.dataset.userEmail),
+      );
+    }
+
+    // Nếu không có hàng nào di chuyển, cập nhật nội dung ngay và kết thúc
     if (animatingRows.length === 0) {
       this._applyContentUpdates(sortedData, hourStart, hourEnd, oldUserMap);
       return;
     }
 
-    // 6. FLIP: đặt transform ngược, thêm class transition, rồi xóa transform
+    // 6. Áp dụng transform ngược để đưa hàng về vị trí cũ
     animatingRows.forEach(({ tr, deltaY }) => {
       tr.style.willChange = "transform";
       tr.style.transform = `translateY(${deltaY}px)`;
-      tr.classList.add("flip-animate"); // transition: transform 0.3s ease
+      tr.classList.add("flip-animate");
     });
 
-    // Ép trình duyệt ghi nhận transform hiện tại (force reflow)
+    // 7. Force reflow để trình duyệt ghi nhận transform khởi đầu
     tbody.offsetHeight; // eslint-disable-line no-unused-expressions
 
-    // 7. Bắt đầu animation: bỏ transform, hàng sẽ trượt về vị trí mới
+    // 8. Bắt đầu animation: xóa transform, hàng sẽ trượt về vị trí mới
     requestAnimationFrame(() => {
       animatingRows.forEach(({ tr }) => {
         tr.style.transform = "";
       });
     });
 
-    // 8. Sau khi animation kết thúc, cập nhật nội dung và dọn dẹp
+    // 9. Khi animation kết thúc, dọn dẹp và cập nhật nội dung
     const cleanup = () => {
       animatingRows.forEach(({ tr }) => {
         tr.classList.remove("flip-animate");
@@ -504,7 +484,6 @@ export class HeatmapTable {
       this._applyContentUpdates(sortedData, hourStart, hourEnd, oldUserMap);
     };
 
-    // Lắng nghe transitionend trên một hàng bất kỳ (đủ đại diện)
     if (animatingRows.length > 0) {
       const firstRow = animatingRows[0].tr;
       const onTransitionEnd = () => {
@@ -512,14 +491,12 @@ export class HeatmapTable {
         firstRow.removeEventListener("transitionend", onTransitionEnd);
       };
       firstRow.addEventListener("transitionend", onTransitionEnd);
-      // Fallback nếu transition không kết thúc (phòng trường hợp lỗi)
+      // fallback an toàn
       setTimeout(cleanup, 400);
-    } else {
-      cleanup();
     }
   }
 
-  // Tách riêng việc cập nhật nội dung để gọi sau FLIP
+  // Cập nhật nội dung sau khi FLIP hoàn tất
   _applyContentUpdates(sortedData, hourStart, hourEnd, oldUserMap) {
     for (const user of sortedData) {
       const tr = this._rowMap.get(user.email);

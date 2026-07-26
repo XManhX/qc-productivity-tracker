@@ -179,12 +179,22 @@ function generateHeatmapHTML(data, hourStart, hourEnd, reportDate) {
 
 // Chụp ảnh từ HTML với Puppeteer
 async function htmlToImage(html) {
-    const browser = await puppeteer.launch({
-        args: [...chromium.args, '--no-sandbox', '--disable-setuid-sandbox'],
-        executablePath: await chromium.executablePath,
-        headless: chromium.headless,
-        defaultViewport: { width: 1920, height: 1080 }
-    });
+    let browser;
+    // Xử lý môi trường: trên Vercel (production) dùng @sparticuz/chromium, local dùng puppeteer có sẵn
+    if (process.env.VERCEL_ENV === "production") {
+        browser = await puppeteer.launch({
+            args: [...chromium.args, '--no-sandbox', '--disable-setuid-sandbox'],
+            executablePath: await chromium.executablePath,
+            headless: chromium.headless,
+            defaultViewport: { width: 1920, height: 1080 }
+        });
+    } else {
+        // Môi trường development local
+        browser = await puppeteer.launch({
+            headless: true,
+            defaultViewport: { width: 1920, height: 1080 }
+        });
+    }
 
     const page = await browser.newPage();
     await page.setContent(html, { waitUntil: 'networkidle0', timeout: 30000 });
@@ -250,8 +260,10 @@ export default async function handler(req, res) {
     // }
 
     try {
+        console.log("Bắt đầu chạy send-hourly-report...");
         // 1. Lấy cấu hình báo cáo
         const config = await getReportConfig();
+        console.log("Đã lấy cấu hình:", JSON.stringify(config));
 
         // Kiểm tra báo cáo có bật không
         if (!config.report_enabled) {

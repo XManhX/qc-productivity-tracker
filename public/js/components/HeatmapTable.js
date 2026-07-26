@@ -133,8 +133,11 @@ export class HeatmapTable {
         <div class="flex items-center gap-3">
           <button id="btn-export-image" 
                   class="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg 
-                        bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 
-                        hover:border-slate-300 transition-colors shadow-sm"
+                        bg-white border border-slate-200 text-slate-600 
+                        hover:bg-slate-50 hover:border-slate-300 hover:text-slate-700
+                        active:bg-slate-100 active:scale-95
+                        disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-white disabled:hover:border-slate-200
+                        transition-all duration-200 shadow-sm"
                   title="Xuất toàn bộ bảng thành ảnh PNG">
             <i data-lucide="camera" class="w-4 h-4"></i>
             <span>Xuất ảnh</span>
@@ -325,21 +328,21 @@ export class HeatmapTable {
   _buildHeader(headerRow, hourStart, hourEnd) {
     let html = `
       <th class="sticky top-0 left-[${this._leftName}px] z-40 w-[280px] min-w-[280px] px-4 py-2 text-left font-semibold text-slate-700 bg-slate-100">
-        <button class="group flex items-center gap-1 w-full text-left" data-sort-trigger="name">
+        <button class="group flex items-center gap-1 w-full text-left hover:text-amber-600 transition-colors duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 rounded" data-sort-trigger="name">
           <span class="w-full">Nhân viên</span>
-          <span data-sort-icon="name"><i data-lucide="chevrons-up-down" class="w-3.5 h-3.5 text-slate-400"></i></span>
+          <span data-sort-icon="name" class="group-hover:text-amber-500 transition-colors"><i data-lucide="chevrons-up-down" class="w-3.5 h-3.5 text-slate-400"></i></span>
         </button>
       </th>
       <th class="sticky top-0 left-[${this._leftRole}px] z-30 w-[90px] min-w-[90px] px-4 py-2 text-left font-semibold text-slate-700 bg-slate-100">
-        <button class="group flex items-center gap-1 w-full text-left" data-sort-trigger="role">
+        <button class="group flex items-center gap-1 w-full text-left hover:text-amber-600 transition-colors duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 rounded" data-sort-trigger="role">
           <span class="w-full">Role</span>
-          <span data-sort-icon="role"><i data-lucide="chevrons-up-down" class="w-3.5 h-3.5 text-slate-400"></i></span>
+          <span data-sort-icon="role" class="group-hover:text-amber-500 transition-colors"><i data-lucide="chevrons-up-down" class="w-3.5 h-3.5 text-slate-400"></i></span>
         </button>
       </th>
       <th class="sticky top-0 left-[${this._leftTotal}px] z-30 w-[90px] min-w-[90px] px-4 py-4 bg-emerald-50 font-bold text-emerald-800">
-        <button class="group flex items-center justify-center gap-1 w-full" data-sort-trigger="total">
+        <button class="group flex items-center justify-center gap-1 w-full text-left hover:text-amber-600 transition-colors duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 rounded" data-sort-trigger="total">
           <span class="w-full">Tổng</span>
-          <span data-sort-icon="total"><i data-lucide="chevrons-up-down" class="w-3.5 h-3.5 text-slate-400"></i></span>
+          <span data-sort-icon="total" class="group-hover:text-amber-500 transition-colors"><i data-lucide="chevrons-up-down" class="w-3.5 h-3.5 text-slate-400"></i></span>
         </button>
       </th>`;
 
@@ -360,9 +363,9 @@ export class HeatmapTable {
 
       html += `
         <th class="sticky top-0 z-20 px-3 py-3 font-semibold border-l border-slate-200/50 ${bgClass}" ${tooltip}>
-          <button class="group flex items-center justify-center gap-1 w-full" data-sort-trigger="hour-${h}">
+          <button class="group flex items-center justify-center gap-1 w-full text-left hover:text-amber-600 transition-colors duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 rounded" data-sort-trigger="hour-${h}">
             <span class="w-full">${h}:00</span>
-            <span data-sort-icon="hour-${h}"><i data-lucide="chevrons-up-down" class="w-3.5 h-3.5 text-slate-400"></i></span>
+            <span data-sort-icon="hour-${h}" class="group-hover:text-amber-500 transition-colors"><i data-lucide="chevrons-up-down" class="w-3.5 h-3.5 text-slate-400"></i></span>
           </button>
         </th>`;
     }
@@ -758,6 +761,12 @@ export class HeatmapTable {
     exportBtn.innerHTML =
       '<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i><span>Đang xuất...</span>';
     exportBtn.disabled = true;
+    exportBtn.classList.add(
+      "bg-indigo-50",
+      "border-indigo-200",
+      "text-indigo-700",
+    );
+
     refreshIcons();
 
     try {
@@ -867,6 +876,12 @@ export class HeatmapTable {
     } finally {
       exportBtn.innerHTML = originalHTML;
       exportBtn.disabled = false;
+      exportBtn.classList.remove(
+        "bg-indigo-50",
+        "border-indigo-200",
+        "text-indigo-700",
+      );
+
       refreshIcons();
     }
   }

@@ -259,6 +259,7 @@ function buildHTML(users, date, displayName, hStart, hEnd, roleMap) {
     border-radius:10px;
     overflow:hidden;
     table-layout:auto;
+    white-space: nowrap;
   }
   th{
     background:#f1f5f9;
@@ -278,9 +279,32 @@ function buildHTML(users, date, displayName, hStart, hEnd, roleMap) {
     white-space:nowrap;
   }
   tr:last-child td{border-bottom:none;}
-  .user-cell{text-align:left; min-width:180px;}
-  .user-name{font-weight:600; color:#0f172a;}
-  .user-email{font-size:11px; color:#64748b; margin-top:2px;}
+  .user-cell{
+    text-align:left;
+    max-width:260px;
+    width:260px;
+    overflow:hidden;
+    text-overflow:ellipsis;
+    white-space:nowrap;
+  }
+  .user-name{
+    font-weight:600;
+    color:#0f172a;
+    max-width:240px;
+    overflow:hidden;
+    text-overflow:ellipsis;
+    display:inline-block;
+    vertical-align:middle;
+  }
+  .user-email{
+    font-size:11px;
+    color:#64748b;
+    margin-top:2px;
+    max-width:240px;
+    overflow:hidden;
+    text-overflow:ellipsis;
+    display:block;
+  }
   .total-header{background:#ecfdf5; font-weight:700; color:#065f46;}
 </style></head>
 <body>
@@ -310,8 +334,8 @@ function buildHTML(users, date, displayName, hStart, hEnd, roleMap) {
         <tr>
           <td style="color:#64748b;">${idx + 1}</td>
           <td class="user-cell">
-            <div class="user-name">${name}</div>
-            ${email ? `<div class="user-email">${email}</div>` : ''}
+            <span class="user-name" title="${name}">${name}</span>
+            ${email ? `<span class="user-email" title="${email}">${email}</span>` : ''}
           </td>
           <td style="${totalStyle(t, low, med)}">${t}</td>
           ${Array.from({ length: wHours }, (_, i) => {
@@ -336,8 +360,18 @@ async function generateImage(users, date, displayName, hStart, hEnd, roleMap) {
       executablePath: await chromium.executablePath(),
       headless: true,
     });
+
     const page = await browser.newPage();
     await page.setContent(html, { waitUntil: "networkidle0", timeout: 15000 });
+
+    // Tính toán chiều rộng viewport để chứa toàn bộ bảng
+    const wHours = hEnd - hStart + 1;
+    const colWidths = 50 + 200 + 90 + wHours * 60; // STT, Nhân viên, Tổng, các cột giờ
+    const padding = 120; // padding của body + card
+    const viewportWidth = Math.max(800, colWidths + padding);
+    await page.setViewport({ width: viewportWidth, height: 800 });
+
+    // Chụp toàn trang (fullPage: true) để lấy hết chiều cao
     const buf = await page.screenshot({ type: "png", fullPage: true });
     return buf.toString("base64");
   } finally {

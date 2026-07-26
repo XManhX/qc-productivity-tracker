@@ -59,60 +59,7 @@ function isWorkdayVN() {
     return true; // Luôn gửi báo cáo tất cả các ngày
 }
 
-// Hàm xử lý logs thành định dạng tính toán năng suất - NƠI DỄ GẶP LỖI NHẤT
-function processLogsToStats(users, logs, hourStart, hourEnd) {
-    console.log(`[DEBUG processLogsToStats] Bắt đầu xử lý: users=${users.length}, logs=${logs.length}, hourStart=${hourStart}, hourEnd=${hourEnd}`);
-
-    // Tạo map operator -> email (chuyển hết về lowerCase để so sánh)
-    const userMap = new Map();
-    users.forEach(user => {
-        const emailLower = user.email.toLowerCase();
-        userMap.set(emailLower, {
-            ...user,
-            total: 0
-        });
-        console.log(`[DEBUG processLogsToStats] Thêm user vào map: ${emailLower} (tên: ${user.name})`);
-    });
-
-    let skippedLogsNoUser = 0;
-    let skippedLogsOutOfTime = 0;
-    let countedLogs = 0;
-
-    // Xử lý từng log
-    logs.forEach(log => {
-        const email = log.operator?.toLowerCase();
-
-        // 1. Kiểm tra user có tồn tại trong map không
-        if (!userMap.has(email)) {
-            skippedLogsNoUser++;
-            // Chỉ log 5 lần đầu để tránh spam console
-            if (skippedLogsNoUser <= 5) console.log(`[DEBUG processLogsToStats] Bỏ qua log không tìm thấy user: operator=${log.operator}, email trong log không khớp với user list`);
-            return;
-        }
-
-        // 2. Kiểm tra log có trong khoảng giờ tính toán không
-        const logDate = new Date(log.created_at);
-        const logHour = logDate.getHours(); // logHour là giờ UTC của DB, cần kiểm tra múi giờ!
-        // ⚠️ LƯU Ý QUAN TRỌNG: DB lưu created_at ở UTC, nhưng ta cần lấy giờ VN để so sánh hourStart/hourEnd!
-        const vnLogDate = new Date(logDate.getTime() + VN_OFFSET);
-        const vnLogHour = vnLogDate.getHours();
-        console.log(`[DEBUG processLogsToStats] Log của ${email}: created_at=${log.created_at}, UTC giờ=${logHour}, VN giờ=${vnLogHour}`);
-
-        if (vnLogHour < hourStart || vnLogHour > hourEnd) {
-            skippedLogsOutOfTime++;
-            return;
-        }
-
-        // 3. Nếu hợp lệ thì tăng tổng
-        const userData = userMap.get(email);
-        userData.total += 1;
-        countedLogs++;
-        console.log(`[DEBUG processLogsToStats] Tăng tổng cho ${email}: mới=${userData.total}`);
-    });
-
-    console.log(`[DEBUG processLogsToStats] Kết quả xử lý: counted=${countedLogs}, bỏ qua vì không có user=${skippedLogsNoUser}, bỏ qua vì ngoài giờ=${skippedLogsOutOfTime}`);
-    return Array.from(userMap.values()).filter(u => u.total > 0); // Chỉ trả về user có logs > 0
-}
+// Hàm processLogsToStats đã bị loại bỏ vì không còn sử dụng (tối ưu dùng get_dashboard_stats SQL function)
 
 // Gửi webhook dạng card (interactive message) đến SeaTalk
 async function sendSeaTalkCardWebhook(webhookUrl, cardPayload) {
@@ -138,46 +85,169 @@ async function sendSeaTalkCardWebhook(webhookUrl, cardPayload) {
     return true;
 }
 
-// Hàm tạo ảnh báo cáo
+// Hàm tạo ảnh báo cáo - Tạo ảnh chứa toàn bộ bảng dữ liệu giống như exportToImage
 async function generateReportImage(data, reportDate, hourStart, hourEnd) {
-    const top10Data = data.slice(0, 10);
+    // Sắp xếp dữ liệu giảm dần theo tổng sản lượng (như trên dashboard)
+    const sortedData = [...data].sort((a, b) => b.total - a.total);
 
     const htmlContent = `
         <html>
             <head>
+                <meta charset="UTF-8">
                 <style>
-                    body { font-family: sans-serif; background-color: #f0f4f8; padding: 20px; }
-                    .container { background-color: white; border-radius: 8px; padding: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
-                    h1 { color: #1e40af; font-size: 24px; }
-                    p { color: #334155; }
-                    table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-                    th, td { padding: 12px; text-align: left; border-bottom: 1px solid #e2e8f0; }
-                    th { background-color: #f1f5f9; color: #475569; }
-                    tr:nth-child(even) { background-color: #f8fafc; }
+                    body { 
+                        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; 
+                        background-color: #f8fafc; 
+                        padding: 30px; 
+                    }
+                    .container { 
+                        background-color: white; 
+                        border-radius: 12px; 
+                        padding: 30px; 
+                        box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); 
+                        max-width: 900px;
+                        margin: 0 auto;
+                    }
+                    h1 { 
+                        color: #1e40af; 
+                        font-size: 28px; 
+                        margin-top: 0;
+                    }
+                    .subtitle {
+                        color: #64748b;
+                        font-size: 16px;
+                        margin-bottom: 30px;
+                    }
+                    .stats {
+                        display: flex;
+                        gap: 30px;
+                        margin-bottom: 30px;
+                        flex-wrap: wrap;
+                    }
+                    .stat-item {
+                        background-color: #f1f5f9;
+                        padding: 15px 25px;
+                        border-radius: 8px;
+                    }
+                    .stat-label {
+                        color: #64748b;
+                        font-size: 14px;
+                    }
+                    .stat-value {
+                        color: #0f172a;
+                        font-size: 24px;
+                        font-weight: bold;
+                    }
+                    table { 
+                        width: 100%; 
+                        border-collapse: collapse; 
+                        margin-top: 20px;
+                    }
+                    th, td { 
+                        padding: 14px; 
+                        text-align: left; 
+                        border-bottom: 1px solid #e2e8f0; 
+                    }
+                    th { 
+                        background-color: #f1f5f9; 
+                        color: #334155;
+                        font-weight: 600;
+                    }
+                    tr:hover {
+                        background-color: #f8fafc;
+                    }
+                    .user-info {
+                        display: flex;
+                        align-items: center;
+                        gap: 12px;
+                    }
+                    .user-avatar {
+                        width: 36px;
+                        height: 36px;
+                        border-radius: 50%;
+                        background-color: #e2e8f0;
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                        font-size: 12px;
+                        font-weight: bold;
+                        color: #475569;
+                    }
+                    .total-green {
+                        background-color: #dcfce7;
+                        color: #166534;
+                        font-weight: bold;
+                        text-align: center;
+                    }
+                    .total-yellow {
+                        background-color: #fef9c3;
+                        color: #854d0e;
+                        font-weight: bold;
+                        text-align: center;
+                    }
+                    .total-red {
+                        background-color: #fee2e2;
+                        color: #991b1b;
+                        font-weight: bold;
+                        text-align: center;
+                        text-align: center;
+                    }
                 </style>
             </head>
             <body>
                 <div class="container">
-                    <h1>Báo cáo năng suất QC - ${reportDate}</h1>
-                    <p>Tổng số nhân viên hoạt động: ${data.length}</p>
-                    <p>Giờ làm việc: ${hourStart}h - ${hourEnd}h</p>
-                    <h2>Top 10 nhân viên năng suất cao nhất</h2>
+                    <h1>📊 Báo cáo năng suất QC - ${reportDate}</h1>
+                    <p class="subtitle">Thống kê sản lượng làm việc của toàn bộ nhân viên</p>
+                    <div class="stats">
+                        <div class="stat-item">
+                            <div class="stat-label">Tổng nhân viên</div>
+                            <div class="stat-value">${sortedData.length}</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-label">Giờ làm việc</div>
+                            <div class="stat-value">${hourStart}h - ${hourEnd}h</div>
+                        </div>
+                    </div>
                     <table>
                         <thead>
                             <tr>
                                 <th>STT</th>
-                                <th>Tên</th>
-                                <th>Tổng</th>
+                                <th>Nhân viên</th>
+                                <th>Role</th>
+                                <th>Tổng sản lượng</th>
                             </tr>
                         </thead>
                         <tbody>
-                            ${top10Data.map((user, index) => `
-                                <tr>
-                                    <td>${index + 1}</td>
-                                    <td>${capitalizeName(user.name) || user.email}</td>
-                                    <td>${user.total || 0}</td>
-                                </tr>
-                            `).join('')}
+                            ${sortedData.map((user, index) => {
+        // Tính toán màu sắc dựa trên ngưỡng (giống như trong HeatmapTable)
+        const workingHours = hourEnd - hourStart + 1;
+        const lowTotal = (user.low_threshold || 10) * workingHours;
+        const highTotal = (user.medium_threshold || 16) * workingHours;
+        const total = user.total || 0;
+        let cellClass = '';
+        if (total >= highTotal) cellClass = 'total-green';
+        else if (total >= lowTotal) cellClass = 'total-yellow';
+        else cellClass = 'total-red';
+
+        return `
+                            <tr>
+                                <td>${index + 1}</td>
+                                <td>
+                                    <div class="user-info">
+                                        <div class="user-avatar">
+                                            ${(user.name || user.email).substring(0, 2).toUpperCase()}
+                                        </div>
+                                        <div>
+                                            <div style="font-weight: 600; color: #1e293b;">${capitalizeName(user.name) || user.email}</div>
+                                            <div style="font-size: 12px; color: #64748b;">${user.email}</div>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td>${user.display_name || user.role_key || '-'}</td>
+                                <td class="${cellClass}">${total}</td>
+                            </tr>
+                                `;
+    }).join('')}
                         </tbody>
                     </table>
                 </div>
@@ -195,27 +265,11 @@ async function generateReportImage(data, reportDate, hourStart, hourEnd) {
     return imagePath;
 }
 
-// Hàm tải ảnh lên Supabase Storage
-async function uploadImageToSupabase(filePath) {
-    const fileContent = await fs.readFile(filePath);
-    const fileName = `public/report-${Date.now()}.png`;
-
-    const { data, error } = await supabase.storage
-        .from('qc-productivity-tracker')
-        .upload(fileName, fileContent, {
-            contentType: 'image/png',
-            upsert: true,
-        });
-
-    if (error) {
-        throw new Error(`Lỗi tải ảnh lên Supabase: ${error.message}`);
-    }
-
-    const { data: publicUrlData } = supabase.storage
-        .from('qc-productivity-tracker')
-        .getPublicUrl(fileName);
-
-    return publicUrlData.publicUrl;
+// Hàm chuyển file ảnh thành Base64 string để nhúng trực tiếp vào SeaTalk card
+async function convertImageToBase64(filePath) {
+    const fileBuffer = await fs.readFile(filePath);
+    const base64 = fileBuffer.toString('base64');
+    return `data:image/png;base64,${base64}`;
 }
 
 export default async function handler(req, res) {
@@ -326,17 +380,72 @@ export default async function handler(req, res) {
         console.log(`[DEBUG] Số users sau khi lọc tài khoản hệ thống: ${reportableData.length}`);
         console.log("[DEBUG] Dữ liệu cuối cùng để báo cáo:", reportableData.map(u => ({ email: u.email, name: u.name, total: u.total })));
 
-        // 5. Tạo nội dung card để gửi qua SeaTalk
-        const top10Content = reportableData
-            .slice(0, 10)
-            .map((user, index) => {
-                const displayName = user.name ? capitalizeName(user.name) : user.email;
-                const name = displayName.substring(0, 22).padEnd(25);
-                const total = (user.total || 0).toString();
-                // Định dạng từng dòng để căn chỉnh cột
-                return `${(index + 1).toString().padEnd(4)}${name}${total}`;
-            })
-            .join("\\n"); // Dùng \\n cho markdown của SeaTalk
+        // ====================== BƯỚC 5: Tạo ảnh báo cáo và tải lên Supabase ======================
+        let reportImageUrl = null;
+        let tempImagePath = null;
+
+        if (reportableData.length > 0) {
+            try {
+                // Tạo file ảnh từ HTML
+                tempImagePath = await generateReportImage(reportableData, reportDate, hourStart, hourEnd);
+                console.log(`[DEBUG] Đã tạo file ảnh tạm tại: ${tempImagePath}`);
+
+                // Tải ảnh lên Supabase Storage
+                reportImageUrl = await uploadImageToSupabase(tempImagePath);
+                console.log(`[DEBUG] Ảnh báo cáo đã được tải lên: ${reportImageUrl}`);
+
+                // Xóa file ảnh tạm trên máy
+                await fs.unlink(tempImagePath);
+                console.log("[DEBUG] Đã xóa file ảnh tạm");
+            } catch (imageError) {
+                console.error("[DEBUG] Lỗi khi xử lý ảnh báo cáo:", imageError);
+            }
+        }
+
+        // ====================== BƯỚC 6: Tạo nội dung card để gửi qua SeaTalk ======================
+        // Luôn thêm ảnh báo cáo chi tiết vào tin nhắn (yêu cầu: chỉ gửi ảnh toàn bộ dữ liệu)
+        const cardElements = [
+            {
+                tag: "div",
+                text: {
+                    tag: "lark_md",
+                    content: `👥 **Tổng số nhân viên hoạt động:** ${reportableData.length}\\n⏰ **Giờ làm việc:** ${hourStart}h - ${hourEnd}h`
+                }
+            }
+        ];
+
+        // Thêm ảnh báo cáo chi tiết vào card
+        if (reportImageUrl) {
+            cardElements.push({
+                tag: "img",
+                image_url: reportImageUrl,
+                alt: {
+                    tag: "plain_text",
+                    content: "Bảng báo cáo năng suất chi tiết toàn bộ nhân viên"
+                }
+            });
+        } else {
+            // Trường hợp xui rủi không thể tạo ảnh, ghi chú vào tin nhắn
+            cardElements.push({
+                tag: "div",
+                text: {
+                    tag: "lark_md",
+                    content: `⚠️ **Lưu ý:** Không thể tạo ảnh báo cáo chi tiết trong lần chạy này, vui lòng kiểm tra dashboard để xem thông tin đầy đủ.`
+                }
+            });
+        }
+
+        // Thêm footer và link xem chi tiết
+        cardElements.push(
+            { tag: "hr" },
+            {
+                tag: "note",
+                elements: [{
+                    tag: "plain_text",
+                    content: `🔗 Xem chi tiết tại: https://qc-productivity-tracker.vercel.app`
+                }]
+            }
+        );
 
         const cardContent = {
             config: {
@@ -349,52 +458,7 @@ export default async function handler(req, res) {
                 },
                 template: "blue"
             },
-            elements: [
-                // Thêm hình ảnh banner tại đây nếu muốn
-                // {
-                //     "tag": "img",
-                //     "image_url": "https://your-image-url.com/banner.png",
-                //     "alt": {
-                //         "tag": "plain_text",
-                //         "content": "Report Banner"
-                //     }
-                // },
-                {
-                    tag: "div",
-                    text: {
-                        tag: "lark_md",
-                        content: `👥 **Tổng số nhân viên hoạt động:** ${reportableData.length}\\n⏰ **Giờ làm việc:** ${hourStart}h - ${hourEnd}h`
-                    }
-                },
-                {
-                    tag: "hr"
-                },
-                {
-                    tag: "div",
-                    text: {
-                        tag: "lark_md",
-                        content: `**🏆 Top 10 nhân viên năng suất cao nhất:**`
-                    }
-                },
-                {
-                    tag: "div",
-                    text: {
-                        tag: "lark_md",
-                        // Dùng code block để có font chữ mono-space, dễ căn chỉnh
-                        content: `\`\`\`${"STT".padEnd(4)}${"Tên".padEnd(25)}Tổng\\n${"-".repeat(35)}\\n${top10Content}\`\`\``
-                    }
-                },
-                {
-                    tag: "hr"
-                },
-                {
-                    tag: "note",
-                    elements: [{
-                        tag: "plain_text",
-                        content: `🔗 Xem chi tiết tại: https://qc-productivity-tracker.vercel.app`
-                    }]
-                }
-            ]
+            elements: cardElements
         };
 
         // Gửi báo cáo đến SeaTalk

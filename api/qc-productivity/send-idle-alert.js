@@ -755,6 +755,12 @@ async function sendReportToSeatalk(report, type) {
 
 // ========== MAIN HANDLER ==========
 export default async function handler(req, res) {
+  // ---------- XÁC THỰC ----------
+  const secret = req.headers.get("x-cron-secret");
+  if (secret !== process.env.CRON_SECRET) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+
   const { action = "alert" } = req.query;
 
   if (action === "alert") {

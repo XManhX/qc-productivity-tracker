@@ -170,6 +170,7 @@ export default async function handler(req, res) {
 
       allIdleUsers.push({
         email,
+        name: user.name,
         idle: idleMinutes,
         lastActivityTime: new Date(lastLogMs).toLocaleTimeString("vi-VN", {
           timeZone: "Asia/Ho_Chi_Minh",

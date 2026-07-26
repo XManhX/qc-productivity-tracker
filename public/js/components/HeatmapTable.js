@@ -417,34 +417,16 @@ export class HeatmapTable {
     const tbody = this.container.querySelector("#dashboard-body");
     const oldUserMap = this._previousUserMap || new Map();
 
-    // FLIP: lưu vị trí cũ của tất cả hàng hiện tại
+    // 1. Lưu vị trí cũ của TẤT CẢ hàng hiện tại trước khi làm bất cứ điều gì
     const oldRects = new Map();
-    if (this._enableFlip) {
-      tbody.querySelectorAll("tr[data-user-email]").forEach((tr) => {
-        oldRects.set(tr.dataset.userEmail, tr.getBoundingClientRect());
-      });
-    }
+    tbody.querySelectorAll("tr[data-user-email]").forEach((tr) => {
+      oldRects.set(tr.dataset.userEmail, tr.getBoundingClientRect());
+    });
 
-    // 1. Di chuyển / tạo hàng theo thứ tự mới
-    for (const user of sortedData) {
-      let tr = this._rowMap.get(user.email);
-      if (!tr) {
-        // User mới
-        tr = this._createRow(user, hourStart, hourEnd);
-        this._rowMap.set(user.email, tr);
-      } else {
-        const oldUser = oldUserMap.get(user.email);
-        if (oldUser) {
-          this._updateRow(tr, user, oldUser, hourStart, hourEnd);
-        } else {
-          this._updateRowComplete(tr, user, hourStart, hourEnd);
-        }
-      }
-      tbody.appendChild(tr); // di chuyển nếu đã tồn tại
-    }
-
-    // 2. Xóa hàng cũ không còn trong danh sách
+    // 2. Tạo tập hợp email mới để xác định hàng cần xóa
     const newEmails = new Set(sortedData.map((u) => u.email));
+
+    // 3. Xóa các hàng không còn trong danh sách mới (nhưng chưa cập nhật vị trí)
     const rowsToRemove = [];
     tbody.querySelectorAll("tr[data-user-email]").forEach((tr) => {
       if (!newEmails.has(tr.dataset.userEmail)) {
@@ -456,31 +438,98 @@ export class HeatmapTable {
       this._rowMap.delete(tr.dataset.userEmail);
     });
 
-    // FLIP animation
-    if (this._enableFlip && oldRects.size > 0) {
-      requestAnimationFrame(() => {
-        tbody.querySelectorAll("tr[data-user-email]").forEach((tr) => {
-          const oldRect = oldRects.get(tr.dataset.userEmail);
-          if (!oldRect) return; // hàng mới thêm, không animate
-          const newRect = tr.getBoundingClientRect();
-          const deltaY = oldRect.top - newRect.top;
-          if (Math.abs(deltaY) > 0.5) {
-            tr.style.transform = `translateY(${deltaY}px)`;
-            tr.classList.add("flip-animate");
-            requestAnimationFrame(() => {
-              tr.style.transform = "";
-              const onTransitionEnd = () => {
-                tr.classList.remove("flip-animate");
-                tr.removeEventListener("transitionend", onTransitionEnd);
-              };
-              tr.addEventListener("transitionend", onTransitionEnd);
-              setTimeout(() => {
-                tr.classList.remove("flip-animate");
-              }, 400);
-            });
-          }
-        });
+    // 4. Di chuyển các hàng còn lại theo thứ tự mới (chưa cập nhật nội dung)
+    for (const user of sortedData) {
+      let tr = this._rowMap.get(user.email);
+      if (!tr) {
+        // Hàng mới – tạo và thêm vào tbody ngay
+        tr = this._createRow(user, hourStart, hourEnd);
+        this._rowMap.set(user.email, tr);
+      }
+      // Di chuyển hàng đến cuối (theo thứ tự mới)
+      tbody.appendChild(tr);
+    }
+
+    // 5. Sau khi DOM đã được sắp xếp, tính vị trí mới và áp dụng FLIP
+    const newRects = new Map();
+    tbody.querySelectorAll("tr[data-user-email]").forEach((tr) => {
+      newRects.set(tr.dataset.userEmail, tr.getBoundingClientRect());
+    });
+
+    // Áp dụng animation cho những hàng có thay đổi vị trí
+    const animatingRows = [];
+    tbody.querySelectorAll("tr[data-user-email]").forEach((tr) => {
+      const email = tr.dataset.userEmail;
+      const oldRect = oldRects.get(email);
+      const newRect = newRects.get(email);
+      if (oldRect && newRect) {
+        const deltaY = oldRect.top - newRect.top;
+        if (Math.abs(deltaY) > 0.5) {
+          // Lưu lại để animate
+          animatingRows.push({ tr, deltaY });
+        }
+      }
+    });
+
+    // Nếu không có hàng nào di chuyển, bỏ qua animation và cập nhật nội dung ngay
+    if (animatingRows.length === 0) {
+      this._applyContentUpdates(sortedData, hourStart, hourEnd, oldUserMap);
+      return;
+    }
+
+    // 6. FLIP: đặt transform ngược, thêm class transition, rồi xóa transform
+    animatingRows.forEach(({ tr, deltaY }) => {
+      tr.style.willChange = "transform";
+      tr.style.transform = `translateY(${deltaY}px)`;
+      tr.classList.add("flip-animate"); // transition: transform 0.3s ease
+    });
+
+    // Ép trình duyệt ghi nhận transform hiện tại (force reflow)
+    tbody.offsetHeight; // eslint-disable-line no-unused-expressions
+
+    // 7. Bắt đầu animation: bỏ transform, hàng sẽ trượt về vị trí mới
+    requestAnimationFrame(() => {
+      animatingRows.forEach(({ tr }) => {
+        tr.style.transform = "";
       });
+    });
+
+    // 8. Sau khi animation kết thúc, cập nhật nội dung và dọn dẹp
+    const cleanup = () => {
+      animatingRows.forEach(({ tr }) => {
+        tr.classList.remove("flip-animate");
+        tr.style.willChange = "";
+        tr.style.transform = "";
+      });
+      this._applyContentUpdates(sortedData, hourStart, hourEnd, oldUserMap);
+    };
+
+    // Lắng nghe transitionend trên một hàng bất kỳ (đủ đại diện)
+    if (animatingRows.length > 0) {
+      const firstRow = animatingRows[0].tr;
+      const onTransitionEnd = () => {
+        cleanup();
+        firstRow.removeEventListener("transitionend", onTransitionEnd);
+      };
+      firstRow.addEventListener("transitionend", onTransitionEnd);
+      // Fallback nếu transition không kết thúc (phòng trường hợp lỗi)
+      setTimeout(cleanup, 400);
+    } else {
+      cleanup();
+    }
+  }
+
+  // Tách riêng việc cập nhật nội dung để gọi sau FLIP
+  _applyContentUpdates(sortedData, hourStart, hourEnd, oldUserMap) {
+    for (const user of sortedData) {
+      const tr = this._rowMap.get(user.email);
+      if (!tr) continue;
+      const oldUser = oldUserMap.get(user.email);
+      if (oldUser) {
+        this._updateRow(tr, user, oldUser, hourStart, hourEnd);
+      } else {
+        this._updateRowComplete(tr, user, hourStart, hourEnd);
+      }
     }
   }
 

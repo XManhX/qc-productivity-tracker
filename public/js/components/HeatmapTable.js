@@ -39,6 +39,20 @@ export class HeatmapTable {
     this._updateStatusDisplay();
   }
 
+  _getWorkConfig() {
+    const cfg = store.getAlertConfig();
+    if (cfg) {
+      return {
+        workStart: cfg.work_start_hour ?? 8,
+        workEnd: cfg.work_end_hour ?? 20,
+        breakStart:
+          (cfg.break_start_hour ?? 12) + (cfg.break_start_min ?? 30) / 60,
+        breakEnd: (cfg.break_end_hour ?? 13) + (cfg.break_end_min ?? 30) / 60,
+      };
+    }
+    return { workStart: 8, workEnd: 20, breakStart: 12.5, breakEnd: 13.5 };
+  }
+
   _getBreakConfig() {
     const cfg = store.getAlertConfig();
     if (cfg) {
@@ -259,9 +273,23 @@ export class HeatmapTable {
         </button>
       </th>`;
 
+    const { workStart, workEnd, breakStart, breakEnd } = this._getWorkConfig();
+    const breakStartHour = Math.floor(breakStart);
+    const breakEndHour = Math.floor(breakEnd);
+
     for (let h = hourStart; h <= hourEnd; h++) {
+      let bgClass = "bg-white text-slate-700";
+      let tooltip = "";
+
+      if (h < workStart || h >= workEnd) {
+        bgClass = "bg-gray-50 text-gray-400";
+      } else if (h >= breakStartHour && h < breakEndHour) {
+        bgClass = "bg-orange-50 text-orange-600";
+        tooltip = 'title="Nghỉ trưa"';
+      }
+
       html += `
-        <th class="sticky top-0 z-20 px-3 py-4 text-slate-700 font-semibold border-l border-slate-200/50 bg-slate-100">
+        <th class="sticky top-0 z-20 px-3 py-3 font-semibold border-l border-slate-200/50 ${bgClass}" ${tooltip}>
           <button class="group flex items-center justify-center gap-1 w-full" data-sort-trigger="hour-${h}">
             <span class="w-full">${h}:00</span>
             <span data-sort-icon="hour-${h}"><i data-lucide="chevrons-up-down" class="w-3.5 h-3.5 text-slate-400"></i></span>

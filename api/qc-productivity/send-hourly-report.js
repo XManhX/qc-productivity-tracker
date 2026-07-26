@@ -21,20 +21,34 @@ let configFetchedAt = 0;
 
 // ==================== CONFIG PARSER ====================
 function parseReportConfig(raw) {
+  const reportEnabled = raw?.report_enabled ?? true;
+  const reportHourStart = raw?.report_hour_start ?? 8;
+  const reportHourEnd = raw?.report_hour_end ?? 20;
+  const reportMinute = raw?.report_minute ?? 10;
+  const onlyWorkdays = raw?.report_only_workdays ?? true;
+  const webhook =
+    raw?.report_seatalk_webhook_url || raw?.seatalk_webhook_url || null;
+
+  const workStartHour = raw?.work_start_hour ?? 8;
+  const workEndHour = raw?.work_end_hour ?? 20;
+  const breakStartHour = raw?.break_start_hour ?? 12;
+  const breakStartMin = raw?.break_start_min ?? 30;
+  const breakEndHour = raw?.break_end_hour ?? 13;
+  const breakEndMin = raw?.break_end_min ?? 30;
+
   return {
-    reportEnabled: raw?.report_enabled ?? true,
-    reportHourStart: raw?.report_hour_start ?? 8,
-    reportHourEnd: raw?.report_hour_end ?? 20,
-    reportMinute: raw?.report_minute ?? 10,
-    onlyWorkdays: raw?.report_only_workdays ?? true,
-    webhook:
-      raw?.report_seatalk_webhook_url || raw?.seatalk_webhook_url || null,
-    workStartHour: raw?.work_start_hour ?? 8,
-    workEndHour: raw?.work_end_hour ?? 20,
-    breakStartHour: raw?.break_start_hour ?? 12,
-    breakStartMin: raw?.break_start_min ?? 30,
-    breakEndHour: raw?.break_end_hour ?? 13,
-    breakEndMin: raw?.break_end_min ?? 30,
+    reportEnabled,
+    reportHourStart,
+    reportHourEnd,
+    reportMinute,
+    onlyWorkdays,
+    webhook,
+    workStartHour,
+    workEndHour,
+    breakStartHour,
+    breakStartMin,
+    breakEndHour,
+    breakEndMin,
   };
 }
 
@@ -74,8 +88,10 @@ const getTodayVN = () => {
 };
 
 const isWorkdayVN = () => true;
+
 const delay = (ms) => new Promise((r) => setTimeout(r, ms));
 
+// ==================== SEA TALK ====================
 async function sendImage(webhookUrl, base64) {
   const res = await fetch(webhookUrl, {
     method: "POST",
@@ -91,6 +107,7 @@ async function sendImage(webhookUrl, base64) {
   }
 }
 
+// ==================== DATA ====================
 async function fetchRoleDetails(roleKeys) {
   const { data, error } = await supabase
     .from("qc_roles")
@@ -174,17 +191,17 @@ async function mergeStats(targetDate, userMap) {
 }
 
 // ==================== IMAGE ====================
-function buildHTML(
-  users,
-  date,
-  displayName,
-  hStart,
-  hEnd,
-  roleMap,
-  effectiveHours,
-) {
-  const sorted = [...users].sort((a, b) => b.displayTotal - a.displayTotal);
-  const wHours = hEnd - hStart;
+function buildHTML(users, date, displayName, hStart, hEnd, roleMap, cfg) {
+  // Sắp xếp theo displayTotal giảm dần
+  const sorted = [...users].sort(
+    (a, b) => (b.displayTotal || 0) - (a.displayTotal || 0),
+  );
+  const wHours = hEnd - hStart; // số cột giờ hiển thị (exclusive hEnd)
+
+  const workStart = cfg.workStartHour;
+  const workEnd = cfg.workEndHour;
+  const breakStartHour = cfg.breakStartHour;
+  const breakEndHour = cfg.breakEndHour; // floor để tô màu header
 
   const cellStyle = (cnt, low, med) => {
     if (!cnt) return "background:#f8fafc; color:#cbd5e1;";
@@ -193,6 +210,7 @@ function buildHTML(
     return "background:#dcfce7; color:#166534; font-weight:700;";
   };
 
+  // Mỗi user có effectiveHours riêng, dùng để tính ngưỡng cho cột Tổng
   const totalStyle = (t, low, med, effHrs) => {
     const lo = low * effHrs;
     const hi = med * effHrs;
@@ -251,7 +269,6 @@ function buildHTML(
     white-space: nowrap;
   }
   th{
-    background:#f1f5f9;
     font-weight:600;
     color:#334155;
     padding:12px 14px;
@@ -302,7 +319,7 @@ function buildHTML(
   <div class="meta">
     <span>👥 ${sorted.length} nhân viên</span>
     <span>⏰ ${hStart}:00 – ${hEnd}:00</span>
-    <span>🕒 Tổng dựa trên giờ có sản lượng (đã trừ 1h nghỉ nếu có)</span>
+    <span>📐 Tổng dựa trên giờ có sản lượng (đã trừ 1h nghỉ nếu có)</span>
   </div>
   <table>
     <thead>
@@ -310,7 +327,21 @@ function buildHTML(
         <th style="width:50px;">STT</th>
         <th class="user-cell">Nhân viên</th>
         <th class="total-header" style="width:90px;">Tổng</th>
-        ${Array.from({ length: wHours }, (_, i) => `<th style="width:60px;">${hStart + i}:00</th>`).join("")}
+        ${Array.from({ length: wHours }, (_, i) => {
+          const h = hStart + i;
+          let bgColor = "#f1f5f9",
+            textColor = "#334155",
+            tooltip = "";
+          if (h < workStart || h >= workEnd) {
+            bgColor = "#f9fafb";
+            textColor = "#9ca3af";
+          } else if (h >= breakStartHour && h < breakEndHour) {
+            bgColor = "#fff7ed";
+            textColor = "#ea580c";
+            tooltip = 'title="Nghỉ trưa"';
+          }
+          return `<th style="width:60px; background:${bgColor}; color:${textColor};" ${tooltip}>${h}:00</th>`;
+        }).join("")}
       </tr>
     </thead>
     <tbody>
@@ -330,7 +361,7 @@ function buildHTML(
             <span class="user-name" title="${name}">${name}</span>
             ${email ? `<span class="user-email" title="${email}">${email}</span>` : ""}
           </td>
-          <td style="${totalStyle(t, low, med, effHrs)}" title="Tổng ước tính cho ${effHrs} giờ làm việc thực tế">${t}</td>
+          <td style="${totalStyle(t, low, med, effHrs)}" title="Tổng ước tính cho ${effHrs} giờ làm việc (đã trừ 1h nghỉ)">${t}</td>
           ${Array.from({ length: wHours }, (_, i) => {
             const h = hStart + i;
             const cnt = hour[h] || 0;
@@ -345,8 +376,16 @@ function buildHTML(
 </body></html>`;
 }
 
-async function generateImage(users, date, displayName, hStart, hEnd, roleMap) {
-  const html = buildHTML(users, date, displayName, hStart, hEnd, roleMap);
+async function generateImage(
+  users,
+  date,
+  displayName,
+  hStart,
+  hEnd,
+  roleMap,
+  cfg,
+) {
+  const html = buildHTML(users, date, displayName, hStart, hEnd, roleMap, cfg);
   let browser = null;
   try {
     browser = await puppeteer.launch({
@@ -371,6 +410,7 @@ async function generateImage(users, date, displayName, hStart, hEnd, roleMap) {
   }
 }
 
+// ==================== MAIN ====================
 export default async function handler(req, res) {
   const secret = req.headers.get("x-cron-secret");
   if (secret !== process.env.CRON_SECRET) {
@@ -382,6 +422,7 @@ export default async function handler(req, res) {
   try {
     console.log("[INFO] Bắt đầu gửi báo cáo...");
 
+    // 1. Lấy cấu hình
     const cfg = await getConfig();
     if (!cfg.reportEnabled) {
       return res.json({ success: false, reason: "Báo cáo đang tắt." });
@@ -394,9 +435,10 @@ export default async function handler(req, res) {
     }
 
     const hStart = cfg.reportHourStart;
-    const hEnd = cfg.reportHourEnd;
+    const hEnd = cfg.reportHourEnd; // exclusive (vd: 20 nghĩa là đến 20h)
     const date = getTodayVN();
 
+    // 2. Lấy dữ liệu người dùng và thống kê
     const { userMap, roleKeys } = await fetchActiveUsers();
     if (userMap.size === 0)
       return res.json({ success: false, reason: "Không có user active." });
@@ -412,16 +454,16 @@ export default async function handler(req, res) {
       });
     }
 
-    // Tính displayTotal và effectiveHours riêng cho từng user
+    // 3. Tính toán displayTotal và effectiveHours RIÊNG cho từng user
     const breakStart = cfg.breakStartHour + cfg.breakStartMin / 60;
     const breakEnd = cfg.breakEndHour + cfg.breakEndMin / 60;
-    const reportStart = hStart;
-    const reportEnd = hEnd; // exclusive
 
     withData.forEach((user) => {
       let rawTotal = 0;
       let activeHours = 0;
-      for (let h = reportStart; h < reportEnd; h++) {
+
+      // Duyệt từng giờ trong khung báo cáo (hStart → hEnd-1)
+      for (let h = hStart; h < hEnd; h++) {
         const cnt = user.hourly?.[h] || 0;
         if (cnt > 0) {
           activeHours++;
@@ -435,7 +477,9 @@ export default async function handler(req, res) {
         return;
       }
 
-      const hasFullBreak = reportStart <= breakStart && reportEnd >= breakEnd;
+      const workStart = hStart;
+      const workEnd = hEnd;
+      const hasFullBreak = workStart <= breakStart && workEnd >= breakEnd;
       let effectiveHours = activeHours;
       if (hasFullBreak && activeHours > 1) {
         effectiveHours = activeHours - 1;
@@ -445,6 +489,7 @@ export default async function handler(req, res) {
       user.effectiveHours = effectiveHours;
     });
 
+    // 4. Nhóm theo role_key
     const groups = new Map();
     withData.forEach((u) => {
       const rk = u.role_key;
@@ -456,6 +501,7 @@ export default async function handler(req, res) {
       return res.json({ success: false, reason: "Thiếu webhook URL." });
     }
 
+    // 5. Sinh ảnh và gửi
     const sent = [];
     for (const [rk, users] of groups.entries()) {
       const { display_name: dn } = roleDetails.get(rk) || { display_name: rk };
@@ -467,6 +513,7 @@ export default async function handler(req, res) {
         hStart,
         hEnd,
         roleDetails,
+        cfg,
       );
       if (b64.length > MAX_IMAGE_BYTES) {
         console.warn(`[WARN] Ảnh ${dn} quá lớn, bỏ qua.`);
@@ -478,6 +525,7 @@ export default async function handler(req, res) {
       await delay(1200);
     }
 
+    // 6. Ghi log
     await supabase
       .from("qc_report_logs")
       .insert({

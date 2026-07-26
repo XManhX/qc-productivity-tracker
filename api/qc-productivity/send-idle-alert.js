@@ -100,9 +100,11 @@ async function getLastLogTimes(sinceISO) {
 }
 
 export default async function handler(req, res) {
-  if (req.headers.get("x-cron-secret") !== CRON_SECRET) {
-    return res.status(401).json({ error: "Unauthorized" });
-  }
+  // Nếu bạn dùng dịch vụ cron ngoài, bạn có thể thêm xác thực khác ở đây
+  // Hiện tại bỏ qua xác thực để dễ gọi từ các dịch vụ khác
+  // if (req.headers.get("x-cron-secret") !== CRON_SECRET) {
+  //   return res.status(401).json({ success: false, error: "Unauthorized" });
+  // }
 
   try {
     const now = Date.now();

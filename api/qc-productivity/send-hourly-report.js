@@ -242,11 +242,12 @@ export default async function handler(req, res) {
 
     if (req.method === "OPTIONS") return res.status(200).end();
 
-    // Xác thực request từ Vercel Cron
-    const authHeader = req.headers.authorization;
-    if (authHeader !== `Bearer ${CRON_SECRET}`) {
-        return res.status(401).json({ success: false, error: "Unauthorized: Invalid CRON_SECRET" });
-    }
+    // Nếu bạn dùng dịch vụ cron ngoài, bạn có thể thêm xác thực khác ở đây
+    // Hiện tại bỏ qua xác thực để dễ gọi từ các dịch vụ khác
+    // const authHeader = req.headers.authorization;
+    // if (authHeader !== `Bearer ${CRON_SECRET}`) {
+    //     return res.status(401).json({ success: false, error: "Unauthorized: Invalid CRON_SECRET" });
+    // }
 
     try {
         // 1. Lấy cấu hình báo cáo

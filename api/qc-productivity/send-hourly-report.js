@@ -142,9 +142,9 @@ export default async function handler(req, res) {
             tableMarkdown += `⚠️ Không có dữ liệu năng suất nào trong khung giờ này.`;
         }
 
-        // Giới hạn 4096 ký tự (nếu dài quá thì cắt bớt, nhưng có thể để ý sau)
-        if (tableMarkdown.length > 4096) {
-            tableMarkdown = tableMarkdown.substring(0, 4000) + "\n\n... (đã cắt bớt do quá dài)";
+        // Giới hạn 1000 ký tự (nếu dài quá thì cắt bớt, nhưng có thể để ý sau)
+        if (tableMarkdown.length > 1000) {
+            tableMarkdown = tableMarkdown.substring(0, 950) + "\n\n... (đã cắt bớt do quá dài)";
         }
 
         // ========== GỬI WEBHOOK ==========

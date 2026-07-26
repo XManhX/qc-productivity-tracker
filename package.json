@@ -19,6 +19,9 @@
     "@supabase/supabase-js": "^2.39.0",
     "@vercel/og": "^0.11.1",
     "react": "^18.2.0",
-    "react-dom": "^18.2.0"
+    "react-dom": "^18.2.0",
+    "node-html-to-image": "^6.2.0",
+    "@sparticuz/chromium": "^149.0.0",
+    "puppeteer-core": "^25.3.0"
   }
 }

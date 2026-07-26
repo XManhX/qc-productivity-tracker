@@ -369,27 +369,12 @@ export default async function handler(req, res) {
             totalUsers: processedData.length
         });
 
-        // Ghi log thành công
-        await supabase.from("qc_report_logs").insert({
-            report_type: "hourly_heatmap",
-            image_url: imageUrl,
-            sent_at: new Date().toISOString(),
-            status: "success"
-        });
-
-        return res.status(200).json({
-            success: true,
-            message: "Báo cáo đã được gửi thành công đến SeaTalk",
-            imageUrl,
-            reportTime: reportTimeVN
-        });
-
     } catch (error) {
         console.error("[send-hourly-report] Lỗi:", error);
 
         // Ghi log lỗi
         await supabase.from("qc_report_logs").insert({
-            report_type: "hourly_heatmap",
+            report_type: "hourly_text",
             error_message: error.message,
             sent_at: new Date().toISOString(),
             status: "failed"

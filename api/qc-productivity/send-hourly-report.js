@@ -485,7 +485,7 @@ export default async function handler(req, res) {
         effectiveHours = activeHours - 1;
       }
 
-      user.displayTotal = Math.round((rawTotal * effectiveHours) / activeHours);
+      user.displayTotal = rawTotal;
       user.effectiveHours = effectiveHours;
     });
 

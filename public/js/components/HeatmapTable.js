@@ -102,8 +102,7 @@ export class HeatmapTable {
       effectiveHours = activeHours - 1; // trừ 1 giờ nghỉ trưa
     }
 
-    const displayTotal = Math.round((rawTotal * effectiveHours) / activeHours);
-    return { displayTotal, effectiveHours };
+    return { displayTotal: rawTotal, effectiveHours };
   }
 
   // ==================== CẤU TRÚC GIAO DIỆN ====================

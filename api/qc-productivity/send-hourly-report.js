@@ -1,9 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
-import nodeHtmlToImage from "node-html-to-image";
+import puppeteer from "puppeteer-core";
 import chromium from "@sparticuz/chromium";
-import { promises as fs } from "fs";
-import path from "path";
-import os from "os";
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
@@ -233,18 +230,20 @@ async function generateReportImage(data, reportDate, hourStart, hourEnd, thresho
     </html>
   `;
 
-  const imagePath = path.join(os.tmpdir(), `report-${Date.now()}.png`);
-
-  await nodeHtmlToImage({
-    output: imagePath,
-    html: htmlContent,
-    puppeteer: chromium.puppeteer,
-    puppeteerArgs: chromium.args,
-  });
-
-  const fileBuffer = await fs.readFile(imagePath);
-  await fs.unlink(imagePath);
-  return fileBuffer.toString("base64");
+  let browser = null;
+  try {
+    browser = await puppeteer.launch({
+      args: chromium.args,
+      executablePath: await chromium.executablePath(),
+      headless: true,
+    });
+    const page = await browser.newPage();
+    await page.setContent(htmlContent, { waitUntil: "networkidle0" });
+    const screenshotBuffer = await page.screenshot({ type: "png", fullPage: true });
+    return screenshotBuffer.toString("base64");
+  } finally {
+    if (browser) await browser.close();
+  }
 }
 
 export default async function handler(req, res) {
@@ -316,7 +315,7 @@ export default async function handler(req, res) {
       return res.json({ success: false, reason: "Thiếu webhook URL" });
     }
 
-    // Tạo ảnh và gửi
+    // Tạo ảnh
     const base64Image = await generateReportImage(
       processedData, reportDate, hourStart, hourEnd, thresholdsMap
     );
@@ -328,7 +327,7 @@ export default async function handler(req, res) {
     await sendSeaTalkImage(webhookUrl, base64Image);
     console.log("Đã gửi ảnh báo cáo thành công");
 
-    // Ghi log thành công
+    // Ghi log
     try {
       await supabase.from("qc_report_logs").insert({
         report_type: "hourly_image",

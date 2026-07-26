@@ -47,11 +47,5 @@
         }
       ]
     }
-  ],
-  "rewrites": [
-    {
-      "source": "/api/(.*)",
-      "destination": "/api/qc-productivity/$1"
-    }
   ]
 }

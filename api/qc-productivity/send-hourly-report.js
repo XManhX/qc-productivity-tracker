@@ -339,7 +339,7 @@ export default async function handler(req, res) {
             reportContent += `${(index + 1).toString().padEnd(5)}${name.padEnd(25)}${(user.total || 0).toString().padEnd(8)}\n`;
         });
         reportContent += "```\n";
-        reportContent += `\n🔗 Xem chi tiết tại: https://qc-productivity-tracker.vercel.app`;
+        // reportContent += `\n🔗 Xem chi tiết tại: https://qc-productivity-tracker.vercel.app`;
 
         // Gửi báo cáo đến SeaTalk
         const webhookUrl = config.report_seatalk_webhook_url || config.seatalk_webhook_url;

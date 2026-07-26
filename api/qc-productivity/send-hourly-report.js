@@ -218,9 +218,13 @@ function generateHeatmapHTML(data, hourStart, hourEnd, reportDate) {
 async function sendSeaTalkTextWebhook(webhookUrl, content, reportTime) {
     if (!webhookUrl) throw new Error("Thiếu SeaTalk webhook URL trong cấu hình");
 
+    // Sửa payload đúng định dạng SeaTalk API (giống send-idle-alert.js)
     const payload = {
-        msg_type: "text",
-        content: content
+        tag: "text",
+        text: {
+            format: 1,
+            content: content
+        }
     };
 
     const response = await fetch(webhookUrl, {

@@ -38,10 +38,7 @@ export class HeatmapTable {
     this._startStatusTimer();
     this._updateStatusDisplay();
   }
-  /**
-   * Lấy cấu hình giờ nghỉ từ DashboardStore (đã tích hợp alertConfig).
-   * Fallback an toàn nếu chưa có dữ liệu.
-   */
+
   _getBreakConfig() {
     const cfg = store.getAlertConfig();
     if (cfg) {
@@ -56,35 +53,42 @@ export class HeatmapTable {
   }
 
   /**
-   * Tính tổng hiển thị & số giờ làm việc thực tế sau khi trừ giờ nghỉ trưa.
-   * Giả định năng suất phân bố đều, không xóa dữ liệu gốc.
+   * Tính tổng hiển thị & số giờ làm việc thực tế cho một user.
+   * Dựa trên số giờ có sản lượng (activeHours) trong khung giờ hiển thị.
+   * Nếu khung giờ bao trọn giờ nghỉ trưa thì trừ 1 giờ khỏi activeHours.
    */
   _computeDisplayTotal(user, hourStart, hourEnd) {
-    const totalHours = hourEnd - hourStart;
-
-    // Tổng thực tế từ tất cả các giờ trong khung
     let rawTotal = 0;
+    let activeHours = 0;
+
+    // Duyệt từng giờ trong khung hiển thị (inclusive)
     for (let h = hourStart; h <= hourEnd; h++) {
-      rawTotal += user.hourly?.[h] || 0;
+      const cnt = user.hourly?.[h] || 0;
+      if (cnt > 0) {
+        activeHours++;
+        rawTotal += cnt;
+      }
+    }
+
+    if (activeHours === 0) {
+      return { displayTotal: 0, effectiveHours: 0 };
     }
 
     const breakCfg = this._getBreakConfig();
-    const breakStart = breakCfg.startHour + breakCfg.startMin / 60; // dạng float
+    const breakStart = breakCfg.startHour + breakCfg.startMin / 60;
     const breakEnd = breakCfg.endHour + breakCfg.endMin / 60;
+
+    // Kiểm tra khung hiển thị có bao trọn giờ nghỉ không
     const workStart = hourStart;
-    const workEnd = hourEnd + 1;  // thời điểm kết thúc ca
+    const workEnd = hourEnd + 1; // thời điểm kết thúc (exclusive)
+    const hasFullBreak = workStart <= breakStart && workEnd >= breakEnd;
 
-    // Kiểm tra ca làm việc có bao trọn giờ nghỉ không
-    const hasFullBreak = (workStart <= breakStart && workEnd >= breakEnd);
-
-    let effectiveHours = totalHours;
-    if (hasFullBreak && totalHours > 1) {
-      effectiveHours = totalHours - 1;   // trừ đúng 1 giờ nghỉ
+    let effectiveHours = activeHours;
+    if (hasFullBreak && activeHours > 1) {
+      effectiveHours = activeHours - 1; // trừ 1 giờ nghỉ trưa
     }
 
-    // Tổng hiển thị = tổng thực tế * (giờ làm việc thực tế / tổng giờ)
-    const displayTotal = Math.round(rawTotal * effectiveHours / totalHours);
-
+    const displayTotal = Math.round((rawTotal * effectiveHours) / activeHours);
     return { displayTotal, effectiveHours };
   }
 
@@ -101,11 +105,10 @@ export class HeatmapTable {
             <span class="inline-flex items-center gap-1"><span class="legend-dot bg-red-50 border-red-200"></span> Thấp</span>
             <span class="inline-flex items-center gap-1"><span class="legend-dot bg-yellow-50 border-yellow-200"></span> Trung bình</span>
             <span class="inline-flex items-center gap-1"><span class="legend-dot bg-green-50 border-green-200"></span> Tốt</span>
-            <span class="text-slate-400 italic ml-2">(ngưỡng theo từng role)</span>
+            <span class="text-slate-400 italic ml-2">(ngưỡng dựa trên giờ có sản lượng thực tế, đã trừ 1h nghỉ nếu có)</span>
           </div>
         </div>
         <div class="flex items-center gap-3">
-          <!-- NÚT XUẤT ẢNH -->
           <button id="btn-export-image" 
                   class="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg 
                         bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 
@@ -132,7 +135,6 @@ export class HeatmapTable {
       </div>
     `;
     refreshIcons();
-    // Gán sự kiện cho nút xuất ảnh
     const exportBtn = this.container.querySelector("#btn-export-image");
     if (exportBtn) {
       exportBtn.addEventListener("click", () => this.exportToImage());
@@ -177,14 +179,12 @@ export class HeatmapTable {
           timeInfo = `đã tải ${this._formatDuration(elapsed)}`;
         }
         break;
-
       case "error":
         statusClass = "bg-red-50 text-red-700";
         iconHtml = `<i data-lucide="alert-circle" class="w-3.5 h-3.5"></i>`;
         label = "Lỗi cập nhật";
         timeInfo = "thử lại sau";
         break;
-
       case "success":
         statusClass = "bg-emerald-50 text-emerald-700";
         iconHtml = `<i data-lucide="check-circle-2" class="w-3.5 h-3.5"></i>`;
@@ -195,7 +195,6 @@ export class HeatmapTable {
           timeInfo = `⏳ ${this._formatDuration(remaining)}`;
         }
         break;
-
       default:
         statusClass = "bg-slate-100 text-slate-500";
         iconHtml = `<span class="w-1.5 h-1.5 rounded-full bg-slate-400"></span>`;
@@ -237,8 +236,8 @@ export class HeatmapTable {
   // ==================== HEADER ====================
   _buildHeader(headerRow, hourStart, hourEnd) {
     const leftName = 0;
-    const leftRole = 280; // 280px = width của cột Nhân viên
-    const leftTotal = 280 + 90; // 370px
+    const leftRole = 280;
+    const leftTotal = 280 + 90;
 
     let html = `
       <th class="sticky top-0 left-[${leftName}px] z-40 w-[280px] min-w-[280px] px-4 py-2 text-left font-semibold text-slate-700 bg-slate-100">
@@ -373,7 +372,7 @@ export class HeatmapTable {
     tr.className = "hover:bg-slate-50/80 transition duration-150";
     tr.dataset.userEmail = user.email;
 
-    // Cột Nhân viên – width 280px
+    // Cột Nhân viên
     const tdName = document.createElement("td");
     tdName.className = `sticky left-[${leftName}px] z-10 bg-white w-[280px] min-w-[280px] px-4 py-2 text-left font-medium text-slate-900 border-r border-slate-100 max-w-[280px]`;
     tdName.innerHTML = `
@@ -388,17 +387,22 @@ export class HeatmapTable {
       </div>`;
     tr.appendChild(tdName);
 
-    // Cột Role – left 280px
+    // Cột Role
     const tdRole = document.createElement("td");
     tdRole.className = `sticky left-[${leftRole}px] z-10 bg-white w-[90px] min-w-[90px] px-2 py-2 border-r border-slate-100 text-sm`;
     tdRole.textContent = user.display_name || user.role_key || "-";
     tr.appendChild(tdRole);
 
-    // Cột Tổng – left 370px
-    const { displayTotal, effectiveHours } = this._computeDisplayTotal(user, hourStart, hourEnd);
+    // Cột Tổng
+    const { displayTotal, effectiveHours } = this._computeDisplayTotal(
+      user,
+      hourStart,
+      hourEnd,
+    );
     const lowTotal = (user.low_threshold || 10) * effectiveHours;
     const highTotal = (user.medium_threshold || 16) * effectiveHours;
-    const total = displayTotal;   // dùng cho hiển thị và màu
+    const total = displayTotal;
+
     const tdTotal = document.createElement("td");
     tdTotal.className = this._getTotalCellClass(
       total,
@@ -407,6 +411,7 @@ export class HeatmapTable {
       leftTotal,
     );
     tdTotal.textContent = total;
+    tdTotal.title = `Tổng ước tính cho ${effectiveHours} giờ làm việc thực tế (đã trừ 1h nghỉ trưa nếu có)`;
     tr.appendChild(tdTotal);
 
     // Các cột giờ
@@ -438,7 +443,7 @@ export class HeatmapTable {
   _diffUpdate(newData, hourStart, hourEnd) {
     const tbody = this.container.querySelector("#dashboard-body");
     const oldDataMap = new Map(this._previousData.map((u) => [u.email, u]));
-    const leftTotal = 370; // cập nhật leftTotal mới
+    const leftTotal = 370;
 
     newData.forEach((user) => {
       const tr = tbody.querySelector(`tr[data-user-email="${user.email}"]`);
@@ -446,13 +451,11 @@ export class HeatmapTable {
         this._fullRender(newData, hourStart, hourEnd);
         return;
       }
-
       const oldUser = oldDataMap.get(user.email);
       if (!oldUser) {
         this._fullRender(newData, hourStart, hourEnd);
         return;
       }
-
       this._updateRow(tr, user, oldUser, hourStart, hourEnd, leftTotal);
     });
   }
@@ -483,8 +486,13 @@ export class HeatmapTable {
       tds[1].textContent = user.display_name || user.role_key || "-";
     }
 
-    const { displayTotal: totalNew, effectiveHours: effNew } = this._computeDisplayTotal(user, hourStart, hourEnd);
-    const { displayTotal: totalOld, effectiveHours: effOld } = this._computeDisplayTotal(oldUser, hourStart, hourEnd);
+    const { displayTotal: totalNew, effectiveHours: effNew } =
+      this._computeDisplayTotal(user, hourStart, hourEnd);
+    const { displayTotal: totalOld } = this._computeDisplayTotal(
+      oldUser,
+      hourStart,
+      hourEnd,
+    );
 
     if (
       totalNew !== totalOld ||
@@ -494,7 +502,13 @@ export class HeatmapTable {
       const lowTotal = (user.low_threshold || 10) * effNew;
       const highTotal = (user.medium_threshold || 16) * effNew;
       tds[2].textContent = totalNew;
-      tds[2].className = this._getTotalCellClass(totalNew, lowTotal, highTotal, leftTotal);
+      tds[2].className = this._getTotalCellClass(
+        totalNew,
+        lowTotal,
+        highTotal,
+        leftTotal,
+      );
+      tds[2].title = `Tổng ước tính cho ${effNew} giờ làm việc thực tế (đã trừ 1h nghỉ trưa nếu có)`;
     }
 
     for (let h = hourStart; h <= hourEnd; h++) {
@@ -552,9 +566,9 @@ export class HeatmapTable {
 
   _attachSortEvents() {
     this.container.querySelectorAll("[data-sort-trigger]").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        store.setSort(btn.dataset.sortTrigger);
-      });
+      btn.addEventListener("click", () =>
+        store.setSort(btn.dataset.sortTrigger),
+      );
     });
   }
 
@@ -587,7 +601,6 @@ export class HeatmapTable {
     const exportBtn = this.container.querySelector("#btn-export-image");
     if (!exportBtn) return;
 
-    // --- Loading ---
     const originalHTML = exportBtn.innerHTML;
     exportBtn.innerHTML =
       '<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i><span>Đang xuất...</span>';
@@ -595,11 +608,9 @@ export class HeatmapTable {
     refreshIcons();
 
     try {
-      // 1. Lấy dữ liệu hiện tại từ store
       const { filters, sort } = store.state;
       const hourStart = Number(filters.hourStart);
       const hourEnd = Number(filters.hourEnd);
-      // Sắp xếp giống bảng đang hiển thị (nếu cần)
       const sortedData = [...store.items].sort((a, b) => {
         const av = this._getSortValue(a, sort.key);
         const bv = this._getSortValue(b, sort.key);
@@ -608,7 +619,6 @@ export class HeatmapTable {
         return 0;
       });
 
-      // 2. Tạo container tạm, nằm ngoài màn hình
       const container = document.createElement("div");
       container.style.position = "absolute";
       container.style.top = "-9999px";
@@ -617,9 +627,7 @@ export class HeatmapTable {
       container.style.padding = "12px";
       container.style.fontFamily = "Inter, sans-serif";
 
-      // 3. Dựng bảng HTML thuần
       let html = `<table style="border-collapse: collapse; width: auto; font-size: 13px;">`;
-      // Header
       html += `<thead><tr style="background: #f1f5f9; font-weight: 600; text-align: center;">`;
       html += `<th style="border: 1px solid #cbd5e1; padding: 8px 12px; min-width: 200px; text-align: left;">Nhân viên</th>`;
       html += `<th style="border: 1px solid #cbd5e1; padding: 8px 12px; min-width: 80px; text-align: left;">Role</th>`;
@@ -629,14 +637,12 @@ export class HeatmapTable {
       }
       html += `</tr></thead><tbody>`;
 
-      // Dữ liệu từng dòng
       sortedData.forEach((user) => {
-        // Tính tổng đã trừ giờ nghỉ và số giờ làm việc hiệu quả
-        const { displayTotal: total, effectiveHours } = this._computeDisplayTotal(user, hourStart, hourEnd);
+        const { displayTotal: total, effectiveHours } =
+          this._computeDisplayTotal(user, hourStart, hourEnd);
         const lowTotal = (user.low_threshold || 10) * effectiveHours;
         const highTotal = (user.medium_threshold || 16) * effectiveHours;
 
-        // Màu nền cột Tổng
         let totalBg = "#f8fafc";
         if (total > 0) {
           if (total < lowTotal) totalBg = "#fee2e2";
@@ -645,19 +651,15 @@ export class HeatmapTable {
         }
 
         html += `<tr>`;
-        // Cột Nhân viên
         const name = user.name || user.email;
         const email = user.name ? user.email : "";
         html += `<td style="border: 1px solid #e2e8f0; padding: 8px 12px; text-align: left;">
                 <div style="font-weight: 500;">${name}</div>
                 ${email ? `<div style="font-size: 11px; color: #64748b;">${email}</div>` : ""}
               </td>`;
-        // Cột Role
         html += `<td style="border: 1px solid #e2e8f0; padding: 8px 12px;">${user.display_name || user.role_key || "-"}</td>`;
-        // Cột Tổng
-        html += `<td style="border: 1px solid #e2e8f0; padding: 8px 12px; text-align: center; font-weight: bold; background: ${totalBg};">${total}</td>`;
+        html += `<td style="border: 1px solid #e2e8f0; padding: 8px 12px; text-align: center; font-weight: bold; background: ${totalBg};" title="Tổng ước tính cho ${effectiveHours} giờ làm việc thực tế">${total}</td>`;
 
-        // Các cột giờ
         for (let h = hourStart; h <= hourEnd; h++) {
           const count = user.hourly?.[h] || 0;
           let bg = "#f8fafc";
@@ -687,10 +689,8 @@ export class HeatmapTable {
       container.innerHTML = html;
       document.body.appendChild(container);
 
-      // Chờ render
       await new Promise((r) => setTimeout(r, 100));
 
-      // 4. Chụp ảnh bảng vừa tạo
       const canvas = await html2canvas(container.firstElementChild, {
         backgroundColor: "#ffffff",
         scale: 2,
@@ -701,7 +701,6 @@ export class HeatmapTable {
 
       document.body.removeChild(container);
 
-      // 5. Tải file
       const link = document.createElement("a");
       const dateStr = new Date().toISOString().slice(0, 10);
       link.download = `QC_Heatmap_${dateStr}.png`;

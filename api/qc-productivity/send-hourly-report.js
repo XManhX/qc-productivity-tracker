@@ -5,7 +5,7 @@ import chromium from "@sparticuz/chromium";
 // ---------- Supabase Client ----------
 const supabase = createClient(
   process.env.SUPABASE_URL,
-  process.env.SUPABASE_ANON_KEY
+  process.env.SUPABASE_ANON_KEY,
 );
 
 // ---------- Constants ----------
@@ -21,33 +21,20 @@ let configFetchedAt = 0;
 
 // ==================== CONFIG PARSER ====================
 function parseReportConfig(raw) {
-  const reportEnabled = raw?.report_enabled ?? true;
-  const reportHourStart = raw?.report_hour_start ?? 8;
-  const reportHourEnd = raw?.report_hour_end ?? 20;
-  const reportMinute = raw?.report_minute ?? 10;
-  const onlyWorkdays = raw?.report_only_workdays ?? true;
-  const webhook = raw?.report_seatalk_webhook_url || raw?.seatalk_webhook_url || null;
-
-  const workStartHour = raw?.work_start_hour ?? 8;
-  const workEndHour = raw?.work_end_hour ?? 20;
-  const breakStartHour = raw?.break_start_hour ?? 12;
-  const breakStartMin = raw?.break_start_min ?? 30;
-  const breakEndHour = raw?.break_end_hour ?? 13;
-  const breakEndMin = raw?.break_end_min ?? 30;
-
   return {
-    reportEnabled,
-    reportHourStart,
-    reportHourEnd,
-    reportMinute,
-    onlyWorkdays,
-    webhook,
-    workStartHour,
-    workEndHour,
-    breakStartHour,
-    breakStartMin,
-    breakEndHour,
-    breakEndMin,
+    reportEnabled: raw?.report_enabled ?? true,
+    reportHourStart: raw?.report_hour_start ?? 8,
+    reportHourEnd: raw?.report_hour_end ?? 20,
+    reportMinute: raw?.report_minute ?? 10,
+    onlyWorkdays: raw?.report_only_workdays ?? true,
+    webhook:
+      raw?.report_seatalk_webhook_url || raw?.seatalk_webhook_url || null,
+    workStartHour: raw?.work_start_hour ?? 8,
+    workEndHour: raw?.work_end_hour ?? 20,
+    breakStartHour: raw?.break_start_hour ?? 12,
+    breakStartMin: raw?.break_start_min ?? 30,
+    breakEndHour: raw?.break_end_hour ?? 13,
+    breakEndMin: raw?.break_end_min ?? 30,
   };
 }
 
@@ -86,14 +73,9 @@ const getTodayVN = () => {
   return d.toISOString().split("T")[0];
 };
 
-const isWorkdayVN = () => {
-  // Có thể sửa logic nếu cần, hiện tại luôn trả về true
-  return true;
-};
-
+const isWorkdayVN = () => true;
 const delay = (ms) => new Promise((r) => setTimeout(r, ms));
 
-// ==================== SEA TALK ====================
 async function sendImage(webhookUrl, base64) {
   const res = await fetch(webhookUrl, {
     method: "POST",
@@ -109,11 +91,12 @@ async function sendImage(webhookUrl, base64) {
   }
 }
 
-// ==================== DATA ====================
 async function fetchRoleDetails(roleKeys) {
   const { data, error } = await supabase
     .from("qc_roles")
-    .select("role_key, display_name, qc_productivity_targets(low_threshold, medium_threshold)")
+    .select(
+      "role_key, display_name, qc_productivity_targets(low_threshold, medium_threshold)",
+    )
     .in("role_key", [...roleKeys]);
 
   if (error) throw new Error(`Lỗi lấy role: ${error.message}`);
@@ -128,7 +111,12 @@ async function fetchRoleDetails(roleKeys) {
     });
   });
   roleKeys.forEach((k) => {
-    if (!map.has(k)) map.set(k, { display_name: k, low_threshold: DEFAULT_LOW, medium_threshold: DEFAULT_MEDIUM });
+    if (!map.has(k))
+      map.set(k, {
+        display_name: k,
+        low_threshold: DEFAULT_LOW,
+        medium_threshold: DEFAULT_MEDIUM,
+      });
   });
   return map;
 }
@@ -136,7 +124,9 @@ async function fetchRoleDetails(roleKeys) {
 async function fetchActiveUsers() {
   const { data, error } = await supabase
     .from("qc_users")
-    .select("email, name, is_active, role_id, qc_roles!inner(role_key, display_name)")
+    .select(
+      "email, name, is_active, role_id, qc_roles!inner(role_key, display_name)",
+    )
     .eq("is_active", true);
 
   if (error) throw new Error(`Lỗi lấy users: ${error.message}`);
@@ -184,9 +174,17 @@ async function mergeStats(targetDate, userMap) {
 }
 
 // ==================== IMAGE ====================
-function buildHTML(users, date, displayName, hStart, hEnd, roleMap, effectiveHours) {
+function buildHTML(
+  users,
+  date,
+  displayName,
+  hStart,
+  hEnd,
+  roleMap,
+  effectiveHours,
+) {
   const sorted = [...users].sort((a, b) => b.displayTotal - a.displayTotal);
-  const wHours = hEnd - hStart; // số cột giờ hiển thị
+  const wHours = hEnd - hStart;
 
   const cellStyle = (cnt, low, med) => {
     if (!cnt) return "background:#f8fafc; color:#cbd5e1;";
@@ -195,9 +193,9 @@ function buildHTML(users, date, displayName, hStart, hEnd, roleMap, effectiveHou
     return "background:#dcfce7; color:#166534; font-weight:700;";
   };
 
-  const totalStyle = (t, low, med) => {
-    const lo = low * effectiveHours;
-    const hi = med * effectiveHours;
+  const totalStyle = (t, low, med, effHrs) => {
+    const lo = low * effHrs;
+    const hi = med * effHrs;
     if (!t) return "background:#f8fafc; color:#94a3b8;";
     if (t < lo) return "background:#fee2e2; color:#991b1b; font-weight:bold;";
     if (t < hi) return "background:#fef9c3; color:#92400e; font-weight:bold;";
@@ -304,6 +302,7 @@ function buildHTML(users, date, displayName, hStart, hEnd, roleMap, effectiveHou
   <div class="meta">
     <span>👥 ${sorted.length} nhân viên</span>
     <span>⏰ ${hStart}:00 – ${hEnd}:00</span>
+    <span>🕒 Tổng dựa trên giờ có sản lượng (đã trừ 1h nghỉ nếu có)</span>
   </div>
   <table>
     <thead>
@@ -311,39 +310,43 @@ function buildHTML(users, date, displayName, hStart, hEnd, roleMap, effectiveHou
         <th style="width:50px;">STT</th>
         <th class="user-cell">Nhân viên</th>
         <th class="total-header" style="width:90px;">Tổng</th>
-        ${Array.from({ length: wHours }, (_, i) => `<th style="width:60px;">${hStart + i}:00</th>`).join('')}
+        ${Array.from({ length: wHours }, (_, i) => `<th style="width:60px;">${hStart + i}:00</th>`).join("")}
       </tr>
     </thead>
     <tbody>
-      ${sorted.map((u, idx) => {
-    const { low_threshold: low, medium_threshold: med } = roleMap.get(u.role_key) || {};
-    const t = u.displayTotal || 0; // dùng tổng đã điều chỉnh
-    const name = capitalizeName(u.name) || u.email;
-    const email = u.name ? u.email : '';
-    const hour = u.hourly || {};
-    return `
+      ${sorted
+        .map((u, idx) => {
+          const { low_threshold: low, medium_threshold: med } =
+            roleMap.get(u.role_key) || {};
+          const t = u.displayTotal || 0;
+          const effHrs = u.effectiveHours || 0;
+          const name = capitalizeName(u.name) || u.email;
+          const email = u.name ? u.email : "";
+          const hour = u.hourly || {};
+          return `
         <tr>
           <td style="color:#64748b;">${idx + 1}</td>
           <td class="user-cell">
             <span class="user-name" title="${name}">${name}</span>
-            ${email ? `<span class="user-email" title="${email}">${email}</span>` : ''}
+            ${email ? `<span class="user-email" title="${email}">${email}</span>` : ""}
           </td>
-          <td style="${totalStyle(t, low, med)}">${t}</td>
+          <td style="${totalStyle(t, low, med, effHrs)}" title="Tổng ước tính cho ${effHrs} giờ làm việc thực tế">${t}</td>
           ${Array.from({ length: wHours }, (_, i) => {
-      const h = hStart + i;
-      const cnt = hour[h] || 0;
-      return `<td style="${cellStyle(cnt, low, med)}">${cnt || '-'}</td>`;
-    }).join('')}
+            const h = hStart + i;
+            const cnt = hour[h] || 0;
+            return `<td style="${cellStyle(cnt, low, med)}">${cnt || "-"}</td>`;
+          }).join("")}
         </tr>`;
-  }).join('')}
+        })
+        .join("")}
     </tbody>
   </table>
 </div>
 </body></html>`;
 }
 
-async function generateImage(users, date, displayName, hStart, hEnd, roleMap, effectiveHours) {
-  const html = buildHTML(users, date, displayName, hStart, hEnd, roleMap, effectiveHours);
+async function generateImage(users, date, displayName, hStart, hEnd, roleMap) {
+  const html = buildHTML(users, date, displayName, hStart, hEnd, roleMap);
   let browser = null;
   try {
     browser = await puppeteer.launch({
@@ -368,7 +371,6 @@ async function generateImage(users, date, displayName, hStart, hEnd, roleMap, ef
   }
 }
 
-// ==================== MAIN ====================
 export default async function handler(req, res) {
   const secret = req.headers.get("x-cron-secret");
   if (secret !== process.env.CRON_SECRET) {
@@ -380,48 +382,69 @@ export default async function handler(req, res) {
   try {
     console.log("[INFO] Bắt đầu gửi báo cáo...");
 
-    // 1. Lấy cấu hình
     const cfg = await getConfig();
     if (!cfg.reportEnabled) {
       return res.json({ success: false, reason: "Báo cáo đang tắt." });
     }
     if (cfg.onlyWorkdays && !isWorkdayVN()) {
-      return res.json({ success: false, reason: "Hôm nay không phải ngày làm việc." });
+      return res.json({
+        success: false,
+        reason: "Hôm nay không phải ngày làm việc.",
+      });
     }
 
     const hStart = cfg.reportHourStart;
     const hEnd = cfg.reportHourEnd;
     const date = getTodayVN();
 
-    // 2. Lấy dữ liệu người dùng và thống kê
     const { userMap, roleKeys } = await fetchActiveUsers();
-    if (userMap.size === 0) return res.json({ success: false, reason: "Không có user active." });
+    if (userMap.size === 0)
+      return res.json({ success: false, reason: "Không có user active." });
 
     const roleDetails = await fetchRoleDetails(roleKeys);
     await mergeStats(date, userMap);
 
-    const withData = [...userMap.values()].filter(u => u.total > 0);
+    const withData = [...userMap.values()].filter((u) => u.total > 0);
     if (withData.length === 0) {
-      return res.json({ success: true, message: "Không có dữ liệu năng suất." });
+      return res.json({
+        success: true,
+        message: "Không có dữ liệu năng suất.",
+      });
     }
 
-    // 3. Tính số giờ làm việc hiệu quả (đã trừ giờ nghỉ trưa)
-    const totalHours = hEnd - hStart; // Tổng số giờ trong khung báo cáo
+    // Tính displayTotal và effectiveHours riêng cho từng user
     const breakStart = cfg.breakStartHour + cfg.breakStartMin / 60;
     const breakEnd = cfg.breakEndHour + cfg.breakEndMin / 60;
-    const hasFullBreak = (hStart <= breakStart && hEnd >= breakEnd);
-    const effectiveHours = (hasFullBreak && totalHours > 1) ? totalHours - 1 : totalHours;
+    const reportStart = hStart;
+    const reportEnd = hEnd; // exclusive
 
-    // Tính displayTotal cho từng user
-    withData.forEach(user => {
+    withData.forEach((user) => {
       let rawTotal = 0;
-      for (let h = hStart; h < hEnd; h++) {
-        rawTotal += user.hourly?.[h] || 0;
+      let activeHours = 0;
+      for (let h = reportStart; h < reportEnd; h++) {
+        const cnt = user.hourly?.[h] || 0;
+        if (cnt > 0) {
+          activeHours++;
+          rawTotal += cnt;
+        }
       }
-      user.displayTotal = Math.round(rawTotal * effectiveHours / totalHours);
+
+      if (activeHours === 0) {
+        user.displayTotal = 0;
+        user.effectiveHours = 0;
+        return;
+      }
+
+      const hasFullBreak = reportStart <= breakStart && reportEnd >= breakEnd;
+      let effectiveHours = activeHours;
+      if (hasFullBreak && activeHours > 1) {
+        effectiveHours = activeHours - 1;
+      }
+
+      user.displayTotal = Math.round((rawTotal * effectiveHours) / activeHours);
+      user.effectiveHours = effectiveHours;
     });
 
-    // 4. Nhóm theo role_key
     const groups = new Map();
     withData.forEach((u) => {
       const rk = u.role_key;
@@ -433,12 +456,18 @@ export default async function handler(req, res) {
       return res.json({ success: false, reason: "Thiếu webhook URL." });
     }
 
-    // 5. Sinh ảnh và gửi
     const sent = [];
     for (const [rk, users] of groups.entries()) {
       const { display_name: dn } = roleDetails.get(rk) || { display_name: rk };
       console.log(`[INFO] Tạo ảnh cho ${dn} (${users.length} users)`);
-      const b64 = await generateImage(users, date, dn, hStart, hEnd, roleDetails, effectiveHours);
+      const b64 = await generateImage(
+        users,
+        date,
+        dn,
+        hStart,
+        hEnd,
+        roleDetails,
+      );
       if (b64.length > MAX_IMAGE_BYTES) {
         console.warn(`[WARN] Ảnh ${dn} quá lớn, bỏ qua.`);
         continue;
@@ -449,24 +478,35 @@ export default async function handler(req, res) {
       await delay(1200);
     }
 
-    // 6. Ghi log
-    await supabase.from("qc_report_logs").insert({
-      report_type: "hourly_image_per_role",
-      content_text: `Đã gửi ${sent.length} ảnh: ${sent.join(", ")}`,
-      sent_at: new Date().toISOString(),
-      status: "success",
-    }).catch((e) => console.warn("Ghi log lỗi:", e.message));
+    await supabase
+      .from("qc_report_logs")
+      .insert({
+        report_type: "hourly_image_per_role",
+        content_text: `Đã gửi ${sent.length} ảnh: ${sent.join(", ")}`,
+        sent_at: new Date().toISOString(),
+        status: "success",
+      })
+      .catch((e) => console.warn("Ghi log lỗi:", e.message));
 
-    return res.json({ success: true, message: `Đã gửi ${sent.length} role`, roles: sent, date });
-
+    return res.json({
+      success: true,
+      message: `Đã gửi ${sent.length} role`,
+      roles: sent,
+      date,
+    });
   } catch (err) {
     console.error("[FATAL]", err);
-    await supabase.from("qc_report_logs").insert({
-      report_type: "hourly_image_per_role",
-      error_message: err.message,
-      sent_at: new Date().toISOString(),
-      status: "failed",
-    }).catch(() => { });
-    return res.status(500).json({ success: false, error: "Internal server error" });
+    await supabase
+      .from("qc_report_logs")
+      .insert({
+        report_type: "hourly_image_per_role",
+        error_message: err.message,
+        sent_at: new Date().toISOString(),
+        status: "failed",
+      })
+      .catch(() => {});
+    return res
+      .status(500)
+      .json({ success: false, error: "Internal server error" });
   }
 }

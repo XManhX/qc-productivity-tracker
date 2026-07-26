@@ -1,7 +1,7 @@
 // api/qc-productivity/send-hourly-report.js
 import { createClient } from "@supabase/supabase-js";
 import puppeteer from 'puppeteer-core';
-import chrome from 'chrome-aws-lambda';
+import chromium from '@sparticuz/chromium';
 
 const supabase = createClient(
     process.env.SUPABASE_URL,
@@ -180,9 +180,9 @@ function generateHeatmapHTML(data, hourStart, hourEnd, reportDate) {
 // Chụp ảnh từ HTML với Puppeteer
 async function htmlToImage(html) {
     const browser = await puppeteer.launch({
-        args: [...chrome.args, '--no-sandbox', '--disable-setuid-sandbox'],
-        executablePath: await chrome.executablePath,
-        headless: chrome.headless,
+        args: [...chromium.args, '--no-sandbox', '--disable-setuid-sandbox'],
+        executablePath: await chromium.executablePath(),
+        headless: chromium.headless,
         defaultViewport: { width: 1920, height: 1080 }
     });
 

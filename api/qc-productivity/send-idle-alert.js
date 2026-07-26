@@ -192,6 +192,16 @@ export default async function handler(req, res) {
         .json({ message: "All idle users are in cooldown or recently reset" });
     }
 
+    // Hàm format tên in hoa chữ đầu (định nghĩa 1 lần duy nhất)
+    const capitalizeName = (name) => {
+      if (!name) return name;
+      return name
+        .trim() // Xóa khoảng trắng thừa đầu/cuối
+        .split(/\s+/) // Tách tất cả khoảng trắng thừa giữa các từ
+        .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+        .join(" ");
+    };
+
     eligibleUsers.sort((a, b) => b.idle - a.idle);
     const displayUsers = eligibleUsers.slice(0, config.max_users_per_message);
 
@@ -202,7 +212,7 @@ export default async function handler(req, res) {
     let message = `⚠️ **Danh sách QC idle > ${config.idle_threshold_minutes} phút** (${nowStr})\n\n`;
     displayUsers.forEach((u, i) => {
       // Chuẩn hóa hiển thị tên ưu tiên name nếu có, nếu không thì dùng email
-      const displayName = u.name || u.email;
+      const displayName = u.name ? capitalizeName(u.name) : u.email;
       message += `${i + 1}. **${displayName}** - idle ${u.idle} phút (hoạt động cuối: ${u.lastActivityTime})\n`;
     });
     if (eligibleUsers.length > config.max_users_per_message) {

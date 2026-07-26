@@ -131,10 +131,10 @@ export default async function handler(req, res) {
     const sinceISO = new Date(vnToday.getTime() - 7 * 3600000).toISOString();
     const alertCooldown = now - config.cooldown_minutes * 60 * 1000;
 
-    // Lấy user active
+    // Lấy user active (lấy thêm name để hiển thị thay vì email)
     const { data: activeUsers, error: userError } = await supabase
       .from("qc_users")
-      .select("email, idle_alert_sent_at")
+      .select("email, name, idle_alert_sent_at")
       .eq("is_active", true);
 
     if (userError) throw userError;
@@ -201,7 +201,9 @@ export default async function handler(req, res) {
     });
     let message = `⚠️ **Danh sách QC idle > ${config.idle_threshold_minutes} phút** (${nowStr})\n\n`;
     displayUsers.forEach((u, i) => {
-      message += `${i + 1}. **${u.email}** - idle ${u.idle} phút (hoạt động cuối: ${u.lastActivityTime})\n`;
+      // Chuẩn hóa hiển thị tên ưu tiên name nếu có, nếu không thì dùng email
+      const displayName = u.name || u.email;
+      message += `${i + 1}. **${displayName}** - idle ${u.idle} phút (hoạt động cuối: ${u.lastActivityTime})\n`;
     });
     if (eligibleUsers.length > config.max_users_per_message) {
       message += `... và ${eligibleUsers.length - config.max_users_per_message} người khác.`;

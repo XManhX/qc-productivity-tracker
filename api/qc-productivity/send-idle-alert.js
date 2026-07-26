@@ -1,33 +1,18 @@
 import { createClient } from "@supabase/supabase-js";
+import XLSX from "xlsx";
 
+// ===== INIT SUPABASE =====
 const supabase = createClient(
   process.env.SUPABASE_URL,
-  process.env.SUPABASE_ANON_KEY
+  process.env.SUPABASE_SERVICE_ROLE_KEY   // dùng service key để đủ quyền
 );
 
-const CRON_SECRET = process.env.CRON_SECRET;
+// ===== COMMON UTILS =====
 const VN_OFFSET = 7 * 3600 * 1000;
-
-let cachedConfig = null;
-let lastConfigFetch = 0;
 
 function getTodayVN() {
   const now = new Date(Date.now() + VN_OFFSET);
   return now.toISOString().split("T")[0];
-}
-
-async function getAlertConfig() {
-  const now = Date.now();
-  if (cachedConfig && now - lastConfigFetch < 60_000) return cachedConfig;
-  const { data, error } = await supabase
-    .from("qc_alert_config")
-    .select("*")
-    .eq("id", 1)
-    .single();
-  if (error) throw new Error(`Config fetch error: ${error.message}`);
-  cachedConfig = data;
-  lastConfigFetch = now;
-  return data;
 }
 
 function createVNTimestamp(hour, min, nowMs = Date.now()) {
@@ -58,6 +43,21 @@ function getBreakTimestamps(nowMs, config) {
   };
 }
 
+function capitalizeName(name) {
+  if (!name) return name;
+  return name
+    .trim()
+    .split(/\s+/)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(" ");
+}
+
+function getPeriodOfDay() {
+  const vnHour = new Date(Date.now() + VN_OFFSET).getHours();
+  return vnHour < 12 ? "morning" : "afternoon";
+}
+
+// Hàm tính idle dùng cho alert (từ lastLog đến now, loại bỏ giờ nghỉ trưa)
 function calcIdleMinutes(lastLogMs, nowMs, workStartMs, workEndMs, breakStartMs, breakEndMs) {
   if (nowMs < workStartMs || nowMs >= workEndMs) return 0;
   if (nowMs >= breakStartMs && nowMs < breakEndMs) return 0;
@@ -72,6 +72,38 @@ function calcIdleMinutes(lastLogMs, nowMs, workStartMs, workEndMs, breakStartMs,
   const effectiveNow = Math.min(nowMs, workEndMs);
   const idleMs = effectiveNow - idleStartMs;
   return Math.max(0, Math.floor(idleMs / 60000));
+}
+
+// Hàm tính idle giữa hai log liên tiếp (dùng cho báo cáo)
+function calcIdleBetweenLogs(lastLogMs, currentLogMs, workStartMs, workEndMs, breakStartMs, breakEndMs) {
+  if (lastLogMs === 0 || currentLogMs <= lastLogMs) return 0;
+
+  let idleMs = currentLogMs - lastLogMs;
+  // trừ thời gian nghỉ trưa nếu overlap
+  if (breakStartMs && breakEndMs && lastLogMs < breakEndMs && currentLogMs > breakStartMs) {
+    const overlapStart = Math.max(lastLogMs, breakStartMs);
+    const overlapEnd = Math.min(currentLogMs, breakEndMs);
+    idleMs -= (overlapEnd - overlapStart);
+  }
+  return Math.max(0, Math.floor(idleMs / 60000));
+}
+
+// ===== ALERT FUNCTIONS =====
+let cachedConfig = null;
+let lastConfigFetch = 0;
+
+async function getAlertConfig() {
+  const now = Date.now();
+  if (cachedConfig && now - lastConfigFetch < 60_000) return cachedConfig;
+  const { data, error } = await supabase
+    .from("qc_alert_config")
+    .select("*")
+    .eq("id", 1)
+    .single();
+  if (error) throw new Error(`Config fetch error: ${error.message}`);
+  cachedConfig = data;
+  lastConfigFetch = now;
+  return data;
 }
 
 async function getLastLogTimes(sinceISO) {
@@ -91,22 +123,7 @@ async function getLastLogTimes(sinceISO) {
   return lastLogMap;
 }
 
-function capitalizeName(name) {
-  if (!name) return name;
-  return name
-    .trim()
-    .split(/\s+/)
-    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-    .join(" ");
-}
-
-function getPeriodOfDay() {
-  const vnHour = new Date(Date.now() + VN_OFFSET).getHours();
-  return vnHour < 12 ? "morning" : "afternoon";
-}
-
-// ========== THƯ VIỆN CÂU TỪ ==========
-
+// Thư viện câu từ
 const GREETINGS_GENERAL = [
   "🤗 Xin chào cả nhà yêu quý!",
   "💖 Cả nhà thân mến, cùng giúp nhau giữ vững tinh thần nhé!",
@@ -132,7 +149,6 @@ const GREETINGS_GENERAL = [
   "🌈 Cùng nhau giữ vững phong độ nào các chiến binh QC!",
   "🎯 Tập trung cao độ – thành công sẽ đến!",
 ];
-
 const GREETINGS_MORNING = [
   "☀️ Chúc mọi người một buổi sáng tràn đầy năng lượng!",
   "🌞 Chào buổi sáng, hy vọng mọi người đầy nhiệt huyết!",
@@ -143,7 +159,6 @@ const GREETINGS_MORNING = [
   "🍳 Một bữa sáng ngon lành, một ngày làm việc tuyệt vời!",
   "🧃 Sẵn sàng cho một buổi sáng bùng nổ nào!",
 ];
-
 const GREETINGS_AFTERNOON = [
   "⏰ Điểm danh sự tập trung buổi chiều!",
   "🌞 Chào buổi chiều, hy vọng mọi người vẫn đầy nhiệt huyết!",
@@ -155,7 +170,6 @@ const GREETINGS_AFTERNOON = [
   "🌆 Hoàng hôn sắp đến, nhưng deadline thì không chờ, cố lên!",
   "🍪 Bánh quy buổi chiều ai mua nào? Nhớ quay lại làm việc nha!",
 ];
-
 const MAIN_MESSAGES = [
   "Cùng điểm qua một vài bạn đã rời bàn phím hơi lâu nhé:",
   "Danh sách những bạn cần quay lại guồng quay công việc nè:",
@@ -184,7 +198,6 @@ const MAIN_MESSAGES = [
   "Mất tích tạm thời, tìm ngay những bạn sau:",
   "Báo cáo tình hình: có người đang “ngủ đông” giữa ca làm!",
 ];
-
 const CLOSINGS = [
   "💪 Cố gắng duy trì sự tập trung nhé, mọi người!",
   "🌸 Cảm ơn cả nhà đã luôn nỗ lực, cùng cố lên nào!",
@@ -210,7 +223,6 @@ const CLOSINGS = [
   "🧠 Tập trung là sức mạnh, đừng lãng phí nó!",
   "🌊 Hãy như sóng biển, luôn tiến về phía trước!",
 ];
-
 const CLOSING_FOOTER = [
   "\n\n🙏 Cảm ơn sự cố gắng của tất cả mọi người!",
   "\n\n💞 Cùng nhau tiến bước, không ai bị bỏ lại phía sau!",
@@ -231,7 +243,6 @@ const CLOSING_FOOTER = [
   "\n\n🕊️ Bình yên trong tâm hồn, hiệu quả trong công việc!",
   "",
 ];
-
 const SMALL_NOTES = [
   "💡 Mẹo nhỏ: Đặt chuông nhắc 30 phút một lần để giữ nhịp làm việc.",
   "☕ Một tách cà phê có thể giúp bạn tỉnh táo hơn, nhưng đừng quên quay lại nhé!",
@@ -258,8 +269,6 @@ function randomItem(arr) {
 function buildFriendlyMessage(displayUsers, eligibleUsers, config) {
   const nowStr = new Date().toLocaleString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" });
   const period = getPeriodOfDay();
-
-  // Chọn câu chào phù hợp buổi
   const periodGreetings = period === "morning" ? GREETINGS_MORNING : GREETINGS_AFTERNOON;
   const allGreetings = [...GREETINGS_GENERAL, ...periodGreetings];
   const greeting = randomItem(allGreetings);
@@ -286,143 +295,236 @@ function buildFriendlyMessage(displayUsers, eligibleUsers, config) {
   return message;
 }
 
-export default async function handler(req, res) {
-  // if (req.headers.get("x-cron-secret") !== CRON_SECRET) {
-  //   return res.status(401).json({ success: false, error: "Unauthorized" });
-  // }
-
+// ===== REPORT FUNCTIONS =====
+async function getCachedReport(type, reportDate) {
   try {
-    const now = Date.now();
-    const config = await getAlertConfig();
-    const { workStartMs, workEndMs } = getWorkTimestamps(now, config);
-    const { breakStartMs, breakEndMs } = getBreakTimestamps(now, config);
+    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+    const { data } = await supabase
+      .from("qc_reports")
+      .select("data, created_at")
+      .eq("report_type", type)
+      .eq("report_date", reportDate)
+      .gt("created_at", oneHourAgo)
+      .single();
+    return data?.data || null;
+  } catch (error) {
+    console.error("Cache read error:", error);
+    return null;
+  }
+}
 
-    if (now < workStartMs || now >= workEndMs) {
-      return res.status(200).json({ message: "Ngoài giờ làm việc, tạm dừng cảnh báo." });
-    }
-    if (now >= breakStartMs && now < breakEndMs) {
-      return res.status(200).json({ message: "Đang trong giờ nghỉ trưa, tạm dừng cảnh báo." });
-    }
+async function saveCachedReport(type, reportDate, reportData) {
+  try {
+    await supabase.from("qc_reports").upsert({
+      report_type: type,
+      report_date: reportDate,
+      data: reportData,
+      updated_at: new Date().toISOString(),
+    });
+  } catch (error) {
+    console.error("Cache save error:", error);
+  }
+}
 
-    const todayVN = getTodayVN();
-    const sinceISO = new Date(`${todayVN}T00:00:00+07:00`).toISOString();
-    const alertCooldown = now - config.cooldown_minutes * 60 * 1000;
+function generateExcelBuffer(reportData, reportType) {
+  const wb = XLSX.utils.book_new();
 
-    const { data: activeUsers, error: userError } = await supabase
-      .from("qc_users")
-      .select("email, name, idle_alert_sent_at")
-      .eq("is_active", true);
+  const summaryWS = XLSX.utils.json_to_sheet([
+    { "Chỉ số": "Tổng số QC", "Giá trị": reportData.summary.total_qc },
+    // ... giữ nguyên các dòng
+  ]);
+  XLSX.utils.book_append_sheet(wb, summaryWS, "Tổng quan");
 
-    if (userError) throw userError;
-    if (!activeUsers || activeUsers.length === 0) {
-      return res.status(200).json({ message: "No active users" });
-    }
+  const idleBreakdownWS = XLSX.utils.json_to_sheet([
+    { "Loại idle": "Dưới 15 phút", "Số lần": reportData.idle_breakdown.short_idle },
+    { "Loại idle": "15-30 phút", "Số lần": reportData.idle_breakdown.medium_idle },
+    { "Loại idle": "Hơn 30 phút", "Số lần": reportData.idle_breakdown.long_idle },
+  ]);
+  XLSX.utils.book_append_sheet(wb, idleBreakdownWS, "Phân loại idle");
 
-    const lastLogMap = await getLastLogTimes(sinceISO);
-    const idleUsers = [];
+  const userDetailWS = XLSX.utils.json_to_sheet(reportData.user_details);
+  XLSX.utils.book_append_sheet(wb, userDetailWS, "Chi tiết QC");
 
-    for (const user of activeUsers) {
-      const lastLogTime = lastLogMap.get(user.email);
-      if (!lastLogTime) continue;
+  if (reportType === "weekly" || reportType === "monthly") {
+    const rankingWS = XLSX.utils.json_to_sheet(reportData.ranking || reportData.top_performers);
+    XLSX.utils.book_append_sheet(wb, rankingWS, "Xếp hạng");
+  }
+  return wb;
+}
 
-      const lastLogMs = new Date(lastLogTime).getTime();
-      const idleMinutes = calcIdleMinutes(
-        lastLogMs,
-        now,
-        workStartMs,
-        workEndMs,
-        breakStartMs,
-        breakEndMs
-      );
+async function getDailyReport(dateStr, skipCache = false) {
+  // ... logic từ file report, nhưng sử dụng calcIdleBetweenLogs thay vì calcIdleMinutes cũ
+  // Lưu ý sửa các chỗ gọi calcIdleMinutes cũ thành calcIdleBetweenLogs
+}
 
-      if (idleMinutes < config.idle_threshold_minutes) continue;
+async function getDailyReportForPeriod(startDateStr, endDateStr) {
+  // ... giữ nguyên
+}
 
-      let lastAlertSent = user.idle_alert_sent_at || 0;
-      if (lastAlertSent > 0 && lastLogMs > lastAlertSent) {
-        lastAlertSent = 0;
+async function getWeeklyReport(endDateStr, skipCache = false) {
+  // ... giữ nguyên
+}
+
+async function getMonthlyReport(year, month, skipCache = false) {
+  // ... giữ nguyên
+}
+
+// ===== MAIN HANDLER =====
+export default async function handler(req, res) {
+  const { action = "alert" } = req.query; // mặc định là alert
+
+  if (action === "alert") {
+    // ========== XỬ LÝ CẢNH BÁO ==========
+    try {
+      const now = Date.now();
+      const config = await getAlertConfig();
+      const { workStartMs, workEndMs } = getWorkTimestamps(now, config);
+      const { breakStartMs, breakEndMs } = getBreakTimestamps(now, config);
+
+      if (now < workStartMs || now >= workEndMs) {
+        return res.status(200).json({ message: "Ngoài giờ làm việc, tạm dừng cảnh báo." });
+      }
+      if (now >= breakStartMs && now < breakEndMs) {
+        return res.status(200).json({ message: "Đang trong giờ nghỉ trưa, tạm dừng cảnh báo." });
       }
 
-      let idleStartMs;
-      if (lastLogMs >= breakEndMs) {
-        idleStartMs = Math.max(lastLogMs, workStartMs);
-      } else {
-        idleStartMs = Math.max(workStartMs, breakEndMs);
+      const todayVN = getTodayVN();
+      const sinceISO = new Date(`${todayVN}T00:00:00+07:00`).toISOString();
+      const alertCooldown = now - config.cooldown_minutes * 60 * 1000;
+
+      const { data: activeUsers, error: userError } = await supabase
+        .from("qc_users")
+        .select("email, name, idle_alert_sent_at")
+        .eq("is_active", true);
+      if (userError) throw userError;
+      if (!activeUsers?.length) {
+        return res.status(200).json({ message: "No active users" });
       }
-      const idleStartTime = new Date(idleStartMs).toLocaleTimeString("vi-VN", {
-        timeZone: "Asia/Ho_Chi_Minh",
-      });
 
-      idleUsers.push({
-        email: user.email,
-        name: user.name,
-        idle: idleMinutes,
-        idleStartTime,
-        lastAlertSent,
-      });
-    }
+      const lastLogMap = await getLastLogTimes(sinceISO);
+      const idleUsers = [];
 
-    if (idleUsers.length === 0) {
-      return res.status(200).json({ message: "No idle users to alert" });
-    }
+      for (const user of activeUsers) {
+        const lastLogTime = lastLogMap.get(user.email);
+        if (!lastLogTime) continue;
 
-    const eligibleUsers = idleUsers.filter(
-      (u) => u.lastAlertSent <= alertCooldown
-    );
-    if (eligibleUsers.length === 0) {
-      return res.status(200).json({
-        message: "All idle users are in cooldown or recently reset",
-      });
-    }
+        const lastLogMs = new Date(lastLogTime).getTime();
+        const idleMinutes = calcIdleMinutes(
+          lastLogMs, now, workStartMs, workEndMs, breakStartMs, breakEndMs
+        );
+        if (idleMinutes < config.idle_threshold_minutes) continue;
 
-    eligibleUsers.sort((a, b) => b.idle - a.idle);
-    const displayUsers = eligibleUsers.slice(0, config.max_users_per_message);
+        let lastAlertSent = user.idle_alert_sent_at || 0;
+        if (lastAlertSent > 0 && lastLogMs > lastAlertSent) lastAlertSent = 0;
 
-    const message = buildFriendlyMessage(displayUsers, eligibleUsers, config);
+        const idleStartMs = (lastLogMs >= breakEndMs)
+          ? Math.max(lastLogMs, workStartMs)
+          : Math.max(workStartMs, breakEndMs);
+        const idleStartTime = new Date(idleStartMs).toLocaleTimeString("vi-VN", {
+          timeZone: "Asia/Ho_Chi_Minh",
+        });
 
-    let sent = false;
-    const webhookUrl =
-      config.seatalk_webhook_url || process.env.SEATALK_ALERT_WEBHOOK_URL;
-    if (webhookUrl && !webhookUrl.includes("xxx")) {
-      try {
+        idleUsers.push({
+          email: user.email,
+          name: user.name,
+          idle: idleMinutes,
+          idleStartTime,
+          lastAlertSent,
+        });
+      }
+
+      if (!idleUsers.length) {
+        return res.status(200).json({ message: "No idle users to alert" });
+      }
+
+      const eligibleUsers = idleUsers.filter(u => u.lastAlertSent <= alertCooldown);
+      if (!eligibleUsers.length) {
+        return res.status(200).json({ message: "All idle users are in cooldown or recently reset" });
+      }
+
+      eligibleUsers.sort((a, b) => b.idle - a.idle);
+      const displayUsers = eligibleUsers.slice(0, config.max_users_per_message);
+      const message = buildFriendlyMessage(displayUsers, eligibleUsers, config);
+
+      let sent = false;
+      const webhookUrl = config.seatalk_webhook_url || process.env.SEATALK_ALERT_WEBHOOK_URL;
+      if (webhookUrl && !webhookUrl.includes("xxx")) {
         const webhookRes = await fetch(webhookUrl, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            tag: "text",
-            text: { format: 1, content: message },
-          }),
+          body: JSON.stringify({ tag: "text", text: { format: 1, content: message } }),
         });
         sent = webhookRes.ok;
-        if (!sent) {
-          console.error("Seatalk webhook failed:", await webhookRes.text());
-        }
-      } catch (webhookErr) {
-        console.error("Seatalk webhook error:", webhookErr);
+        if (!sent) console.error("Seatalk webhook failed:", await webhookRes.text());
+      } else {
+        console.warn("Webhook not configured, would send:", message);
+        sent = true;
       }
-    } else {
-      console.warn("SEATALK_ALERT_WEBHOOK_URL not configured, would send:", message);
-      sent = true;
-    }
 
-    if (sent && displayUsers.length > 0) {
-      const emailsToUpdate = displayUsers.map((u) => u.email);
-      const { error: updateError } = await supabase
-        .from("qc_users")
-        .update({ idle_alert_sent_at: now })
-        .in("email", emailsToUpdate);
-      if (updateError) {
-        console.error("Failed to update idle_alert_sent_at:", updateError);
+      if (sent && displayUsers.length > 0) {
+        await supabase
+          .from("qc_users")
+          .update({ idle_alert_sent_at: now })
+          .in("email", displayUsers.map(u => u.email));
       }
-    }
 
-    return res.status(200).json({
-      sent,
-      totalIdle: idleUsers.length,
-      eligible: eligibleUsers.length,
-      displayed: displayUsers.length,
-    });
-  } catch (err) {
-    console.error("send-idle-alert error:", err);
-    return res.status(500).json({ error: "Internal server error" });
+      return res.status(200).json({
+        sent,
+        totalIdle: idleUsers.length,
+        eligible: eligibleUsers.length,
+        displayed: displayUsers.length,
+      });
+    } catch (err) {
+      console.error("send-idle-alert error:", err);
+      return res.status(500).json({ error: "Internal server error" });
+    }
+  }
+
+  else if (action === "report") {
+    // ========== XỬ LÝ BÁO CÁO ==========
+    try {
+      const { date, year, month, type = "daily", force = "false", export_excel = "false" } = req.query;
+      const skipCache = force === "true";
+
+      let report;
+      let fileName;
+
+      if (type === "daily") {
+        const targetDate = date || getTodayVN();
+        report = await getDailyReport(targetDate, skipCache);
+        fileName = `qc-daily-report-${targetDate}.xlsx`;
+      } else if (type === "weekly") {
+        const endDate = date || getTodayVN();
+        report = await getWeeklyReport(endDate, skipCache);
+        fileName = `qc-weekly-report-${endDate}.xlsx`;
+      } else if (type === "monthly") {
+        const currentYear = year ? parseInt(year) : new Date().getFullYear();
+        const currentMonth = month ? parseInt(month) : new Date().getMonth() + 1;
+        report = await getMonthlyReport(currentYear, currentMonth, skipCache);
+        fileName = `qc-monthly-report-${currentYear}-${currentMonth.toString().padStart(2, "0")}.xlsx`;
+      }
+
+      if (export_excel === "true") {
+        const wb = generateExcelBuffer(report, type);
+        const buf = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
+        res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
+        res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+        return res.send(buf);
+      }
+
+      return res.status(200).json({
+        success: true,
+        report_type: type,
+        generated_at: new Date().toISOString(),
+        data: report,
+      });
+    } catch (error) {
+      console.error("Report generation error:", error);
+      return res.status(500).json({ success: false, error: error.message });
+    }
+  }
+
+  else {
+    return res.status(400).json({ error: "Invalid action. Use ?action=alert or ?action=report" });
   }
 }

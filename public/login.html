@@ -150,7 +150,7 @@
         async function initLoginButton() {
           try {
             // Fetch config
-            const res = await fetch("/api/config");
+            const res = await fetch("/api/config/public");
             if (!res.ok) throw new Error("Không thể tải cấu hình");
             const config = await res.json();
 

@@ -1,5 +1,5 @@
 export const API_BASE_URL = __API_BASE_URL__;
-export const LOG_ENDPOINT = "/api/qc-productivity/log";
+export const LOG_ENDPOINT = "/api/qc/log";
 export const VERSION = __VERSION__;
 
 export const PAGE_PATHS = {

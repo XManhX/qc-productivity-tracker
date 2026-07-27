@@ -23,7 +23,7 @@ async function init() {
   // 2. Tải danh sách roles
   await store.loadRoles();
 
-    // Thêm dòng này – tải cấu hình giờ nghỉ trước khi render bảng
+  // Thêm dòng này – tải cấu hình giờ nghỉ trước khi render bảng
   await store.loadAlertConfig();
 
   store.validateFilters();
@@ -48,7 +48,7 @@ async function init() {
       // Vẫn đang trong ngày hiện tại → refresh dữ liệu
       store.loadData();
     }
-  }, 60_000); // 1 phút
+  }, 120_000); // 2 phút
 }
 
 document.addEventListener("DOMContentLoaded", init);

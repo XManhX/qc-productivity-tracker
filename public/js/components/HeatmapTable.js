@@ -41,9 +41,6 @@ export class HeatmapTable {
     this._refreshInterval = 120; // giây
     this._statusTimer = null;
 
-    // Inject style cho delta badge (NEW)
-    this._injectDeltaStyles();
-
     // Sử dụng debounce khi store update (NEW)
     store.on("update", () => {
       this._handleStoreUpdate();
@@ -272,40 +269,6 @@ export class HeatmapTable {
       this._debounceTimer = null;
       this._renderTable();
     }, this._debounceDelay);
-  }
-
-  // ==================== DELTA STYLES (NEW) ====================
-  _injectDeltaStyles() {
-    if (document.getElementById("heatmap-delta-styles")) return;
-    const style = document.createElement("style");
-    style.id = "heatmap-delta-styles";
-    style.textContent = `
-      @keyframes fadeOutUp {
-        0% { opacity: 1; transform: translateY(0); }
-        100% { opacity: 0; transform: translateY(-12px); }
-      }
-      .delta-badge {
-        position: absolute;
-        top: -2px;
-        right: 2px;
-        font-size: 0.7rem;
-        font-weight: 700;
-        padding: 0 3px;
-        border-radius: 4px;
-        animation: fadeOutUp 2s forwards;
-        z-index: 50;
-        pointer-events: none;
-      }
-      .delta-increase {
-        background-color: #dcfce7;
-        color: #166534;
-      }
-      .delta-decrease {
-        background-color: #fee2e2;
-        color: #991b1b;
-      }
-    `;
-    document.head.appendChild(style);
   }
 
   _showDelta(td, delta) {

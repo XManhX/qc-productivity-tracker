@@ -180,6 +180,34 @@ export class AlertConfigForm {
           </div>
         </fieldset>
 
+        <!-- Danh sách ngoại lệ -->
+        <fieldset class="border border-slate-200 rounded-xl p-4">
+          <legend class="text-base font-medium text-slate-600 px-2 flex items-center gap-1">
+            <i data-lucide="user-x" class="w-4 h-4 text-red-500"></i> Danh sách ngoại lệ
+          </legend>
+          <div class="mt-2 space-y-3">
+            <div class="flex space-x-2">
+              <input type="email" id="exclude-email-input"
+                    placeholder="Nhập email cần loại trừ"
+                    class="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition">
+              <button type="button" id="add-exclude-btn"
+                      class="px-4 py-2 bg-indigo-600 text-white font-semibold text-sm rounded-xl hover:bg-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-300 transition">
+                Thêm
+              </button>
+            </div>
+            <ul id="excluded-emails-list" class="space-y-1">
+              ${(config.excluded_emails || []).map(email => `
+                <li class="flex items-center justify-between bg-slate-50 rounded-lg px-3 py-2">
+                  <span class="text-sm text-slate-700">${email}</span>
+                  <button type="button" class="remove-exclude-btn text-red-500 hover:text-red-700" data-email="${email}">
+                    <i data-lucide="x" class="w-4 h-4"></i>
+                  </button>
+                </li>
+              `).join('')}
+            </ul>
+          </div>
+        </fieldset>
+
         <div class="flex justify-end space-x-3">
           <button type="button" id="reset-btn" 
                   class="px-4 py-2 border border-slate-300 rounded-xl text-slate-700 font-semibold text-sm hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-slate-200 transition">
@@ -202,53 +230,131 @@ export class AlertConfigForm {
   attachEvents() {
     const form = document.getElementById("alert-config-form");
     const resetBtn = document.getElementById("reset-btn");
+    const addExcludeBtn = document.getElementById("add-exclude-btn");
+    const excludeInput = document.getElementById("exclude-email-input");
 
     if (!form) return;
 
-    resetBtn.addEventListener("click", () => {
-      this.render(); // Reset to store values
+    // Khởi tạo mảng ngoại lệ từ store (clone để tránh tham chiếu)
+    this.excludedEmails = [...(this.store.getConfig().excluded_emails || [])];
+
+    // Hiển thị danh sách ngoại lệ ban đầu
+    const renderExcludedList = () => {
+      const listEl = document.getElementById("excluded-emails-list");
+      if (!listEl) return;
+      listEl.innerHTML = this.excludedEmails
+        .map(
+          (email) => `
+        <li class="flex items-center justify-between bg-slate-50 rounded-lg px-3 py-2">
+          <span class="text-sm text-slate-700">${email}</span>
+          <button type="button" class="remove-exclude-btn text-red-500 hover:text-red-700" data-email="${email}">
+            <i data-lucide="x" class="w-4 h-4"></i>
+          </button>
+        </li>`
+        )
+        .join("");
+      lucide.createIcons();
+
+      // Gắn sự kiện xóa cho từng nút (có thể dùng event delegation nếu muốn tối ưu hơn)
+      document.querySelectorAll(".remove-exclude-btn").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const email = btn.dataset.email;
+          this.excludedEmails = this.excludedEmails.filter((e) => e !== email);
+          renderExcludedList();
+        });
+      });
+    };
+
+    renderExcludedList();
+
+    // Thêm email mới
+    const addExcludedEmail = () => {
+      const email = excludeInput.value.trim().toLowerCase();
+      if (!email) {
+        showToast("Vui lòng nhập email hợp lệ", "error");
+        return;
+      }
+      if (this.excludedEmails.includes(email)) {
+        showToast("Email đã tồn tại trong danh sách ngoại lệ", "error");
+        return;
+      }
+      // Có thể kiểm tra thêm định dạng email đơn giản
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        showToast("Định dạng email không hợp lệ", "error");
+        return;
+      }
+      this.excludedEmails.push(email);
+      renderExcludedList();
+      excludeInput.value = "";
+      excludeInput.focus();
+    };
+
+    addExcludeBtn.addEventListener("click", addExcludedEmail);
+    excludeInput.addEventListener("keypress", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        addExcludedEmail();
+      }
     });
 
+    // Reset form về giá trị trong store
+    resetBtn.addEventListener("click", () => {
+      // Reset toàn bộ component sẽ được thực hiện bằng cách gọi render() từ bên ngoài,
+      // nhưng trong phạm vi attachEvents ta chỉ cần khôi phục excludedEmails
+      this.excludedEmails = [...(this.store.getConfig().excluded_emails || [])];
+      renderExcludedList();
+      // Đặt lại giá trị các trường khác nếu muốn, nhưng ta sẽ dùng this.render()
+      // để đảm bảo đồng bộ toàn bộ. Tuy nhiên để tránh vòng lặp, chỉ cần reset form từ DOM:
+      form.reset();
+      // Sau khi reset form, cần cập nhật lại checkbox vì form.reset() không khôi phục giá trị checked từ state cũ
+      const config = this.store.getConfig();
+      if (config) {
+        form.querySelector('[name="report_enabled"]').checked = config.report_enabled || false;
+        form.querySelector('[name="report_only_workdays"]').checked = config.report_only_workdays || false;
+        // Các trường số sẽ được reset từ form.reset() dựa vào value attribute đã được render.
+      }
+    });
+
+    // Xử lý submit form
     form.addEventListener("submit", async (e) => {
       e.preventDefault();
 
-      // Lấy dữ liệu
       const formData = new FormData(form);
       const data = {};
+
+      // Danh sách các trường số
       const numberFields = [
-        "work_start_hour",
-        "work_start_min",
-        "work_end_hour",
-        "work_end_min",
-        "work_start_buffer_minutes",
-        "work_end_buffer_minutes",
-        "break_start_hour",
-        "break_start_min",
-        "break_end_hour",
-        "break_end_min",
-        "idle_threshold_minutes",
-        "cooldown_minutes",
-        "max_users_per_message",
-        "report_hour_start",
-        "report_hour_end",
-        "report_minute",
+        "work_start_hour", "work_start_min", "work_end_hour", "work_end_min",
+        "work_start_buffer_minutes", "work_end_buffer_minutes",
+        "break_start_hour", "break_start_min", "break_end_hour", "break_end_min",
+        "idle_threshold_minutes", "cooldown_minutes", "max_users_per_message",
+        "report_hour_start", "report_hour_end", "report_minute",
       ];
-      numberFields.forEach((f) => {
-        data[f] = parseInt(formData.get(f), 10);
+      numberFields.forEach((field) => {
+        const value = parseInt(formData.get(field), 10);
+        if (isNaN(value)) {
+          // Trường hợp lỗi nếu không phải số, nhưng đã có validation HTML
+          data[field] = 0;
+        } else {
+          data[field] = value;
+        }
       });
 
-      data["seatalk_webhook_url"] =
-        formData.get("seatalk_webhook_url")?.trim() || "";
-      data["report_seatalk_webhook_url"] =
-        formData.get("report_seatalk_webhook_url")?.trim() || "";
-      data["report_enabled"] = formData.get("report_enabled") === "on";
-      data["report_only_workdays"] =
-        formData.get("report_only_workdays") === "on";
+      // Các trường URL
+      data["seatalk_webhook_url"] = formData.get("seatalk_webhook_url")?.trim() || "";
+      data["report_seatalk_webhook_url"] = formData.get("report_seatalk_webhook_url")?.trim() || "";
 
-      // Validate
+      // Checkbox
+      data["report_enabled"] = formData.get("report_enabled") === "on";
+      data["report_only_workdays"] = formData.get("report_only_workdays") === "on";
+
+      // Danh sách ngoại lệ
+      data["excluded_emails"] = [...this.excludedEmails];
+
+      // --- Validate ---
       const toMinutes = (h, m) => h * 60 + m;
 
-      // Work hours
+      // Giờ làm việc
       if (
         toMinutes(data.work_start_hour, data.work_start_min) >=
         toMinutes(data.work_end_hour, data.work_end_min)
@@ -257,44 +363,31 @@ export class AlertConfigForm {
         return;
       }
 
-      // Break hours (nếu có break khác 0? Ở đây có thể validate nếu break_start và break_end khác không)
-      if (data.break_start_hour !== undefined) {
-        const breakStart = toMinutes(
-          data.break_start_hour,
-          data.break_start_min,
-        );
-        const breakEnd = toMinutes(data.break_end_hour, data.break_end_min);
-        if (breakStart >= breakEnd) {
-          showToast("Giờ bắt đầu nghỉ trưa phải nhỏ hơn giờ kết thúc", "error");
-          return;
-        }
+      // Giờ nghỉ trưa
+      const breakStart = toMinutes(data.break_start_hour, data.break_start_min);
+      const breakEnd = toMinutes(data.break_end_hour, data.break_end_min);
+      if (breakStart >= breakEnd) {
+        showToast("Giờ bắt đầu nghỉ trưa phải nhỏ hơn giờ kết thúc", "error");
+        return;
       }
 
-      // URL validation (optional but gentle)
+      // Validate URL nếu có
       const urlFields = ["seatalk_webhook_url", "report_seatalk_webhook_url"];
       for (const field of urlFields) {
         const val = data[field];
-        if (val && !val.startsWith("https://") && !val.startsWith("http://")) {
-          showToast(
-            `URL không hợp lệ ở trường ${field}. Phải bắt đầu bằng http:// hoặc https://`,
-            "error",
-          );
+        if (val && !/^https?:\/\/.+/.test(val)) {
+          showToast(`URL không hợp lệ ở trường ${field}. Phải bắt đầu bằng http:// hoặc https://`, "error");
           return;
         }
       }
 
-      // Buffer, threshold, cooldown phải >= 0 (min đã có trong input, nhưng check lại)
-      if (
-        data.work_start_buffer_minutes < 0 ||
-        data.work_end_buffer_minutes < 0 ||
-        data.idle_threshold_minutes < 1 ||
-        data.cooldown_minutes < 1 ||
-        data.max_users_per_message < 1
-      ) {
-        showToast(
-          "Giá trị không được âm và ngưỡng idle/cooldown tối thiểu 1",
-          "error",
-        );
+      // Kiểm tra buffer/threshold tối thiểu
+      if (data.work_start_buffer_minutes < 0 || data.work_end_buffer_minutes < 0) {
+        showToast("Giá trị đệm không được âm", "error");
+        return;
+      }
+      if (data.idle_threshold_minutes < 1 || data.cooldown_minutes < 1 || data.max_users_per_message < 1) {
+        showToast("Ngưỡng idle, cooldown và số user tối đa phải >= 1", "error");
         return;
       }
 
@@ -302,10 +395,12 @@ export class AlertConfigForm {
       const result = await this.store.saveConfig(data);
       if (result.success) {
         showToast("Đã lưu cấu hình thành công!");
+        // Cập nhật lại excludedEmails từ store sau khi lưu (phòng trường hợp có thay đổi từ server)
+        this.excludedEmails = [...(this.store.getConfig().excluded_emails || [])];
+        renderExcludedList();
       } else {
         showToast(`Lỗi: ${result.message}`, "error");
       }
-      this.render(); // Re-render để lấy config mới từ store và reset UI
     });
   }
 }

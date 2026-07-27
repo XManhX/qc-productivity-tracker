@@ -1,0 +1,218 @@
+// File: /api/qc-productivity/users.js (Ví dụ dùng Next.js API Routes)
+import { createClient } from "@supabase/supabase-js";
+
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_ANON_KEY,
+);
+
+function normalizeEmail(email) {
+  return typeof email === "string" ? email.toLowerCase().trim() : "";
+}
+
+function normalizeName(name) {
+  return typeof name === "string" ? name.trim() : "";
+}
+
+export default async function handler(req, res) {
+  const { method } = req;
+
+  // ===================== GET =====================
+  if (method === "GET") {
+    try {
+      const { data, error } = await supabase
+        .from("qc_users")
+        .select("*, qc_roles(role_key, display_name)")
+        .order("created_at", { ascending: false });
+
+      if (error) throw error;
+      const formatted = (data || []).map((u) => ({
+        id: u.id,
+        email: u.email,
+        name: u.name,
+        is_active: u.is_active,
+        widget_visible: u.widget_visible, // ⬅️ Thêm
+        created_at: u.created_at,
+        role_id: u.role_id,
+        role_key: u.qc_roles?.role_key || null,
+        display_name: u.qc_roles?.display_name || null,
+      }));
+      return res.status(200).json(formatted);
+    } catch (error) {
+      return res.status(500).json({ error: error.message });
+    }
+  }
+
+  // ===================== POST =====================
+  if (method === "POST") {
+    // Kiểm tra quyền admin: có thể kiểm tra Authorization header với secret đặc biệt
+    const authHeader = req.headers.authorization;
+    if (authHeader !== `Bearer ${process.env.ADMIN_API_SECRET}`) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+
+    const { email, name, role_key, import: importUsers } = req.body || {};
+
+    // Import hàng loạt
+    if (Array.isArray(importUsers) && importUsers.length > 0) {
+      try {
+        const { data: roles } = await supabase
+          .from("qc_roles")
+          .select("id, role_key");
+        const roleMap = {};
+        roles.forEach((r) => {
+          roleMap[r.role_key] = r.id;
+        });
+
+        const defaultRoleKey = req.body.defaultRoleKey || "qc_rr";
+        const defaultRoleId = roleMap[defaultRoleKey] || roles[0]?.id;
+
+        const toInsert = [];
+        for (const item of importUsers) {
+          const emailNormalized = normalizeEmail(item.email);
+          if (!emailNormalized) continue;
+          let roleKey = item.role_key || defaultRoleKey;
+          const roleId = roleMap[roleKey] || defaultRoleId;
+          if (!roleId) continue;
+
+          toInsert.push({
+            email: emailNormalized,
+            name:
+              normalizeName(item.name) ||
+              emailNormalized.split("@")[0].toUpperCase(),
+            role_id: roleId,
+            is_active: true,
+            widget_visible: true, // ⬅️ mặc định hiển thị widget
+          });
+        }
+
+        if (toInsert.length === 0) {
+          return res.status(400).json({ message: "No valid data to import" });
+        }
+
+        const { data, error } = await supabase
+          .from("qc_users")
+          .insert(toInsert)
+          .select();
+        if (error) {
+          if (error.code === "23505") {
+            return res.status(200).json({
+              insertedCount: 0,
+              skippedCount: toInsert.length,
+              message: "All duplicates",
+            });
+          }
+          throw error;
+        }
+        return res.status(200).json({
+          insertedCount: data.length,
+          skippedCount: toInsert.length - data.length,
+        });
+      } catch (error) {
+        return res.status(500).json({ error: error.message });
+      }
+    }
+
+    // Thêm một user
+    const emailNormalized = normalizeEmail(email);
+    if (!emailNormalized)
+      return res.status(400).json({ message: "Missing email" });
+
+    try {
+      let roleId = null;
+      if (role_key) {
+        const { data: roleData } = await supabase
+          .from("qc_roles")
+          .select("id")
+          .eq("role_key", role_key)
+          .single();
+        roleId = roleData?.id;
+      }
+      if (!roleId) {
+        const { data: defaultRole } = await supabase
+          .from("qc_roles")
+          .select("id")
+          .eq("role_key", "qc_rr")
+          .single();
+        roleId = defaultRole?.id;
+      }
+
+      const { data, error } = await supabase
+        .from("qc_users")
+        .insert([
+          {
+            email: emailNormalized,
+            name:
+              normalizeName(name) ||
+              emailNormalized.split("@")[0].toUpperCase(),
+            role_id: roleId,
+            is_active: true,
+            widget_visible: true, // ⬅️ mặc định bật
+          },
+        ])
+        .select();
+
+      if (error) throw error;
+      return res.status(201).json(data[0]);
+    } catch (error) {
+      return res.status(500).json({ error: error.message });
+    }
+  }
+
+  // ===================== PUT =====================
+  if (method === "PUT") {
+    // Kiểm tra quyền admin: có thể kiểm tra Authorization header với secret đặc biệt
+    const authHeader = req.headers.authorization;
+    if (authHeader !== `Bearer ${process.env.ADMIN_API_SECRET}`) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+
+    const { id, name, email, is_active, widget_visible, role_key } =
+      req.body || {};
+    if (!id) return res.status(400).json({ message: "Missing id" });
+
+    const updatePayload = {};
+    if (name !== undefined) updatePayload.name = normalizeName(name);
+    if (email !== undefined) updatePayload.email = normalizeEmail(email);
+    if (typeof is_active === "boolean") updatePayload.is_active = is_active;
+    if (typeof widget_visible === "boolean")
+      updatePayload.widget_visible = widget_visible; // ⬅️ Hỗ trợ cập nhật
+    if (role_key) {
+      const { data: roleData } = await supabase
+        .from("qc_roles")
+        .select("id")
+        .eq("role_key", role_key)
+        .single();
+      if (roleData) updatePayload.role_id = roleData.id;
+    }
+
+    if (Object.keys(updatePayload).length === 0)
+      return res.status(400).json({ message: "No fields to update" });
+
+    const { data, error } = await supabase
+      .from("qc_users")
+      .update(updatePayload)
+      .eq("id", id)
+      .select();
+    if (error) return res.status(500).json({ error: error.message });
+    if (!data.length)
+      return res.status(404).json({ message: "User not found" });
+    return res.status(200).json(data[0]);
+  }
+
+  // ===================== DELETE =====================
+  if (method === "DELETE") {
+    // Kiểm tra quyền admin: có thể kiểm tra Authorization header với secret đặc biệt
+    const authHeader = req.headers.authorization;
+    if (authHeader !== `Bearer ${process.env.ADMIN_API_SECRET}`) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+
+    const { id } = req.query;
+    const { error } = await supabase.from("qc_users").delete().eq("id", id);
+    if (error) return res.status(500).json({ error: error.message });
+    return res.status(200).json({ message: "Deleted" });
+  }
+
+  return res.status(405).json({ message: "Method not allowed" });
+}

@@ -1,5 +1,3 @@
-const BASE_URL = "/api";
-
 export function checkAuth() {
   const token = localStorage.getItem("qc_session_token");
   if (token) {
@@ -12,7 +10,7 @@ export function checkAuth() {
           return true;
         }
       }
-    } catch (e) { }
+    } catch (e) {}
   }
   localStorage.removeItem("qc_session_token");
   localStorage.removeItem("user_email");
@@ -23,7 +21,7 @@ export function checkAuth() {
 export async function fetchAndStoreRole(token) {
   try {
     const data = await (
-      await fetch(`${BASE_URL}/qc/me`, {
+      await fetch("/api/qc-productivity/me", {
         headers: { Authorization: `Bearer ${token}` },
       })
     ).json();
@@ -49,7 +47,7 @@ export function handleAuthToken() {
           history.replaceState(null, "", newUrl);
         }
       }
-    } catch (e) { }
+    } catch (e) {}
   }
 }
 

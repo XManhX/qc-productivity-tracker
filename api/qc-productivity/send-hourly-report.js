@@ -196,7 +196,7 @@ function buildHTML(users, date, displayName, hStart, hEnd, roleMap, cfg) {
   const sorted = [...users].sort(
     (a, b) => (b.displayTotal || 0) - (a.displayTotal || 0),
   );
-  const wHours = hEnd - hStart; // số cột giờ hiển thị (exclusive hEnd)
+  const wHours = hEnd - hStart + 1; // số cột giờ hiển thị (exclusive hEnd)
 
   const workStart = cfg.workStartHour;
   const workEnd = cfg.workEndHour;
@@ -463,8 +463,8 @@ export default async function handler(req, res) {
       let rawTotal = 0;
       let activeHours = 0;
 
-      // Duyệt từng giờ trong khung báo cáo (hStart → hEnd)
-      for (let h = hStart; h <= hEnd; h++) {
+      // Duyệt từng giờ trong khung báo cáo (hStart → hEnd - 1)
+      for (let h = hStart; h < hEnd; h++) {
         const cnt = user.hourly?.[h] || 0;
         if (cnt > 0) {
           activeHours++;

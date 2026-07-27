@@ -1,22 +1,15 @@
 import { createClient } from "@supabase/supabase-js";
 
-// Khởi tạo Supabase client (nên dùng singleton hoặc tái sử dụng)
 const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_ANON_KEY,
 );
 
-/**
- * Lấy ngày hôm nay theo múi giờ Việt Nam (UTC+7)
- */
 function getTodayVN() {
   const now = new Date(new Date().getTime() + 7 * 60 * 60 * 1000);
   return now.toISOString().split("T")[0];
 }
 
-/**
- * Validator đơn giản cho tham số query
- */
 function validateDate(dateStr) {
   if (!dateStr || !/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return null;
   const d = new Date(dateStr + "T00:00:00+07:00");
@@ -25,13 +18,10 @@ function validateDate(dateStr) {
 
 export default async function handler(req, res) {
   if (req.method !== "GET") {
-    return res
-      .status(405)
-      .json({ success: false, error: "Method not allowed" });
+    return res.status(405).json({ success: false, error: "Method not allowed" });
   }
 
   try {
-    // ---------- 1. Parse & validate query params ----------
     const {
       date,
       page = "1",
@@ -46,33 +36,30 @@ export default async function handler(req, res) {
       role,
     } = req.query;
 
-    // Ngày target: ưu tiên tham số, nếu không có hoặc không hợp lệ thì dùng hôm nay
     const targetDate = validateDate(date) || getTodayVN();
 
-    // Phân trang
     const pageNum = Math.max(1, parseInt(page, 10) || 1);
     const pageSize = Math.min(500, Math.max(1, parseInt(limit, 10) || 25));
 
-    // Sắp xếp
     const sortDirection = sortDir === "asc" ? 1 : -1;
 
-    // Các bộ lọc cần parse
-    const filterRole = role?.trim() || null;
-    const searchTerm = q?.trim()?.toLowerCase() || null;
+    // ---- Xử lý multi role: chuyển thành mảng ----
+    let filterRoles = null;
+    if (role) {
+      const rawRoles = Array.isArray(role) ? role : role.split(",");
+      filterRoles = rawRoles.map((s) => s.trim()).filter(Boolean);
+      if (filterRoles.length === 0) filterRoles = null;
+    }
 
-    // Chỉ lọc isActive nếu giá trị rõ ràng là "true" hoặc "1"
+    const searchTerm = q?.trim()?.toLowerCase() || null;
     const filterActive =
       isActive === "true" || isActive === "1"
         ? true
         : isActive === "false" || isActive === "0"
           ? false
           : null;
-
-    // minTotal: chỉ lọc nếu là số hợp lệ
     const filterMinTotal =
       minTotal && !isNaN(Number(minTotal)) ? Number(minTotal) : null;
-
-    // Khoảng giờ
     const hs = hourStart
       ? Math.max(0, Math.min(23, Number(hourStart) || 0))
       : null;
@@ -80,7 +67,6 @@ export default async function handler(req, res) {
       ? Math.max(0, Math.min(23, Number(hourEnd) || 23))
       : null;
 
-    // ---------- 2. Xây dựng query lấy users ----------
     let userQuery = supabase
       .from("qc_users")
       .select(
@@ -88,22 +74,21 @@ export default async function handler(req, res) {
       )
       .order("email");
 
-    // Áp dụng các filter (chỉ khi có giá trị thực)
-    if (filterRole) userQuery = userQuery.eq("qc_roles.role_key", filterRole);
+    // Sửa thành dùng .in() nếu có mảng role
+    if (filterRoles) {
+      userQuery = userQuery.in("qc_roles.role_key", filterRoles);
+    }
     if (filterActive !== null)
       userQuery = userQuery.eq("is_active", filterActive);
     if (searchTerm) {
-      // Sử dụng tham số hóa để tránh SQL injection (Supabase đã tự bảo vệ)
       userQuery = userQuery.or(
         `name.ilike.%${searchTerm}%,email.ilike.%${searchTerm}%`,
       );
     }
 
-    // ---------- 3. Thực hiện truy vấn song song ----------
     const { data: users, error: usersError } = await userQuery;
     if (usersError) throw usersError;
 
-    // Nếu không có user, trả về ngay
     if (!users.length) {
       return res.status(200).json({
         success: true,
@@ -113,7 +98,6 @@ export default async function handler(req, res) {
       });
     }
 
-    // Map user info
     const userMap = new Map();
     const roleKeys = new Set();
     for (const u of users) {
@@ -127,7 +111,6 @@ export default async function handler(req, res) {
       roleKeys.add(u.qc_roles.role_key);
     }
 
-    // Lấy targets cho các role (song song)
     const [{ data: rolesData, error: rolesError }] = await Promise.all([
       supabase
         .from("qc_roles")
@@ -147,7 +130,6 @@ export default async function handler(req, res) {
       };
     });
 
-    // ---------- 4. Gọi function tính toán trực tiếp trên DB ----------
     const { data: stats, error: statsError } = await supabase.rpc(
       "get_dashboard_stats",
       {
@@ -157,7 +139,6 @@ export default async function handler(req, res) {
     );
     if (statsError) throw statsError;
 
-    // Khởi tạo báo cáo cho mọi user (kể cả không có log)
     const report = new Map();
     for (const [email, info] of userMap) {
       const targets = targetMap[info.role_key] || {
@@ -173,7 +154,6 @@ export default async function handler(req, res) {
       });
     }
 
-    // Điền dữ liệu từ kết quả function
     (stats || []).forEach((row) => {
       const entry = report.get(row.email);
       if (entry) {
@@ -189,7 +169,6 @@ export default async function handler(req, res) {
 
     let results = Array.from(report.values());
 
-    // ---------- 5. Áp dụng filter post-processing ----------
     if (filterMinTotal !== null) {
       results = results.filter((r) => r.total >= filterMinTotal);
     }
@@ -199,12 +178,12 @@ export default async function handler(req, res) {
       );
     }
 
-    // ---------- 6. Sắp xếp ----------
     results.sort((a, b) => {
       switch (sortBy) {
         case "name":
           return (
-            (a.name || a.email).localeCompare(b.name || b.email) * sortDirection
+            (a.name || a.email).localeCompare(b.name || b.email) *
+            sortDirection
           );
         case "role":
           return a.role_key.localeCompare(b.role_key) * sortDirection;
@@ -222,7 +201,6 @@ export default async function handler(req, res) {
       }
     });
 
-    // ---------- 7. Phân trang và trả về ----------
     const totalCount = results.length;
     const startIdx = (pageNum - 1) * pageSize;
     const items = results.slice(startIdx, startIdx + pageSize);

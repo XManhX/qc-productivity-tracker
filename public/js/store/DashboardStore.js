@@ -1,9 +1,4 @@
-// store/DashboardStore.js
-import {
-  fetchDashboard,
-  fetchRoles,
-  fetchAlertConfig,
-} from "../services/api.js";
+import { fetchDashboard, fetchRoles, fetchAlertConfig } from "../services/api.js";
 
 class DashboardStore {
   constructor() {
@@ -12,7 +7,7 @@ class DashboardStore {
       total: 0,
       filters: {
         date: "",
-        role: "",
+        roles: [],           // mảng các role key được chọn
         q: "",
         minTotal: "",
         hourStart: 6,
@@ -22,7 +17,7 @@ class DashboardStore {
         page: 1,
       },
       sort: { key: "total", direction: "desc" },
-      roles: [],
+      roles: [],             // danh sách role từ DB
       alertConfig: null,
       loading: false,
       error: null,
@@ -60,10 +55,7 @@ class DashboardStore {
     return this.state.total;
   }
   get totalPages() {
-    return Math.max(
-      1,
-      Math.ceil(this.state.total / Number(this.state.filters.pageSize)),
-    );
+    return Math.max(1, Math.ceil(this.state.total / Number(this.state.filters.pageSize)));
   }
 
   getTodayVN() {
@@ -81,20 +73,26 @@ class DashboardStore {
       try {
         const stored = localStorage.getItem("qc_dashboard_filters");
         if (stored) rawFilters = JSON.parse(stored);
-      } catch (e) {
-        /* ignore */
-      }
+      } catch (e) { /* ignore */ }
     }
 
     const today = this.getTodayVN();
-    if (rawFilters.date && rawFilters.date === today) {
-      this.state.filters.date = rawFilters.date;
-    } else {
-      this.state.filters.date = today;
-    }
+    this.state.filters.date =
+      rawFilters.date && rawFilters.date === today ? rawFilters.date : today;
 
-    this.state.filters.role =
-      typeof rawFilters.role === "string" ? rawFilters.role.trim() : "";
+    // ---- Xử lý roles từ URL hoặc localStorage ----
+    let roles = [];
+    if (rawFilters.role) {
+      // Hỗ trợ cả dạng string "qc1,qc2" hoặc mảng (từ localStorage cũ)
+      const raw = Array.isArray(rawFilters.role) ? rawFilters.role : rawFilters.role.split(",");
+      roles = raw.map((s) => s.trim()).filter(Boolean);
+    }
+    // Nếu không có trong URL, thử lấy từ localStorage (nếu có key roles)
+    if (!roles.length && rawFilters.roles) {
+      roles = Array.isArray(rawFilters.roles) ? rawFilters.roles : [];
+    }
+    this.state.filters.roles = roles;
+
     this.state.filters.q =
       typeof rawFilters.q === "string" ? rawFilters.q.trim() : "";
     this.state.filters.minTotal =
@@ -102,9 +100,7 @@ class DashboardStore {
 
     let hs = parseInt(rawFilters.hourStart, 10);
     let he = parseInt(rawFilters.hourEnd, 10);
-    this.state.filters.hourStart = isNaN(hs)
-      ? 6
-      : Math.max(0, Math.min(23, hs));
+    this.state.filters.hourStart = isNaN(hs) ? 6 : Math.max(0, Math.min(23, hs));
     this.state.filters.hourEnd = isNaN(he) ? 22 : Math.max(0, Math.min(23, he));
 
     const rawActive = rawFilters.isActive;
@@ -112,16 +108,12 @@ class DashboardStore {
       rawActive === "1" || rawActive === "true" || rawActive === true;
 
     const limit = parseInt(rawFilters.limit, 10);
-    this.state.filters.pageSize = isNaN(limit)
-      ? 25
-      : Math.min(500, Math.max(1, limit));
+    this.state.filters.pageSize = isNaN(limit) ? 25 : Math.min(500, Math.max(1, limit));
 
     const page = parseInt(rawFilters.page, 10);
     this.state.filters.page = isNaN(page) || page < 1 ? 1 : page;
 
-    const validSortKeys = ["total", "name", "role", ...Array(24).keys()].map(
-      (i) => `hour-${i}`,
-    );
+    const validSortKeys = ["total", "name", "role", ...Array(24).keys()].map((i) => `hour-${i}`);
     const rawSortKey = rawFilters.sortBy;
     const rawSortDir = rawFilters.sortDir;
     const sortKey = validSortKeys.includes(rawSortKey) ? rawSortKey : "total";
@@ -135,6 +127,7 @@ class DashboardStore {
     try {
       const roles = await fetchRoles();
       this.state.roles = roles;
+      this.validateFilters(); // Kiểm tra role đã chọn có còn hợp lệ không
       this.notify();
     } catch (error) {
       console.error("Failed to load roles:", error);
@@ -142,12 +135,12 @@ class DashboardStore {
   }
 
   validateFilters() {
-    const { role } = this.state.filters;
-    if (role && this.state.roles.length > 0) {
-      const exists = this.state.roles.some((r) => r.role_key === role);
-      if (!exists) {
-        console.warn(`Role "${role}" no longer exists, removing filter.`);
-        this.state.filters.role = "";
+    if (this.state.roles.length > 0) {
+      const validKeys = this.state.roles.map((r) => r.role_key);
+      const filtered = this.state.filters.roles.filter((r) => validKeys.includes(r));
+      if (filtered.length !== this.state.filters.roles.length) {
+        console.warn("Một số role đã bị xóa khỏi hệ thống, bộ lọc đã được cập nhật.");
+        this.state.filters.roles = filtered;
         this.updateURL();
       }
     }
@@ -188,7 +181,9 @@ class DashboardStore {
       sortBy: sort.key,
       sortDir: sort.direction,
     };
-    if (filters.role) params.role = filters.role;
+    if (filters.roles && filters.roles.length) {
+      params.role = filters.roles.join(","); // gửi dạng chuỗi, backend tự tách
+    }
     if (filters.q) params.q = filters.q;
     if (filters.minTotal) params.minTotal = filters.minTotal;
     if (filters.activeOnly) params.isActive = "true";
@@ -198,11 +193,13 @@ class DashboardStore {
   }
 
   setFilters(partial) {
-    if (typeof partial.q === "string") partial.q = partial.q.trim();
-    if (typeof partial.role === "string") partial.role = partial.role.trim();
-    Object.keys(partial).forEach((key) => {
-      if (partial[key] === undefined) delete partial[key];
-    });
+    // Hỗ trợ tương thích nếu ai đó vẫn truyền partial.role (string)
+    if (partial.role !== undefined) {
+      partial.roles = typeof partial.role === "string"
+        ? partial.role.split(",").map((s) => s.trim()).filter(Boolean)
+        : [];
+      delete partial.role;
+    }
     Object.assign(this.state.filters, partial);
     if (!("page" in partial)) {
       this.state.filters.page = 1;
@@ -235,7 +232,7 @@ class DashboardStore {
   resetFilters() {
     this.state.filters = {
       date: this.getTodayVN(),
-      role: "",
+      roles: [],
       q: "",
       minTotal: "",
       hourStart: 6,
@@ -258,7 +255,9 @@ class DashboardStore {
     params.set("limit", String(filters.pageSize));
     params.set("sortBy", sort.key);
     params.set("sortDir", sort.direction);
-    if (filters.role) params.set("role", filters.role);
+    if (filters.roles && filters.roles.length) {
+      params.set("role", filters.roles.join(","));
+    }
     if (filters.q) params.set("q", filters.q);
     if (filters.minTotal) params.set("minTotal", filters.minTotal);
     if (filters.activeOnly) params.set("isActive", "1");
@@ -270,7 +269,7 @@ class DashboardStore {
     try {
       const toStore = {
         date: filters.date,
-        role: filters.role,
+        roles: filters.roles,
         q: filters.q,
         minTotal: filters.minTotal,
         hourStart: filters.hourStart,
@@ -282,7 +281,7 @@ class DashboardStore {
         sortDir: sort.direction,
       };
       localStorage.setItem("qc_dashboard_filters", JSON.stringify(toStore));
-    } catch (e) {}
+    } catch (e) { }
   }
 
   getExportData() {

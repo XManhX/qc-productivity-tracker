@@ -229,16 +229,17 @@ function buildHTML(users, date, displayName, hStart, hEnd, roleMap, cfg) {
     font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
     background:#f1f5f9;
     padding:30px;
-    display:flex;
-    justify-content:center;
+    display: block;
+    text-align: center;
+    white-space: normal;
   }
   .card{
+    display: inline-block;
     background:#fff;
     border-radius:16px;
     box-shadow:0 8px 30px rgba(0,0,0,0.06);
     padding:32px;
-    max-width:fit-content;
-    overflow-x:auto;
+    text-align: left;
   }
   .title{
     font-size:28px;
@@ -328,33 +329,33 @@ function buildHTML(users, date, displayName, hStart, hEnd, roleMap, cfg) {
         <th class="user-cell">Nhân viên</th>
         <th class="total-header" style="width:90px;">Tổng</th>
         ${Array.from({ length: wHours }, (_, i) => {
-          const h = hStart + i;
-          let bgColor = "#f1f5f9",
-            textColor = "#334155",
-            tooltip = "";
-          if (h < workStart || h >= workEnd) {
-            bgColor = "#f9fafb";
-            textColor = "#9ca3af";
-          } else if (h >= breakStartHour && h < breakEndHour) {
-            bgColor = "#fff7ed";
-            textColor = "#ea580c";
-            tooltip = 'title="Nghỉ trưa"';
-          }
-          return `<th style="width:60px; background:${bgColor}; color:${textColor};" ${tooltip}>${h}:00</th>`;
-        }).join("")}
+    const h = hStart + i;
+    let bgColor = "#f1f5f9",
+      textColor = "#334155",
+      tooltip = "";
+    if (h < workStart || h >= workEnd) {
+      bgColor = "#f9fafb";
+      textColor = "#9ca3af";
+    } else if (h >= breakStartHour && h < breakEndHour) {
+      bgColor = "#fff7ed";
+      textColor = "#ea580c";
+      tooltip = 'title="Nghỉ trưa"';
+    }
+    return `<th style="width:60px; background:${bgColor}; color:${textColor};" ${tooltip}>${h}:00</th>`;
+  }).join("")}
       </tr>
     </thead>
     <tbody>
       ${sorted
-        .map((u, idx) => {
-          const { low_threshold: low, medium_threshold: med } =
-            roleMap.get(u.role_key) || {};
-          const t = u.displayTotal || 0;
-          const effHrs = u.effectiveHours || 0;
-          const name = capitalizeName(u.name) || u.email;
-          const email = u.name ? u.email : "";
-          const hour = u.hourly || {};
-          return `
+      .map((u, idx) => {
+        const { low_threshold: low, medium_threshold: med } =
+          roleMap.get(u.role_key) || {};
+        const t = u.displayTotal || 0;
+        const effHrs = u.effectiveHours || 0;
+        const name = capitalizeName(u.name) || u.email;
+        const email = u.name ? u.email : "";
+        const hour = u.hourly || {};
+        return `
         <tr>
           <td style="color:#64748b;">${idx + 1}</td>
           <td class="user-cell">
@@ -363,13 +364,13 @@ function buildHTML(users, date, displayName, hStart, hEnd, roleMap, cfg) {
           </td>
           <td style="${totalStyle(t, low, med, effHrs)}" title="Tổng ước tính cho ${effHrs} giờ làm việc (đã trừ 1h nghỉ)">${t}</td>
           ${Array.from({ length: wHours }, (_, i) => {
-            const h = hStart + i;
-            const cnt = hour[h] || 0;
-            return `<td style="${cellStyle(cnt, low, med)}">${cnt || "-"}</td>`;
-          }).join("")}
+          const h = hStart + i;
+          const cnt = hour[h] || 0;
+          return `<td style="${cellStyle(cnt, low, med)}">${cnt || "-"}</td>`;
+        }).join("")}
         </tr>`;
-        })
-        .join("")}
+      })
+      .join("")}
     </tbody>
   </table>
 </div>
@@ -398,7 +399,7 @@ async function generateImage(
     await page.setContent(html, { waitUntil: "networkidle0", timeout: 15000 });
 
     const wHours = hEnd - hStart;
-    const colWidths = 50 + 200 + 90 + wHours * 60;
+    const colWidths = 50 + 260 + 90 + wHours * 60;
     const padding = 120;
     const viewportWidth = Math.max(800, colWidths + padding);
     await page.setViewport({ width: viewportWidth, height: 800 });
@@ -462,8 +463,8 @@ export default async function handler(req, res) {
       let rawTotal = 0;
       let activeHours = 0;
 
-      // Duyệt từng giờ trong khung báo cáo (hStart → hEnd-1)
-      for (let h = hStart; h < hEnd; h++) {
+      // Duyệt từng giờ trong khung báo cáo (hStart → hEnd)
+      for (let h = hStart; h <= hEnd; h++) {
         const cnt = user.hourly?.[h] || 0;
         if (cnt > 0) {
           activeHours++;
@@ -552,7 +553,7 @@ export default async function handler(req, res) {
         sent_at: new Date().toISOString(),
         status: "failed",
       })
-      .catch(() => {});
+      .catch(() => { });
     return res
       .status(500)
       .json({ success: false, error: "Internal server error" });

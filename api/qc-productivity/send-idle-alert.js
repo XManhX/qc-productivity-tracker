@@ -65,7 +65,7 @@ function getPeriodOfDay() {
   return vnHour < 12 ? "morning" : "afternoon";
 }
 
-// Hàm tính idle cho CẢNH BÁO
+// Hàm tính idle cho CẢNH BÁO (từ log cuối đến hiện tại)
 function calcIdleMinutes(
   lastLogMs,
   nowMs,
@@ -89,7 +89,7 @@ function calcIdleMinutes(
   return Math.max(0, Math.floor(idleMs / 60000));
 }
 
-// Hàm tính idle cho BÁO CÁO
+// Hàm tính idle cho BÁO CÁO (giữa 2 lần log liên tiếp, đã trừ giờ nghỉ trưa)
 function calcIdleBetweenLogs(
   lastLogMs,
   currentLogMs,
@@ -101,6 +101,7 @@ function calcIdleBetweenLogs(
   if (lastLogMs === 0 || currentLogMs <= lastLogMs) return 0;
 
   let idleMs = currentLogMs - lastLogMs;
+  // Trừ đi phần thời gian nghỉ trưa nằm giữa 2 log
   if (
     breakStartMs &&
     breakEndMs &&
@@ -109,7 +110,9 @@ function calcIdleBetweenLogs(
   ) {
     const overlapStart = Math.max(lastLogMs, breakStartMs);
     const overlapEnd = Math.min(currentLogMs, breakEndMs);
-    idleMs -= overlapEnd - overlapStart;
+    if (overlapEnd > overlapStart) {
+      idleMs -= overlapEnd - overlapStart;
+    }
   }
   return Math.max(0, Math.floor(idleMs / 60000));
 }
@@ -442,6 +445,7 @@ async function getConfigForReport() {
   return data;
 }
 
+// ========== BÁO CÁO NGÀY ==========
 async function getDailyReport(dateStr, skipCache = false) {
   if (!skipCache) {
     const cached = await getCachedReport("daily", dateStr);
@@ -477,6 +481,18 @@ async function getDailyReport(dateStr, skipCache = false) {
   const breakEndMs =
     dateBase + config.break_end_hour * 3600000 + config.break_end_min * 60000;
 
+  // Thời gian làm việc thực tế của 1 người (đã trừ giờ nghỉ trưa)
+  const workMinutesPerPerson =
+    (config.work_end_hour * 60 + config.work_end_min) -
+    (config.work_start_hour * 60 + config.work_start_min);
+  const breakMinutes =
+    (config.break_end_hour * 60 + config.break_end_min) -
+    (config.break_start_hour * 60 + config.break_start_min);
+  const effectiveWorkMinutesPerPerson = workMinutesPerPerson - breakMinutes;
+
+  const totalWorkMinutes = activeUsers.length * effectiveWorkMinutesPerPerson;
+  const totalWorkHours = Math.round((totalWorkMinutes / 60) * 10) / 10;
+
   const userStats = {};
   activeUsers.forEach((user) => {
     userStats[user.email] = {
@@ -484,9 +500,9 @@ async function getDailyReport(dateStr, skipCache = false) {
       email: user.email,
       total_idle_minutes: 0,
       log_count: 0,
-      short_idle: 0, // <15p
-      medium_idle: 0, // 15-30p
-      long_idle: 0, // >30p
+      short_idle: 0,
+      medium_idle: 0,
+      long_idle: 0,
     };
   });
 
@@ -528,12 +544,6 @@ async function getDailyReport(dateStr, skipCache = false) {
     total_idle_minutes += userStats[email].total_idle_minutes;
   }
 
-  const totalWorkMinutes =
-    activeUsers.length *
-    (config.work_end_hour * 60 +
-      config.work_end_min -
-      (config.work_start_hour * 60 + config.work_start_min));
-  const totalWorkHours = Math.round((totalWorkMinutes / 60) * 10) / 10;
   const totalIdleHours = Math.round((total_idle_minutes / 60) * 10) / 10;
   const idlePercent =
     totalWorkMinutes > 0
@@ -561,11 +571,13 @@ async function getDailyReport(dateStr, skipCache = false) {
       total_qc: activeUsers.length,
       active_count: userDetails.filter((u) => u.log_count > 0).length,
       percent_active:
-        Math.round(
-          (userDetails.filter((u) => u.log_count > 0).length /
-            activeUsers.length) *
+        activeUsers.length > 0
+          ? Math.round(
+            (userDetails.filter((u) => u.log_count > 0).length /
+              activeUsers.length) *
             100,
-        ) || 0,
+          )
+          : 0,
       total_work_hours: totalWorkHours,
       total_idle_hours: totalIdleHours,
       idle_percent: idlePercent,
@@ -591,6 +603,7 @@ async function getDailyReport(dateStr, skipCache = false) {
   return report;
 }
 
+// ========== TỔNG HỢP NHIỀU NGÀY ==========
 async function getDailyReportForPeriod(startDateStr, endDateStr) {
   const start = new Date(startDateStr);
   const end = new Date(endDateStr);
@@ -610,6 +623,14 @@ async function getDailyReportForPeriod(startDateStr, endDateStr) {
     }),
     { total_work_hours: 0, total_idle_hours: 0, total_alerts_sent: 0 },
   );
+
+  // Tính idle_percent cho cả kỳ
+  totalSummary.idle_percent =
+    totalSummary.total_work_hours > 0
+      ? Math.round(
+        (totalSummary.total_idle_hours / totalSummary.total_work_hours) * 100,
+      )
+      : 0;
 
   const allUserStats = {};
   for (const day of days) {
@@ -632,6 +653,7 @@ async function getDailyReportForPeriod(startDateStr, endDateStr) {
   };
 }
 
+// ========== BÁO CÁO TUẦN ==========
 async function getWeeklyReport(endDateStr, skipCache = false) {
   if (!skipCache) {
     const cached = await getCachedReport("weekly", endDateStr);
@@ -663,10 +685,17 @@ async function getWeeklyReport(endDateStr, skipCache = false) {
   );
   const needs_support = allUsers.filter((u) => u.total_idle_minutes >= 180);
 
-  const currentIdle = (thisWeek.summary?.total_idle_hours || 0) * 60;
-  const lastIdle = (lastWeek.summary?.total_idle_hours || 0) * 60;
-  const improvement =
-    lastIdle > 0 ? Math.round(((lastIdle - currentIdle) / lastIdle) * 100) : 0;
+  // Cải thiện so với tuần trước
+  const currentIdle = thisWeek.summary?.total_idle_hours || 0;
+  const lastIdle = lastWeek.summary?.total_idle_hours || 0;
+  let improvementText;
+  if (lastIdle === 0) {
+    improvementText =
+      currentIdle === 0 ? "0%" : "N/A (tuần trước không có dữ liệu)";
+  } else {
+    const pct = Math.round(((lastIdle - currentIdle) / lastIdle) * 100);
+    improvementText = `${pct}%`;
+  }
 
   const qcsImproved = allUsers.filter((u) => {
     const lastUser = lastWeek.user_details?.find((p) => p.email === u.email);
@@ -678,7 +707,7 @@ async function getWeeklyReport(endDateStr, skipCache = false) {
       week_start: startStr,
       week_end: endStr,
       ...thisWeek.summary,
-      improvement_from_last_week: improvement,
+      improvement_from_last_week: improvementText,
       qcs_improved: qcsImproved,
       improvement_rate:
         allUsers.length > 0
@@ -687,12 +716,12 @@ async function getWeeklyReport(endDateStr, skipCache = false) {
       alert_reduction:
         lastWeek.summary?.total_alerts_sent > 0
           ? Math.round(
-              ((lastWeek.summary.total_alerts_sent -
-                thisWeek.summary.total_alerts_sent) /
-                lastWeek.summary.total_alerts_sent) *
-                100,
-            )
-          : 0,
+            ((lastWeek.summary.total_alerts_sent -
+              thisWeek.summary.total_alerts_sent) /
+              lastWeek.summary.total_alerts_sent) *
+            100,
+          )
+          : "N/A",
     },
     user_classification: {
       excellent_count: excellent.length,
@@ -718,6 +747,7 @@ async function getWeeklyReport(endDateStr, skipCache = false) {
   return report;
 }
 
+// ========== BÁO CÁO THÁNG ==========
 async function getMonthlyReport(year, month, skipCache = false) {
   const reportKey = `${year}-${String(month).padStart(2, "0")}`;
   if (!skipCache) {
@@ -742,12 +772,26 @@ async function getMonthlyReport(year, month, skipCache = false) {
     prevLastDay.toISOString().split("T")[0],
   );
 
-  const currentIdleMinutes = (thisMonth.summary?.total_idle_hours || 0) * 60;
-  const lastIdleMinutes = (lastMonth.summary?.total_idle_hours || 0) * 60;
+  const currentIdleMinutes = thisMonth.summary?.total_idle_hours || 0;
+  const lastIdleMinutes = lastMonth.summary?.total_idle_hours || 0;
   const savedMinutes = lastIdleMinutes - currentIdleMinutes;
   const savedHours = Math.round((savedMinutes / 60) * 10) / 10;
   const savedFTE = Math.round((savedHours / 160) * 100) / 100;
-  const savedSalary = savedHours * 50;
+  const savedSalary = Math.round(savedHours * 50);
+
+  // Cải thiện so với tháng trước
+  let improvementText;
+  if (lastIdleMinutes === 0) {
+    improvementText =
+      currentIdleMinutes === 0
+        ? "0%"
+        : "N/A (tháng trước không có dữ liệu)";
+  } else {
+    const pct = Math.round(
+      ((lastIdleMinutes - currentIdleMinutes) / lastIdleMinutes) * 100,
+    );
+    improvementText = `${pct}%`;
+  }
 
   const recommendations = [];
   if (thisMonth.summary?.idle_percent > 15) {
@@ -773,12 +817,7 @@ async function getMonthlyReport(year, month, skipCache = false) {
       month_start: firstDay.toISOString().split("T")[0],
       month_end: lastDay.toISOString().split("T")[0],
       ...thisMonth.summary,
-      improvement_over_last_month:
-        lastIdleMinutes > 0
-          ? Math.round(
-              ((lastIdleMinutes - currentIdleMinutes) / lastIdleMinutes) * 100,
-            )
-          : 0,
+      improvement_over_last_month: improvementText,
       saved_hours: savedHours,
       saved_fte: savedFTE,
       estimated_salary_saved_million: savedSalary,
@@ -824,7 +863,7 @@ function buildReportMessage(report, type) {
     message += `📈 **BÁO CÁO TUẦN** (${s.week_start} → ${s.week_end})\n`;
     message += `⏰ ${nowStr}\n\n`;
     message += `⏳ Tổng idle: ${s.total_idle_hours} giờ (${s.idle_percent}%)\n`;
-    message += `📉 Cải thiện: ${s.improvement_from_last_week}% so với tuần trước\n`;
+    message += `📉 Cải thiện: ${s.improvement_from_last_week} so với tuần trước\n`;
     message += `👥 QC xuất sắc (<60p): ${report.user_classification.excellent_count} (${report.user_classification.excellent_percent}%)\n`;
     message += `🆘 Cần hỗ trợ (>180p): ${report.user_classification.needs_support_count}\n`;
     if (report.ranking && report.ranking.length > 0) {
@@ -837,7 +876,7 @@ function buildReportMessage(report, type) {
     message += `📅 **BÁO CÁO THÁNG** ${s.month}/${s.year}\n`;
     message += `⏰ ${nowStr}\n\n`;
     message += `⏳ Tổng idle: ${s.total_idle_hours} giờ (${s.idle_percent}%)\n`;
-    message += `📉 Cải thiện so với tháng trước: ${s.improvement_over_last_month}%\n`;
+    message += `📉 Cải thiện so với tháng trước: ${s.improvement_over_last_month}\n`;
     message += `💰 Tiết kiệm ước tính: ${s.saved_hours} giờ (~${s.estimated_salary_saved_million} triệu VNĐ)\n`;
     message += `🎯 Mục tiêu tháng sau: idle < ${s.target_next_month}%\n`;
     if (report.top_performers && report.top_performers.length > 0) {
@@ -862,7 +901,7 @@ async function sendReportToSeatalk(report, type) {
     config.seatalk_webhook_url || process.env.SEATALK_ALERT_WEBHOOK_URL;
   if (!webhookUrl || webhookUrl.includes("xxx")) {
     console.log("Webhook not configured, would send report:", report.summary);
-    return true; // giả lập thành công
+    return true;
   }
   const message = buildReportMessage(report, type);
   const res = await fetch(webhookUrl, {
@@ -882,7 +921,6 @@ async function sendReportToSeatalk(report, type) {
 
 // ========== MAIN HANDLER ==========
 export default async function handler(req, res) {
-  // ---------- XÁC THỰC ----------
   const secret = req.headers["x-cron-secret"];
   if (secret !== process.env.CRON_SECRET) {
     return res.status(401).json({ error: "Unauthorized" });
@@ -950,9 +988,7 @@ export default async function handler(req, res) {
             : Math.max(workStartMs, breakEndMs);
         const idleStartTime = new Date(idleStartMs).toLocaleTimeString(
           "vi-VN",
-          {
-            timeZone: "Asia/Ho_Chi_Minh",
-          },
+          { timeZone: "Asia/Ho_Chi_Minh" },
         );
 
         idleUsers.push({
@@ -1055,13 +1091,13 @@ export default async function handler(req, res) {
         fileName = `qc-monthly-report-${currentYear}-${String(currentMonth).padStart(2, "0")}.xlsx`;
       }
 
-      // Nếu yêu cầu gửi báo cáo lên Seatalk
+      // Gửi Seatalk nếu yêu cầu
       let sentToSeatalk = false;
       if (send === "true") {
         sentToSeatalk = await sendReportToSeatalk(report, type);
       }
 
-      // Nếu yêu cầu xuất Excel
+      // Xuất Excel nếu yêu cầu
       if (export_excel === "true") {
         const wb = generateExcelBuffer(report, type);
         const buf = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });

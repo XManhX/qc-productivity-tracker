@@ -2,30 +2,28 @@
 import { requireAdmin } from '../../lib/auth/auth.js';
 import usersHandler from '../../lib/admin/users.js';
 import rolesHandler from '../../lib/admin/roles.js';
-import assignmentsHandler from '../../lib/admin/assignments.js'; // thêm
+import assignmentsHandler from '../../lib/admin/assignments.js';
 import { getPathSegments } from '../../lib/path-utils.js';
 
 export default async function handler(req, res) {
+    // Xác định resource (users, roles, assignments)
     const entity = getPathSegments(req, 'admin');
     const resource = entity[0];
 
-    if (resource === 'users') {
-        if (req.method === 'GET') return usersHandler(req, res);
-        if (await requireAdmin(req)) return usersHandler(req, res);
+    // Tất cả request admin đều yêu cầu quyền admin
+    if (!(await requireAdmin(req))) {
         return res.status(401).json({ error: 'Unauthorized' });
     }
 
-    if (resource === 'roles') {
-        if (req.method === 'GET') return rolesHandler(req, res);
-        if (await requireAdmin(req)) return rolesHandler(req, res);
-        return res.status(401).json({ error: 'Unauthorized' });
+    // Điều hướng đến handler tương ứng
+    switch (resource) {
+        case 'users':
+            return usersHandler(req, res);
+        case 'roles':
+            return rolesHandler(req, res);
+        case 'assignments':
+            return assignmentsHandler(req, res);
+        default:
+            return res.status(404).json({ error: 'Admin resource not found' });
     }
-
-    if (resource === 'assignments') {
-        if (req.method === 'GET') return assignmentsHandler(req, res);
-        if (await requireAdmin(req)) return assignmentsHandler(req, res);
-        return res.status(401).json({ error: 'Unauthorized' });
-    }
-
-    return res.status(404).json({ error: 'Admin resource not found' });
 }

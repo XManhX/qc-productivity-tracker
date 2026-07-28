@@ -31,8 +31,6 @@ async function init() {
   // 4. Load dữ liệu lần đầu
   await store.loadData();
 
-  console.log(store.state.data); // Debug state ban đầu
-
   // 5. Kiểm tra chuyển ngày và tự động refresh khi cần
   setInterval(() => {
     const today = store.getTodayVN();

@@ -202,8 +202,6 @@
             });
             const data = await res.json();
 
-            console.log("Login response:", data); // debug
-
             if (res.ok && data.success) {
               const token = data.token;
               if (!token) {
@@ -214,10 +212,6 @@
 
               // Lưu token
               localStorage.setItem("qc_session_token", token);
-              console.log(
-                "Token saved:",
-                localStorage.getItem("qc_session_token"),
-              );
 
               // Lưu email từ token (nếu có)
               try {

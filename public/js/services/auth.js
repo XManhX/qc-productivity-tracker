@@ -1,3 +1,4 @@
+// public/js/services/auth.js
 const BASE_URL = "/api";
 
 export function checkAuth() {

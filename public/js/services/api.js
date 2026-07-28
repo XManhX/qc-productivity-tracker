@@ -1,4 +1,4 @@
-// api.js
+// public/js/services/api.js
 const BASE_URL = "/api";
 
 // ============================================================
@@ -140,5 +140,33 @@ export async function updateTarget(data) {
   return request(`${BASE_URL}/config/targets`, {
     method: "PUT",
     body: JSON.stringify(data),
+  });
+}
+
+// ============================================================
+// Assignments
+// ============================================================
+export async function fetchAssignments(params = {}) {
+  const qs = new URLSearchParams(params).toString();
+  return request(`${BASE_URL}/admin/assignments?${qs}`);
+}
+
+export async function createAssignment(data) {
+  return request(`${BASE_URL}/admin/assignments`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function updateAssignment(id, data) {
+  return request(`${BASE_URL}/admin/assignments?id=${id}`, {
+    method: "PUT",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function deleteAssignment(id) {
+  return request(`${BASE_URL}/admin/assignments?id=${id}`, {
+    method: "DELETE",
   });
 }

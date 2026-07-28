@@ -1,12 +1,12 @@
 // api/qc/[...slug].js
+import { getPathSegments } from '../../lib/path-utils.js';
 import authzHandler from '../../lib/qc/authz.js';
 import meHandler from '../../lib/qc/me.js';
 import logHandler from '../../lib/qc/log.js';
 import dashboardHandler from '../../lib/qc/dashboard.js';
-import { getPathSegments } from '../../lib/path-utils.js';
 
 export default async function handler(req, res) {
-    // CORS
+    // CORS headers
     res.setHeader('Access-Control-Allow-Credentials', true);
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
@@ -14,30 +14,22 @@ export default async function handler(req, res) {
 
     if (req.method === 'OPTIONS') return res.status(200).end();
 
-    // Luôn lấy endpoint từ path, bỏ qua query param
     const slug = getPathSegments(req, 'qc');
     const endpoint = slug[0];
 
     if (!endpoint) {
-        return res.status(404).json({ error: 'QC endpoint is required (e.g., /api/qc/me)' });
+        return res.status(404).json({ error: 'QC endpoint is required' });
     }
 
     switch (endpoint) {
-        case 'authz': return authzHandler(req, res);
+        case 'authz':
+            return authzHandler(req, res);
         case 'me':
-            if (req.method === 'GET') {
-                const email = verifyToken(req.headers.authorization?.split(' ')[1]);
-                if (!email) return res.status(401).json({ error: 'Unauthorized' });
-                const { data: user } = await supabase
-                    .from('qc_users')
-                    .select('email, name, role_key')
-                    .eq('email', email)
-                    .single();
-                return res.status(200).json(user || { email });
-            }
-            break;
-        case 'log': return logHandler(req, res);
-        case 'dashboard': return dashboardHandler(req, res);
+            return meHandler(req, res);
+        case 'log':
+            return logHandler(req, res);
+        case 'dashboard':
+            return dashboardHandler(req, res);
         default:
             return res.status(404).json({ error: `Unknown QC endpoint: ${endpoint}` });
     }

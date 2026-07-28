@@ -11,8 +11,12 @@ export default async function handler(req, res) {
     const resource = entity[0];
 
     // Tất cả request admin đều yêu cầu quyền admin
-    if (!(await requireAdmin(req))) {
-        return res.status(401).json({ error: 'Unauthorized' });
+    const auth = await requireAdmin(req);
+    if (!auth.authorized) {
+        if (auth.reason === 'missing_token' || auth.reason === 'invalid_token') {
+            return res.status(401).json({ error: 'Unauthorized - Please login' });
+        }
+        return res.status(403).json({ error: 'Forbidden - Admin access required' });
     }
 
     // Điều hướng đến handler tương ứng

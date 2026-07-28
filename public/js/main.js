@@ -4,7 +4,7 @@ import { FilterBar } from "./components/FilterBar.js";
 import { StatsOverview } from "./components/StatsOverview.js";
 import { HeatmapTable } from "./components/HeatmapTable.js";
 import { Pagination } from "./components/Pagination.js";
-// import { checkAuth, handleAuthToken, isAdmin } from './services/auth.js'; // Bật nếu cần auth
+import { checkAuth } from './services/auth.js';
 
 async function init() {
   checkAuth(); // Kiểm tra đăng nhập, nếu không có token hợp lệ sẽ redirect

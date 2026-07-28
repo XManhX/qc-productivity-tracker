@@ -3,6 +3,7 @@ import { NavBar } from "./components/NavBar.js";
 import { UserForm } from "./components/UserForm.js";
 import { ImportSection } from "./components/ImportSection.js";
 import { UserList } from "./components/UserList.js";
+import { checkAuth } from './services/auth.js';
 
 async function init() {
   checkAuth(); // Yêu cầu đăng nhập

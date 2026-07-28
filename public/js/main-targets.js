@@ -2,6 +2,7 @@ import { targetStore } from "./store/TargetStore.js";
 import { NavBar } from "./components/NavBar.js";
 import { RoleTable } from "./components/RoleTable.js";
 import { TargetTable } from "./components/TargetTable.js";
+import { checkAuth } from './services/auth.js';
 
 async function init() {
   checkAuth(); // Yêu cầu đăng nhập

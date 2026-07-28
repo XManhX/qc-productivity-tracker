@@ -1,6 +1,7 @@
 import { alertConfigStore } from "./store/AlertConfigStore.js";
 import { NavBar } from "./components/NavBar.js";
 import { AlertConfigForm } from "./components/AlertConfigForm.js";
+import { checkAuth } from './services/auth.js';
 
 async function init() {
   checkAuth(); // Yêu cầu đăng nhập

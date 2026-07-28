@@ -2,11 +2,13 @@ import { fetchAssignments, createAssignment, updateAssignment, deleteAssignment 
 
 export class AssignmentStore {
     constructor() {
+        // Lấy ngày hôm nay dạng YYYY-MM-DD
+        const today = new Date().toISOString().slice(0, 10);
         this.state = {
             assignments: [],
             filters: {
                 searchQuery: "",
-                date: "",
+                date: today, // mặc định hôm nay
                 page: 1,
                 pageSize: 25,
             },
@@ -58,13 +60,12 @@ export class AssignmentStore {
         this.state.error = null;
         this.notify();
         try {
-            // Gộp filters.date vào params nếu có
-            if (this.state.filters.date) {
-                params.date = this.state.filters.date;
-            }
-            const data = await fetchAssignments(params);
+            // Ưu tiên params.date, nếu không có thì dùng filters.date (hôm nay)
+            const date = params.date || this.state.filters.date;
+            const query = { ...params, date };
+            const data = await fetchAssignments(query);
             this.state.assignments = data || [];
-            this.state.filters.page = 1; // reset trang khi load mới
+            this.state.filters.page = 1; // reset về trang đầu khi load mới
         } catch (err) {
             this.state.error = err.message;
         } finally {
@@ -88,7 +89,7 @@ export class AssignmentStore {
     async addAssignment(data) {
         try {
             await createAssignment(data);
-            await this.loadAssignments();
+            await this.loadAssignments(); // reload với filters hiện tại (bao gồm date)
             return { success: true };
         } catch (err) {
             return { success: false, message: err.message };
@@ -115,7 +116,6 @@ export class AssignmentStore {
         }
     }
 
-    // Lấy thống kê nhanh (tổng, hôm nay, đang diễn ra)
     getStats() {
         const now = new Date();
         const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();

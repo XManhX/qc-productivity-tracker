@@ -193,6 +193,7 @@
           const email = $("login-email").value.trim();
           const password = $("login-password").value;
           emailError.classList.add("hidden");
+
           try {
             const res = await fetch("/api/auth/login", {
               method: "POST",
@@ -200,21 +201,40 @@
               body: JSON.stringify({ email, password }),
             });
             const data = await res.json();
+
+            console.log("Login response:", data); // debug
+
             if (res.ok && data.success) {
-              // Lưu token và đợi hoàn tất
-              localStorage.setItem("qc_session_token", data.token);
-              // Kiểm tra nếu token đã được lưu
+              const token = data.token;
+              if (!token) {
+                emailError.textContent = "Token không được trả về.";
+                emailError.classList.remove("hidden");
+                return;
+              }
+
+              // Lưu token
+              localStorage.setItem("qc_session_token", token);
               console.log(
                 "Token saved:",
                 localStorage.getItem("qc_session_token"),
               );
-              // Chuyển hướng sau khi chắc chắn đã lưu
-              window.location.href = "/index.html";
+
+              // Lưu email từ token (nếu có)
+              try {
+                const payload = JSON.parse(atob(token.split(".")[0]));
+                if (payload.email) {
+                  localStorage.setItem("user_email", payload.email);
+                }
+              } catch (e) {}
+
+              // Chuyển trang (dùng replace để không giữ lại trang login trong lịch sử)
+              window.location.replace("/index.html");
             } else {
               emailError.textContent = data.error || "Đăng nhập thất bại";
               emailError.classList.remove("hidden");
             }
           } catch (err) {
+            console.error("Login error:", err);
             emailError.textContent = "Lỗi kết nối";
             emailError.classList.remove("hidden");
           }

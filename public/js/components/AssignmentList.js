@@ -72,7 +72,7 @@ export class AssignmentList {
           <div class="flex flex-wrap items-center gap-2">
             <label class="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 h-11 text-sm text-slate-600">
               <i data-lucide="calendar" class="w-4 h-4 text-slate-400"></i>
-              <input type="date" id="filter-date" class="bg-transparent text-sm font-medium outline-none h-full" />
+              <input type="date" id="filter-date" value="${this.store.state.filters.date}" class="bg-transparent text-sm font-medium outline-none h-full" />
             </label>
             <button id="clear-filters-btn" class="rounded-xl border border-slate-200 bg-white px-3 h-11 text-sm font-medium text-slate-600 transition hover:bg-slate-100 flex items-center">Xóa bộ lọc</button>
           </div>

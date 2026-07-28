@@ -14,8 +14,8 @@ export class NavBar {
     const path = window.location.pathname;
     if (path.endsWith("/users.html") || path.endsWith("/users")) return "users";
     if (path.endsWith("/targets.html") || path.endsWith("/targets")) return "targets";
-    if (path.endsWith("/alert-config.html") || path.endsWith("/alert-config")) return "alert-config";
     if (path.endsWith("/assignments.html") || path.endsWith("/assignments")) return "assignments";
+    if (path.endsWith("/alert-config.html") || path.endsWith("/alert-config")) return "alert-config";
     return "dashboard"; // mặc định
   }
 
@@ -24,8 +24,8 @@ export class NavBar {
       { key: "dashboard", href: "/", icon: "bar-chart-3", label: "Dashboard" },
       { key: "users", href: "/users.html", icon: "users", label: "Nhân Sự" },
       { key: "targets", href: "/targets.html", icon: "target", label: "Roles & Targets" },
-      { key: "alert-config", href: "/alert-config.html", icon: "bell-ring", label: "Cấu hình Alert" },
       { key: "assignments", href: "/assignments.html", icon: "clipboard-list", label: "Phân công" },
+      { key: "alert-config", href: "/alert-config.html", icon: "bell-ring", label: "Cấu hình Alert" },
     ];
 
     const linksHtml = pages

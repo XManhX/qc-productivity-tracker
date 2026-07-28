@@ -7,7 +7,7 @@ import { getPathSegments } from '../../lib/path-utils.js';
 export default async function handler(req, res) {
     const secret = req.headers['x-cron-secret'];
     if (secret !== process.env.CRON_SECRET) {
-        return res.status(401).json({ error: 'Unauthorized' });
+        return res.status(401).json({ error: 'Unauthorized Cron' });
     }
 
     if (req.method === 'OPTIONS') return res.status(200).end();

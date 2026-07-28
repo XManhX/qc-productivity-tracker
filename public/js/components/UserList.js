@@ -19,11 +19,7 @@ export class UserList {
     );
     userStore.on("update", () => {
       this._updateView();
-      this.pagination.refresh({
-        page: userStore.currentPage,
-        totalPages: userStore.totalPages,
-        totalItems: userStore.totalFiltered,
-      });
+      // Pagination listens to the same event and re-renders itself
     });
     this._updateView();
   }

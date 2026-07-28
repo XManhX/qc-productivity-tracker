@@ -1,21 +1,21 @@
 export class NavBar {
   /**
    * @param {HTMLElement} container - phần tử chứa navigation
-   * @param {string} [currentPage] - 'dashboard' | 'users' | 'targets' (nếu không truyền sẽ tự detect từ URL)
+   * @param {string} [currentPage] - 'dashboard' | 'users' | 'targets' | 'alert-config' | 'assignments' (nếu không truyền sẽ tự detect từ URL)
    */
   constructor(container, currentPage = null) {
     this.container = container;
     this.currentPage = currentPage || this._detectPage();
     this._render();
-    // Gọi lucide.createIcons() sau khi HTML đã được chèn vào DOM
     if (typeof lucide !== "undefined") lucide.createIcons();
   }
 
   _detectPage() {
     const path = window.location.pathname;
     if (path.endsWith("/users.html") || path.endsWith("/users")) return "users";
-    if (path.endsWith("/targets.html") || path.endsWith("/targets"))
-      return "targets";
+    if (path.endsWith("/targets.html") || path.endsWith("/targets")) return "targets";
+    if (path.endsWith("/alert-config.html") || path.endsWith("/alert-config")) return "alert-config";
+    if (path.endsWith("/assignments.html") || path.endsWith("/assignments")) return "assignments";
     return "dashboard"; // mặc định
   }
 
@@ -23,18 +23,9 @@ export class NavBar {
     const pages = [
       { key: "dashboard", href: "/", icon: "bar-chart-3", label: "Dashboard" },
       { key: "users", href: "/users.html", icon: "users", label: "Nhân Sự" },
-      {
-        key: "targets",
-        href: "/targets.html",
-        icon: "target",
-        label: "Roles & Targets",
-      },
-      {
-        key: "alert-config",
-        href: "/alert-config.html",
-        icon: "bell-ring",
-        label: "Cấu hình Alert",
-      },
+      { key: "targets", href: "/targets.html", icon: "target", label: "Roles & Targets" },
+      { key: "alert-config", href: "/alert-config.html", icon: "bell-ring", label: "Cấu hình Alert" },
+      { key: "assignments", href: "/assignments.html", icon: "clipboard-list", label: "Phân công" },
     ];
 
     const linksHtml = pages

@@ -5,6 +5,8 @@ import { ImportSection } from "./components/ImportSection.js";
 import { UserList } from "./components/UserList.js";
 
 async function init() {
+  checkAuth(); // Yêu cầu đăng nhập
+
   new NavBar(document.getElementById("nav-container"), "users");
 
   await userStore.loadRoles();

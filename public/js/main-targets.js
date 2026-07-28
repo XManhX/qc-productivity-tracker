@@ -4,6 +4,8 @@ import { RoleTable } from "./components/RoleTable.js";
 import { TargetTable } from "./components/TargetTable.js";
 
 async function init() {
+  checkAuth(); // Yêu cầu đăng nhập
+
   new NavBar(document.getElementById("nav-container"), "targets");
   new RoleTable(document.getElementById("role-section"));
   new TargetTable(document.getElementById("target-section"));

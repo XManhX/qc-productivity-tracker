@@ -7,14 +7,8 @@ import { Pagination } from "./components/Pagination.js";
 // import { checkAuth, handleAuthToken, isAdmin } from './services/auth.js'; // Bật nếu cần auth
 
 async function init() {
-  // ---- Bỏ comment nếu cần auth ----
-  // handleAuthToken();
-  // if (!checkAuth()) return;
-  // if (!isAdmin()) {
-  //   alert('Bạn không có quyền truy cập.');
-  //   window.location.href = '/index.html';
-  //   return;
-  // }
+  checkAuth(); // Kiểm tra đăng nhập, nếu không có token hợp lệ sẽ redirect
+
   new NavBar(document.getElementById("nav-container"));
 
   // 1. Khôi phục filter từ URL/localStorage

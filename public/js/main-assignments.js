@@ -4,6 +4,8 @@ import { AssignmentList } from "./components/AssignmentList.js";
 import { AssignmentStore } from "./store/AssignmentStore.js";
 
 async function init() {
+    checkAuth(); // Yêu cầu đăng nhập
+
     new NavBar(document.getElementById("nav-container"), "assignments");
 
     const store = new AssignmentStore();

@@ -1,10 +1,12 @@
 import { alertConfigStore } from "./store/AlertConfigStore.js";
 import { NavBar } from "./components/NavBar.js";
 import { AlertConfigForm } from "./components/AlertConfigForm.js";
-import { checkAuth } from './services/auth.js';
+import { handleAuthToken, checkAuth } from './services/auth.js';
+
 
 async function init() {
-  checkAuth(); // Yêu cầu đăng nhập
+  handleAuthToken();
+  checkAuth(); // Kiểm tra đăng nhập, nếu không có token hợp lệ sẽ redirect
 
   new NavBar(document.getElementById("nav-container"), "alert-config");
 

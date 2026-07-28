@@ -38,17 +38,16 @@ export function handleAuthToken() {
   const params = new URLSearchParams(window.location.search);
   const token = params.get("token");
   if (token) {
+    localStorage.setItem("qc_session_token", token);
+    // Xoá token khỏi URL
+    const newUrl = window.location.pathname;
+    history.replaceState(null, "", newUrl);
+    // Giải mã lấy email (nếu cần)
     try {
-      fetchAndStoreRole(token);
       const parts = token.split(".");
-      if (parts.length === 2) {
-        const payload = JSON.parse(atob(parts[0]));
-        if (payload.email && payload.exp > Date.now()) {
-          localStorage.setItem("qc_session_token", token);
-          localStorage.setItem("user_email", payload.email);
-          const newUrl = window.location.pathname;
-          history.replaceState(null, "", newUrl);
-        }
+      const payload = JSON.parse(atob(parts[0]));
+      if (payload.email) {
+        localStorage.setItem("user_email", payload.email);
       }
     } catch (e) { }
   }

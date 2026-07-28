@@ -201,7 +201,14 @@
             });
             const data = await res.json();
             if (res.ok && data.success) {
+              // Lưu token và đợi hoàn tất
               localStorage.setItem("qc_session_token", data.token);
+              // Kiểm tra nếu token đã được lưu
+              console.log(
+                "Token saved:",
+                localStorage.getItem("qc_session_token"),
+              );
+              // Chuyển hướng sau khi chắc chắn đã lưu
               window.location.href = "/index.html";
             } else {
               emailError.textContent = data.error || "Đăng nhập thất bại";

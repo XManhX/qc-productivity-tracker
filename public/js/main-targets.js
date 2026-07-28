@@ -2,10 +2,12 @@ import { targetStore } from "./store/TargetStore.js";
 import { NavBar } from "./components/NavBar.js";
 import { RoleTable } from "./components/RoleTable.js";
 import { TargetTable } from "./components/TargetTable.js";
-import { checkAuth } from './services/auth.js';
+import { handleAuthToken, checkAuth } from './services/auth.js';
+
 
 async function init() {
-  checkAuth(); // Yêu cầu đăng nhập
+  handleAuthToken();
+  checkAuth(); // Kiểm tra đăng nhập, nếu không có token hợp lệ sẽ redirect
 
   new NavBar(document.getElementById("nav-container"), "targets");
   new RoleTable(document.getElementById("role-section"));

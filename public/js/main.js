@@ -4,9 +4,11 @@ import { FilterBar } from "./components/FilterBar.js";
 import { StatsOverview } from "./components/StatsOverview.js";
 import { HeatmapTable } from "./components/HeatmapTable.js";
 import { Pagination } from "./components/Pagination.js";
-import { checkAuth } from './services/auth.js';
+import { handleAuthToken, checkAuth } from './services/auth.js';
+
 
 async function init() {
+  handleAuthToken();
   checkAuth(); // Kiểm tra đăng nhập, nếu không có token hợp lệ sẽ redirect
 
   new NavBar(document.getElementById("nav-container"));

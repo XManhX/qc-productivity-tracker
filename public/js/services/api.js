@@ -71,10 +71,10 @@ export async function createUser({ name, email, role_key }) {
   });
 }
 
-export async function updateUser({ id, name, email, role_key, is_active, widget_visible }) {
+export async function updateUser({ id, name, email, password, role_key, is_active, widget_visible }) {
   return request(`${BASE_URL}/admin/users`, {
     method: "PUT",
-    body: JSON.stringify({ id, name, email, role_key, is_active, widget_visible }),
+    body: JSON.stringify({ id, name, email, password, role_key, is_active, widget_visible }),
   });
 }
 

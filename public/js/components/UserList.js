@@ -36,6 +36,10 @@ export class UserList {
             </div>
           </div>
           <button id="refresh-users-btn" class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-slate-500 hover:text-slate-700 transition" title="Tải lại dữ liệu"><i data-lucide="refresh-cw" class="w-4 h-4"></i></button>
+          <button id="export-excel-btn" class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-slate-500 hover:text-emerald-600 transition flex items-center gap-1" title="Xuất Excel">
+            <i data-lucide="download" class="w-4 h-4"></i>
+            <span class="text-xs font-medium">Xuất Excel</span>
+          </button>
         </div>
         <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
           <div class="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm"><div class="flex items-center justify-between"><div><p class="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">Tổng</p><p id="summary-total" class="text-xl font-semibold text-slate-900">0</p></div><div class="rounded-xl bg-indigo-50 p-2 text-indigo-600"><i data-lucide="users" class="w-4 h-4"></i></div></div></div>
@@ -68,7 +72,7 @@ export class UserList {
       </div>
       <div class="overflow-x-auto max-h-[600px] overflow-y-auto">
         <table class="w-full text-left border-collapse">
-          <thead><tr class="bg-slate-50 border-b border-slate-100 text-slate-500 text-xs uppercase tracking-wider font-semibold"><th class="px-6 py-3">Nhân Viên</th><th class="px-6 py-3">Email</th><th class="px-6 py-3">Vai Trò</th><th class="px-6 py-3">Trạng Thái</th><th class="px-6 py-3">Widget</th><th class="px-6 py-3">Mật khẩu</th></tr></thead>
+          <thead><tr class="bg-slate-50 border-b border-slate-100 text-slate-500 text-xs uppercase tracking-wider font-semibold"><th class="px-6 py-3">Nhân Viên</th><th class="px-6 py-3">Email</th><th class="px-6 py-3">Vai Trò</th><th class="px-6 py-3">Trạng Thái</th><th class="px-6 py-3">Widget</th><th class="px-6 py-3">Mật khẩu</th><th class="px-6 py-3">Thao tác</th></tr></thead>
           <tbody id="user-list-body" class="divide-y divide-slate-100 text-sm"></tbody>
         </table>
       </div>
@@ -122,19 +126,19 @@ export class UserList {
     const pagedUsers = userStore.pagedUsers;
     const filteredUsers = userStore.filteredUsers;
     if (loading) {
-      tbody.innerHTML = `<tr><td colspan="6" class="py-12 text-center text-slate-400"><div class="loading-spinner w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full mx-auto"></div><span>Đang tải...</span></td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="7" class="py-12 text-center text-slate-400"><div class="loading-spinner w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full mx-auto"></div><span>Đang tải...</span></td></tr>`;
       return;
     }
     if (error) {
-      tbody.innerHTML = `<tr><td colspan="6" class="py-12 text-rose-500 text-center">Lỗi: ${error}</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="7" class="py-12 text-rose-500 text-center">Lỗi: ${error}</td></tr>`;
       return;
     }
     if (users.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="6" class="py-14 text-center text-slate-400"><i data-lucide="user-x" class="w-8 h-8 mx-auto"></i><p class="font-semibold mt-2">Chưa có nhân viên nào</p><p class="text-sm">Thêm nhân sự mới để bắt đầu.</p></td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="7" class="py-14 text-center text-slate-400"><i data-lucide="user-x" class="w-8 h-8 mx-auto"></i><p class="font-semibold mt-2">Chưa có nhân viên nào</p><p class="text-sm">Thêm nhân sự mới để bắt đầu.</p></td></tr>`;
       return;
     }
     if (filteredUsers.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="6" class="py-14 text-center text-slate-400"><i data-lucide="search-x" class="w-8 h-8 mx-auto"></i><p class="font-semibold mt-2">Không tìm thấy nhân sự</p><p class="text-sm">Thử lại với bộ lọc khác.</p></td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="7" class="py-14 text-center text-slate-400"><i data-lucide="search-x" class="w-8 h-8 mx-auto"></i><p class="font-semibold mt-2">Không tìm thấy nhân sự</p><p class="text-sm">Thử lại với bộ lọc khác.</p></td></tr>`;
       return;
     }
     tbody.innerHTML = pagedUsers
@@ -166,6 +170,16 @@ export class UserList {
         </td>
         <td class="px-6 py-4 text-center">
           ${user.has_password ? '<i data-lucide="lock" class="w-4 h-4 text-emerald-500 inline-block" title="Đã đặt mật khẩu"></i>' : '<i data-lucide="unlock" class="w-4 h-4 text-slate-300 inline-block" title="Chưa có mật khẩu"></i>'}
+        </td>
+        <td class="px-6 py-4">
+          <div class="flex items-center gap-2">
+            <button data-user-id="${user.id}" data-action="reset-password" class="text-slate-400 hover:text-indigo-600 transition" title="Đặt lại mật khẩu">
+              <i data-lucide="key" class="w-4 h-4"></i>
+            </button>
+            <button data-user-id="${user.id}" data-action="delete" class="text-slate-400 hover:text-rose-600 transition" title="Xóa người dùng">
+              <i data-lucide="trash-2" class="w-4 h-4"></i>
+            </button>
+          </div>
         </td>
       </tr>`;
       })
@@ -239,7 +253,33 @@ export class UserList {
           result.success ? "Đã cập nhật widget" : `Lỗi: ${result.message}`,
           result.success ? "success" : "error",
         );
+      } else if (action === 'reset-password') {
+        const { PromptModal } = await import('./PromptModal.js');
+        const newPassword = await PromptModal.show({
+          title: 'Đặt lại mật khẩu',
+          label: 'Mật khẩu mới (ít nhất 6 ký tự)',
+          confirmText: 'Cập nhật'
+        });
+        if (newPassword) {
+          const result = await userStore.resetPassword(id, newPassword);
+          showToast(result.success ? 'Mật khẩu đã được cập nhật' : `Lỗi: ${result.message}`, result.success ? 'success' : 'error');
+        }
       }
+    });
+
+    this.container.querySelector('#export-excel-btn').addEventListener('click', () => {
+      const users = userStore.filteredUsers; // toàn bộ user đã lọc
+      const data = users.map(u => ({
+        'Họ tên': u.name,
+        'Email': u.email,
+        'Vai trò': u.display_name || '',
+        'Trạng thái': u.is_active ? 'Active' : 'Inactive',
+        'Widget': u.widget_visible ? 'Hiện' : 'Ẩn'
+      }));
+      import('../utils/exportExcel.js').then(({ exportToExcel }) => {
+        exportToExcel(data, `danh-sach-users-${new Date().toISOString().slice(0, 10)}.xlsx`);
+        showToast('Đã xuất file Excel', 'success');
+      });
     });
   }
 

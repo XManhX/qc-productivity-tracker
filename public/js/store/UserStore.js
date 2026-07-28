@@ -204,14 +204,28 @@ class UserStore {
     return { created, updated, errors };
   }
 
-  // Giữ lại importUsers cũ nếu cần
-  async importUsers(payloadArray) {
+  async deleteUser(id) {
     try {
-      const result = await bulkCreateUsers({ import: payloadArray });
-      await this.loadUsers();
-      return result;
+      await deleteUser(id); // import từ api.js
+      this.state.users = this.state.users.filter(u => u.id != id);
+      this.notify();
+      return { success: true };
     } catch (err) {
-      throw err;
+      return { success: false, message: err.message };
+    }
+  }
+
+  async resetPassword(id, newPassword) {
+    try {
+      await updateUser({ id, password: newPassword });
+      const user = this.state.users.find(u => u.id == id);
+      if (user) {
+        user.has_password = true;  // backend đã hash, client chỉ cần biết đã có
+      }
+      this.notify();
+      return { success: true };
+    } catch (err) {
+      return { success: false, message: err.message };
     }
   }
 

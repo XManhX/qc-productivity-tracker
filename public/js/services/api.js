@@ -1,9 +1,6 @@
 // public/js/services/api.js
 const BASE_URL = "/api";
 
-// ============================================================
-// Hàm gửi request chung
-// ============================================================
 async function request(url, options = {}) {
   const token = localStorage.getItem("qc_session_token");
   const headers = {
@@ -24,9 +21,7 @@ async function request(url, options = {}) {
   return data;
 }
 
-// ============================================================
-// Auth / User
-// ============================================================
+// Auth
 export async function fetchMe() {
   return request(`${BASE_URL}/qc/me`);
 }
@@ -38,9 +33,7 @@ export async function checkAuthz(email) {
   });
 }
 
-// ============================================================
 // Dashboard
-// ============================================================
 export async function fetchDashboard(params) {
   const qs = new URLSearchParams(params).toString();
   return request(`${BASE_URL}/qc/dashboard?${qs}`);
@@ -57,24 +50,22 @@ export async function postLog(data) {
   });
 }
 
-// ============================================================
-// Admin: Users
-// ============================================================
+// Admin Users
 export async function fetchUsers() {
   return request(`${BASE_URL}/admin/users`);
 }
 
-export async function createUser({ name, email, role_key }) {
+export async function createUser({ name, email, role_key, password }) {
   return request(`${BASE_URL}/admin/users`, {
     method: "POST",
-    body: JSON.stringify({ name, email, role_key }),
+    body: JSON.stringify({ name, email, role_key, password }),
   });
 }
 
-export async function updateUser({ id, name, email, password, role_key, is_active, widget_visible }) {
+export async function updateUser({ id, name, email, role_key, is_active, widget_visible, password }) {
   return request(`${BASE_URL}/admin/users`, {
     method: "PUT",
-    body: JSON.stringify({ id, name, email, password, role_key, is_active, widget_visible }),
+    body: JSON.stringify({ id, name, email, role_key, is_active, widget_visible, password }),
   });
 }
 
@@ -89,9 +80,7 @@ export async function bulkCreateUsers(payload) {
   });
 }
 
-// ============================================================
-// Admin: Roles
-// ============================================================
+// Admin Roles
 export async function fetchRoles() {
   return request(`${BASE_URL}/admin/roles`);
 }
@@ -114,9 +103,7 @@ export async function deleteRole(id) {
   return request(`${BASE_URL}/admin/roles?id=${id}`, { method: "DELETE" });
 }
 
-// ============================================================
 // Config
-// ============================================================
 export async function fetchPublicConfig() {
   return request(`${BASE_URL}/config/public`);
 }
@@ -143,9 +130,7 @@ export async function updateTarget(data) {
   });
 }
 
-// ============================================================
 // Assignments
-// ============================================================
 export async function fetchAssignments(params = {}) {
   const qs = new URLSearchParams(params).toString();
   return request(`${BASE_URL}/admin/assignments?${qs}`);
@@ -166,7 +151,5 @@ export async function updateAssignment(id, data) {
 }
 
 export async function deleteAssignment(id) {
-  return request(`${BASE_URL}/admin/assignments?id=${id}`, {
-    method: "DELETE",
-  });
+  return request(`${BASE_URL}/admin/assignments?id=${id}`, { method: "DELETE" });
 }

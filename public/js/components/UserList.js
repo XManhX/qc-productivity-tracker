@@ -2,6 +2,8 @@ import { userStore } from "../store/UserStore.js";
 import { escapeHtml } from "../utils/escapeHtml.js";
 import { showToast } from "../utils/toast.js";
 import { Pagination } from "./Pagination.js";
+import { ConfirmModal } from "./ConfirmModal.js";
+import { PromptModal } from "./PromptModal.js";
 
 export class UserList {
   constructor(container) {
@@ -19,7 +21,6 @@ export class UserList {
     );
     userStore.on("update", () => {
       this._updateView();
-      // Pagination listens to the same event and re-renders itself
     });
     this._updateView();
   }
@@ -35,11 +36,13 @@ export class UserList {
               <p id="user-count-badge" class="text-slate-400 text-xs mt-0.5">0 nhân sự được ủy quyền</p>
             </div>
           </div>
-          <button id="refresh-users-btn" class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-slate-500 hover:text-slate-700 transition" title="Tải lại dữ liệu"><i data-lucide="refresh-cw" class="w-4 h-4"></i></button>
-          <button id="export-excel-btn" class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-slate-500 hover:text-emerald-600 transition flex items-center gap-1" title="Xuất Excel">
-            <i data-lucide="download" class="w-4 h-4"></i>
-            <span class="text-xs font-medium">Xuất Excel</span>
-          </button>
+          <div class="flex items-center gap-2">
+            <button id="export-excel-btn" class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-slate-500 hover:text-emerald-600 transition flex items-center gap-1" title="Xuất Excel">
+              <i data-lucide="download" class="w-4 h-4"></i>
+              <span class="text-xs font-medium">Xuất Excel</span>
+            </button>
+            <button id="refresh-users-btn" class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-slate-500 hover:text-slate-700 transition" title="Tải lại dữ liệu"><i data-lucide="refresh-cw" class="w-4 h-4"></i></button>
+          </div>
         </div>
         <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
           <div class="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm"><div class="flex items-center justify-between"><div><p class="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">Tổng</p><p id="summary-total" class="text-xl font-semibold text-slate-900">0</p></div><div class="rounded-xl bg-indigo-50 p-2 text-indigo-600"><i data-lucide="users" class="w-4 h-4"></i></div></div></div>
@@ -72,7 +75,17 @@ export class UserList {
       </div>
       <div class="overflow-x-auto max-h-[600px] overflow-y-auto">
         <table class="w-full text-left border-collapse">
-          <thead><tr class="bg-slate-50 border-b border-slate-100 text-slate-500 text-xs uppercase tracking-wider font-semibold"><th class="px-6 py-3">Nhân Viên</th><th class="px-6 py-3">Email</th><th class="px-6 py-3">Vai Trò</th><th class="px-6 py-3">Trạng Thái</th><th class="px-6 py-3">Widget</th><th class="px-6 py-3">Mật khẩu</th><th class="px-6 py-3">Thao tác</th></tr></thead>
+          <thead>
+            <tr class="bg-slate-50 border-b border-slate-100 text-slate-500 text-xs uppercase tracking-wider font-semibold">
+              <th class="px-6 py-3">Nhân Viên</th>
+              <th class="px-6 py-3">Email</th>
+              <th class="px-6 py-3">Vai Trò</th>
+              <th class="px-6 py-3">Trạng Thái</th>
+              <th class="px-6 py-3">Widget</th>
+              <th class="px-6 py-3">Mật khẩu</th>
+              <th class="px-6 py-3">Thao tác</th>
+            </tr>
+          </thead>
           <tbody id="user-list-body" class="divide-y divide-slate-100 text-sm"></tbody>
         </table>
       </div>
@@ -214,6 +227,26 @@ export class UserList {
       .querySelector("#refresh-users-btn")
       .addEventListener("click", () => userStore.loadUsers());
 
+    // Xuất Excel
+    this.container
+      .querySelector("#export-excel-btn")
+      .addEventListener("click", async () => {
+        const users = userStore.filteredUsers;
+        const data = users.map((u) => ({
+          "Họ tên": u.name,
+          "Email": u.email,
+          "Vai trò": u.display_name || "",
+          "Trạng thái": u.is_active ? "Active" : "Inactive",
+          "Widget": u.widget_visible ? "Hiện" : "Ẩn",
+        }));
+        const { exportToExcel } = await import("../utils/exportExcel.js");
+        exportToExcel(
+          data,
+          `danh-sach-users-${new Date().toISOString().slice(0, 10)}.xlsx`,
+        );
+        showToast("Đã xuất file Excel", "success");
+      });
+
     const tbody = this.container.querySelector("#user-list-body");
     tbody.addEventListener(
       "blur",
@@ -233,18 +266,22 @@ export class UserList {
         await this._saveInline(Number(e.target.dataset.userId));
       }
     });
+
+    // Xử lý click trên các nút toggle, delete, reset password
     tbody.addEventListener("click", async (e) => {
       const btn = e.target.closest("button");
       if (!btn?.dataset.userId) return;
       const id = Number(btn.dataset.userId);
-      if (btn.dataset.action === "toggle-status") {
+      const action = btn.dataset.action;
+
+      if (action === "toggle-status") {
         const isActive = btn.dataset.active === "true";
         const result = await userStore.updateUser(id, { is_active: !isActive });
         showToast(
           result.success ? "Đã cập nhật trạng thái" : `Lỗi: ${result.message}`,
           result.success ? "success" : "error",
         );
-      } else if (btn.dataset.action === "toggle-widget") {
+      } else if (action === "toggle-widget") {
         const visible = btn.dataset.visible === "true";
         const result = await userStore.updateUser(id, {
           widget_visible: !visible,
@@ -253,33 +290,39 @@ export class UserList {
           result.success ? "Đã cập nhật widget" : `Lỗi: ${result.message}`,
           result.success ? "success" : "error",
         );
-      } else if (action === 'reset-password') {
-        const { PromptModal } = await import('./PromptModal.js');
+      } else if (action === "delete") {
+        const confirmed = await ConfirmModal.show({
+          title: "Xóa người dùng",
+          message:
+            "Bạn có chắc muốn xóa người dùng này? Hành động không thể hoàn tác.",
+          confirmText: "Xóa",
+          confirmClass: "bg-rose-600 hover:bg-rose-500",
+        });
+        if (confirmed) {
+          const result = await userStore.deleteUser(id);
+          showToast(
+            result.success
+              ? "Đã xóa người dùng"
+              : `Lỗi: ${result.message}`,
+            result.success ? "success" : "error",
+          );
+        }
+      } else if (action === "reset-password") {
         const newPassword = await PromptModal.show({
-          title: 'Đặt lại mật khẩu',
-          label: 'Mật khẩu mới (ít nhất 6 ký tự)',
-          confirmText: 'Cập nhật'
+          title: "Đặt lại mật khẩu",
+          label: "Mật khẩu mới (ít nhất 6 ký tự)",
+          confirmText: "Cập nhật",
         });
         if (newPassword) {
           const result = await userStore.resetPassword(id, newPassword);
-          showToast(result.success ? 'Mật khẩu đã được cập nhật' : `Lỗi: ${result.message}`, result.success ? 'success' : 'error');
+          showToast(
+            result.success
+              ? "Mật khẩu đã được cập nhật"
+              : `Lỗi: ${result.message}`,
+            result.success ? "success" : "error",
+          );
         }
       }
-    });
-
-    this.container.querySelector('#export-excel-btn').addEventListener('click', () => {
-      const users = userStore.filteredUsers; // toàn bộ user đã lọc
-      const data = users.map(u => ({
-        'Họ tên': u.name,
-        'Email': u.email,
-        'Vai trò': u.display_name || '',
-        'Trạng thái': u.is_active ? 'Active' : 'Inactive',
-        'Widget': u.widget_visible ? 'Hiện' : 'Ẩn'
-      }));
-      import('../utils/exportExcel.js').then(({ exportToExcel }) => {
-        exportToExcel(data, `danh-sach-users-${new Date().toISOString().slice(0, 10)}.xlsx`);
-        showToast('Đã xuất file Excel', 'success');
-      });
     });
   }
 

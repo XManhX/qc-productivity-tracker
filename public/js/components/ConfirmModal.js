@@ -1,8 +1,24 @@
 export class ConfirmModal {
-    static show({ title = 'Xác nhận', message = 'Bạn có chắc chắn?', confirmText = 'Xác nhận', cancelText = 'Hủy', confirmClass = 'bg-rose-600 hover:bg-rose-500' } = {}) {
+    /**
+     * @param {Object} options
+     * @param {string} options.title
+     * @param {string} options.message
+     * @param {string} options.confirmText
+     * @param {string} options.cancelText
+     * @param {string} options.confirmClass - CSS class cho nút xác nhận
+     * @returns {Promise<boolean>}
+     */
+    static show({
+        title = "Xác nhận",
+        message = "Bạn có chắc chắn?",
+        confirmText = "Xác nhận",
+        cancelText = "Hủy",
+        confirmClass = "bg-rose-600 hover:bg-rose-500",
+    } = {}) {
         return new Promise((resolve) => {
-            const overlay = document.createElement('div');
-            overlay.className = 'fixed inset-0 bg-black/50 flex items-center justify-center z-50';
+            const overlay = document.createElement("div");
+            overlay.className =
+                "fixed inset-0 bg-black/50 flex items-center justify-center z-50";
             overlay.innerHTML = `
         <div class="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 mx-4">
           <div class="flex items-center gap-3 mb-4">
@@ -19,16 +35,19 @@ export class ConfirmModal {
             document.body.appendChild(overlay);
             lucide.createIcons({ attrs: { width: 20, height: 20 } });
 
-            overlay.querySelector('.cancel-btn').onclick = () => {
+            overlay.querySelector(".cancel-btn").onclick = () => {
                 overlay.remove();
                 resolve(false);
             };
-            overlay.querySelector('.confirm-btn').onclick = () => {
+            overlay.querySelector(".confirm-btn").onclick = () => {
                 overlay.remove();
                 resolve(true);
             };
-            overlay.addEventListener('click', (e) => {
-                if (e.target === overlay) { overlay.remove(); resolve(false); }
+            overlay.addEventListener("click", (e) => {
+                if (e.target === overlay) {
+                    overlay.remove();
+                    resolve(false);
+                }
             });
         });
     }

@@ -3,6 +3,7 @@ import {
   fetchRoles,
   createUser,
   updateUser,
+  deleteUser,
 } from "../services/api.js";
 
 class UserStore {
@@ -142,6 +143,32 @@ class UserStore {
     }
   }
 
+  async deleteUser(id) {
+    try {
+      await deleteUser(id); // gọi API
+      this.state.users = this.state.users.filter((u) => u.id != id);
+      this.notify();
+      return { success: true };
+    } catch (err) {
+      return { success: false, message: err.message };
+    }
+  }
+
+  async resetPassword(id, newPassword) {
+    try {
+      // Gửi password qua updateUser, backend sẽ xử lý hash
+      await updateUser({ id, password: newPassword });
+      const user = this.state.users.find((u) => u.id == id);
+      if (user) {
+        user.has_password = true; // cập nhật trạng thái client
+      }
+      this.notify();
+      return { success: true };
+    } catch (err) {
+      return { success: false, message: err.message };
+    }
+  }
+
   async bulkAddUsers(emails, roleKey) {
     let success = 0,
       failed = 0;
@@ -161,7 +188,6 @@ class UserStore {
     return { success, failed };
   }
 
-  // Import có upsert + callback tiến trình
   async importWithUpsert(payloadArray, onProgress = null) {
     let created = 0,
       updated = 0,
@@ -195,7 +221,6 @@ class UserStore {
       } catch (err) {
         errors++;
       }
-      // Gọi callback tiến trình sau mỗi item
       if (onProgress) {
         onProgress({ processed: i + 1, total, created, updated, errors });
       }
@@ -204,28 +229,13 @@ class UserStore {
     return { created, updated, errors };
   }
 
-  async deleteUser(id) {
+  async importUsers(payloadArray) {
     try {
-      await deleteUser(id); // import từ api.js
-      this.state.users = this.state.users.filter(u => u.id != id);
-      this.notify();
-      return { success: true };
+      const result = await bulkCreateUsers({ import: payloadArray });
+      await this.loadUsers();
+      return result;
     } catch (err) {
-      return { success: false, message: err.message };
-    }
-  }
-
-  async resetPassword(id, newPassword) {
-    try {
-      await updateUser({ id, password: newPassword });
-      const user = this.state.users.find(u => u.id == id);
-      if (user) {
-        user.has_password = true;  // backend đã hash, client chỉ cần biết đã có
-      }
-      this.notify();
-      return { success: true };
-    } catch (err) {
-      return { success: false, message: err.message };
+      throw err;
     }
   }
 

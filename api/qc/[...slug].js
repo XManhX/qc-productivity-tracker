@@ -24,7 +24,18 @@ export default async function handler(req, res) {
 
     switch (endpoint) {
         case 'authz': return authzHandler(req, res);
-        case 'me': return meHandler(req, res);
+        case 'me':
+            if (req.method === 'GET') {
+                const email = verifyToken(req.headers.authorization?.split(' ')[1]);
+                if (!email) return res.status(401).json({ error: 'Unauthorized' });
+                const { data: user } = await supabase
+                    .from('qc_users')
+                    .select('email, name, role_key')
+                    .eq('email', email)
+                    .single();
+                return res.status(200).json(user || { email });
+            }
+            break;
         case 'log': return logHandler(req, res);
         case 'dashboard': return dashboardHandler(req, res);
         default:

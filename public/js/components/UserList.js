@@ -72,7 +72,7 @@ export class UserList {
       </div>
       <div class="overflow-x-auto max-h-[600px] overflow-y-auto">
         <table class="w-full text-left border-collapse">
-          <thead><tr class="bg-slate-50 border-b border-slate-100 text-slate-500 text-xs uppercase tracking-wider font-semibold"><th class="px-6 py-3">Nhân Viên</th><th class="px-6 py-3">Email</th><th class="px-6 py-3">Vai Trò</th><th class="px-6 py-3">Trạng Thái</th><th class="px-6 py-3">Widget</th></tr></thead>
+          <thead><tr class="bg-slate-50 border-b border-slate-100 text-slate-500 text-xs uppercase tracking-wider font-semibold"><th class="px-6 py-3">Nhân Viên</th><th class="px-6 py-3">Email</th><th class="px-6 py-3">Vai Trò</th><th class="px-6 py-3">Trạng Thái</th><th class="px-6 py-3">Widget</th><th class="px-6 py-3">Mật khẩu</th></tr></thead>
           <tbody id="user-list-body" class="divide-y divide-slate-100 text-sm"></tbody>
         </table>
       </div>
@@ -106,8 +106,7 @@ export class UserList {
     const active = users.filter((u) => u.is_active !== false).length;
     this.container.querySelector("#summary-total").textContent = total;
     this.container.querySelector("#summary-active").textContent = active;
-    this.container.querySelector("#summary-inactive").textContent =
-      total - active;
+    this.container.querySelector("#summary-inactive").textContent = total - active;
     const badge = this.container.querySelector("#user-count-badge");
     const filtered = userStore.filteredUsers;
     if (badge) {
@@ -127,19 +126,19 @@ export class UserList {
     const pagedUsers = userStore.pagedUsers;
     const filteredUsers = userStore.filteredUsers;
     if (loading) {
-      tbody.innerHTML = `<tr><td colspan="5" class="py-12 text-center text-slate-400"><div class="loading-spinner w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full mx-auto"></div><span>Đang tải...</span></td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="6" class="py-12 text-center text-slate-400"><div class="loading-spinner w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full mx-auto"></div><span>Đang tải...</span></td></tr>`;
       return;
     }
     if (error) {
-      tbody.innerHTML = `<tr><td colspan="5" class="py-12 text-rose-500 text-center">Lỗi: ${error}</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="6" class="py-12 text-rose-500 text-center">Lỗi: ${error}</td></tr>`;
       return;
     }
     if (users.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="5" class="py-14 text-center text-slate-400"><i data-lucide="user-x" class="w-8 h-8 mx-auto"></i><p class="font-semibold mt-2">Chưa có nhân viên nào</p><p class="text-sm">Thêm nhân sự mới để bắt đầu.</p></td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="6" class="py-14 text-center text-slate-400"><i data-lucide="user-x" class="w-8 h-8 mx-auto"></i><p class="font-semibold mt-2">Chưa có nhân viên nào</p><p class="text-sm">Thêm nhân sự mới để bắt đầu.</p></td></tr>`;
       return;
     }
     if (filteredUsers.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="5" class="py-14 text-center text-slate-400"><i data-lucide="search-x" class="w-8 h-8 mx-auto"></i><p class="font-semibold mt-2">Không tìm thấy nhân sự</p><p class="text-sm">Thử lại với bộ lọc khác.</p></td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="6" class="py-14 text-center text-slate-400"><i data-lucide="search-x" class="w-8 h-8 mx-auto"></i><p class="font-semibold mt-2">Không tìm thấy nhân sự</p><p class="text-sm">Thử lại với bộ lọc khác.</p></td></tr>`;
       return;
     }
     tbody.innerHTML = pagedUsers
@@ -168,6 +167,9 @@ export class UserList {
             <span class="inline-block h-4 w-4 transform rounded-full bg-white shadow-sm transition ${widgetVisible ? "translate-x-5" : "translate-x-0.5"}"></span>
           </button>
           <span class="ml-2 text-xs font-semibold ${widgetVisible ? "text-indigo-700" : "text-slate-500"}">${widgetVisible ? "Hiện" : "Ẩn"}</span>
+        </td>
+        <td class="px-6 py-4 text-center">
+          ${user.has_password ? '<i data-lucide="lock" class="w-4 h-4 text-emerald-500 inline-block" title="Đã đặt mật khẩu"></i>' : '<i data-lucide="unlock" class="w-4 h-4 text-slate-300 inline-block" title="Chưa có mật khẩu"></i>'}
         </td>
       </tr>`;
       })

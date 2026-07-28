@@ -17,37 +17,16 @@
         font-family: "Inter", sans-serif;
       }
       .loader {
-        width: 28px;
-        height: 28px;
-        border: 3px solid #e2e8f0;
+        width: 30px;
+        height: 30px;
+        border: 3px solid #f3f3f3;
         border-top: 3px solid #f59e0b;
         border-radius: 50%;
-        animation: spin 0.8s linear infinite;
+        animation: spin 1s linear infinite;
       }
       @keyframes spin {
         to {
           transform: rotate(360deg);
-        }
-      }
-      #seatalk_login_button {
-        display: inline-flex;
-        justify-content: center;
-      }
-      #seatalk_login_button,
-      #seatalk_login_button * {
-        font-family: "Inter", sans-serif;
-      }
-      .fade-in {
-        animation: fadeIn 0.5s ease;
-      }
-      @keyframes fadeIn {
-        from {
-          opacity: 0;
-          transform: translateY(10px);
-        }
-        to {
-          opacity: 1;
-          transform: translateY(0);
         }
       }
     </style>
@@ -56,8 +35,8 @@
     class="bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 min-h-screen flex items-center justify-center p-4"
   >
     <div class="w-full max-w-md">
-      <!-- Logo / Tên hệ thống -->
-      <div class="text-center mb-8 fade-in">
+      <!-- Logo -->
+      <div class="text-center mb-8">
         <div
           class="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-amber-500/10 border border-amber-500/20 mb-4"
         >
@@ -80,44 +59,103 @@
 
       <!-- Card đăng nhập -->
       <div
-        class="bg-white/5 backdrop-blur-sm border border-white/10 rounded-2xl p-8 shadow-2xl fade-in"
+        class="bg-white/5 backdrop-blur-sm border border-white/10 rounded-2xl p-8 shadow-2xl"
       >
-        <div id="login-container" class="flex flex-col items-center">
-          <!-- Loading -->
-          <div id="loading-indicator" class="flex flex-col items-center gap-3">
-            <div class="loader"></div>
-            <p class="text-slate-400 text-sm">Đang kiểm tra trạng thái...</p>
-          </div>
-
-          <!-- Thông tin App (ẩn) -->
-          <div id="seatalk_login_app_info" style="display: none"></div>
-
-          <!-- Nút đăng nhập SeaTalk (ẩn cho đến khi sẵn sàng) -->
-          <div
-            id="seatalk_login_button_wrapper"
-            style="display: none"
-            class="w-full flex justify-center"
+        <!-- Tabs -->
+        <div class="flex mb-6 border-b border-white/10">
+          <button
+            id="tab-seatalk"
+            class="flex-1 pb-3 text-sm font-medium text-amber-400 border-b-2 border-amber-400"
           >
-            <div id="seatalk_login_button"></div>
+            SeaTalk
+          </button>
+          <button
+            id="tab-email"
+            class="flex-1 pb-3 text-sm font-medium text-slate-400 border-b-2 border-transparent hover:text-white transition"
+          >
+            Email
+          </button>
+        </div>
+
+        <!-- SeaTalk Login -->
+        <div id="seatalk-content">
+          <div class="flex flex-col items-center">
+            <div
+              id="loading-indicator"
+              class="flex flex-col items-center gap-3"
+            >
+              <div class="loader"></div>
+              <p class="text-slate-400 text-sm">Đang kiểm tra trạng thái...</p>
+            </div>
+            <div id="seatalk_login_app_info" style="display: none"></div>
+            <div
+              id="seatalk_login_button_wrapper"
+              style="display: none"
+              class="w-full flex justify-center"
+            >
+              <div id="seatalk_login_button"></div>
+            </div>
           </div>
         </div>
 
-        <!-- Thông báo lỗi -->
+        <!-- Email Login -->
+        <div id="email-content" class="hidden">
+          <form id="email-login-form" class="space-y-4">
+            <div>
+              <label
+                for="login-email"
+                class="block text-xs font-medium text-slate-300 mb-1"
+                >Email</label
+              >
+              <input
+                type="email"
+                id="login-email"
+                required
+                class="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-amber-500/50 transition"
+                placeholder="you@example.com"
+              />
+            </div>
+            <div>
+              <label
+                for="login-password"
+                class="block text-xs font-medium text-slate-300 mb-1"
+                >Mật khẩu</label
+              >
+              <input
+                type="password"
+                id="login-password"
+                required
+                class="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-amber-500/50 transition"
+                placeholder="••••••••"
+              />
+            </div>
+            <button
+              type="submit"
+              class="w-full py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-900 font-semibold rounded-xl transition"
+            >
+              Đăng nhập
+            </button>
+            <p
+              id="email-login-error"
+              class="hidden text-red-400 text-sm text-center"
+            ></p>
+          </form>
+        </div>
+
+        <!-- Lỗi chung -->
         <div
           id="error-message"
           class="hidden mt-4 p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-red-300 text-sm text-center"
         ></div>
       </div>
 
-      <!-- Footer -->
-      <p class="text-center text-slate-500 text-xs mt-6 fade-in">
-        &copy; 2025 WMS. Đăng nhập bằng tài khoản SeaTalk của bạn.
+      <p class="text-center text-slate-500 text-xs mt-6">
+        &copy; 2025 WMS. Đăng nhập bằng SeaTalk hoặc email.
       </p>
     </div>
 
     <!-- SeaTalk SDK -->
     <script src="https://static.cdn.haiserve.com/seatalk/client/shared/sop/auth.js"></script>
-
     <script>
       (function () {
         const $ = (id) => document.getElementById(id);
@@ -126,26 +164,33 @@
         const wrapperEl = $("seatalk_login_button_wrapper");
         const appInfoEl = $("seatalk_login_app_info");
         const buttonEl = $("seatalk_login_button");
+        const emailForm = $("email-login-form");
+        const emailError = $("email-login-error");
 
-        function showError(msg) {
-          errorEl.textContent = msg;
-          errorEl.classList.remove("hidden");
+        // Tab switching
+        let activeTab = "seatalk";
+        function setTab(tab) {
+          activeTab = tab;
+          $("tab-seatalk").classList.toggle(
+            "text-amber-400",
+            tab === "seatalk",
+          );
+          $("tab-seatalk").classList.toggle(
+            "border-amber-400",
+            tab === "seatalk",
+          );
+          $("tab-email").classList.toggle("text-amber-400", tab === "email");
+          $("tab-email").classList.toggle("border-amber-400", tab === "email");
+          $("seatalk-content").classList.toggle("hidden", tab !== "seatalk");
+          $("email-content").classList.toggle("hidden", tab !== "email");
         }
+        $("tab-seatalk").addEventListener("click", () => setTab("seatalk"));
+        $("tab-email").addEventListener("click", () => setTab("email"));
 
-        function hideError() {
-          errorEl.classList.add("hidden");
-        }
-
-        function showLoading(visible) {
-          loadingEl.style.display = visible ? "flex" : "none";
-          wrapperEl.style.display = visible ? "none" : "flex";
-        }
-
-        // 1. Kiểm tra token hiện có
+        // Kiểm tra token cũ
         async function checkExistingToken() {
           const token = localStorage.getItem("qc_session_token");
           if (!token) return false;
-
           try {
             const resp = await fetch("/api/qc/me", {
               headers: { Authorization: `Bearer ${token}` },
@@ -154,92 +199,89 @@
               window.location.href = "/index.html";
               return true;
             }
-            // Token không hợp lệ -> xoá
-            localStorage.removeItem("qc_session_token");
-          } catch {
-            localStorage.removeItem("qc_session_token");
-          }
+          } catch {}
+          localStorage.removeItem("qc_session_token");
           return false;
         }
 
-        // 2. Đọc lỗi từ URL
+        function showError(msg) {
+          errorEl.textContent = msg;
+          errorEl.classList.remove("hidden");
+        }
+
         function handleUrlError() {
           const params = new URLSearchParams(window.location.search);
           const error = params.get("error");
           if (!error) return false;
-
           const messages = {
             missing_code: "Thiếu mã xác thực từ SeaTalk.",
-            token_exchange_failed:
-              "Xác thực không thành công. Vui lòng thử lại.",
-            profile_fetch_failed: "Không thể lấy thông tin người dùng.",
-            unauthorized:
-              "Tài khoản của bạn không được phép truy cập hệ thống này.",
-            internal_error: "Lỗi hệ thống. Vui lòng thử lại sau.",
-            state_mismatch: "Yêu cầu không hợp lệ (state không khớp).",
-            token_failed: "Không thể lấy App Access Token.",
+            token_exchange_failed: "Xác thực không thành công.",
             sso_failed: "Xác minh SSO thất bại.",
+            unauthorized: "Tài khoản không được phép.",
+            internal_error: "Lỗi hệ thống.",
           };
-          showError(messages[error] || "Đã xảy ra lỗi không xác định.");
+          showError(messages[error] || "Đã xảy ra lỗi.");
           return true;
         }
 
-        // 3. Khởi tạo nút SeaTalk
-        async function initLoginButton() {
+        // Khởi tạo nút SeaTalk
+        async function initSeaTalk() {
           try {
             const res = await fetch("/api/config/public");
-            if (!res.ok) throw new Error("Không thể tải cấu hình hệ thống.");
             const config = await res.json();
-
             const { seatalkAppId, seatalkRedirectUri } = config;
-            if (!seatalkAppId || !seatalkRedirectUri) {
-              throw new Error("Cấu hình SeaTalk chưa đầy đủ.");
-            }
+            if (!seatalkAppId || !seatalkRedirectUri)
+              throw new Error("Thiếu cấu hình");
 
-            const state = crypto.randomUUID
-              ? crypto.randomUUID()
-              : Math.random().toString(36).substring(2, 15);
+            const state = crypto.randomUUID();
             sessionStorage.setItem("seatalk_oauth_state", state);
-
             appInfoEl.setAttribute("data-appid", seatalkAppId);
             appInfoEl.setAttribute("data-redirect_uri", seatalkRedirectUri);
             appInfoEl.setAttribute("data-response_type", "code");
             appInfoEl.setAttribute("data-state", state);
-
             buttonEl.setAttribute("data-size", "medium");
-            buttonEl.setAttribute("data-align", "center");
             buttonEl.setAttribute("data-theme", "light");
-            buttonEl.setAttribute("data-logo_size", "24");
             buttonEl.setAttribute("data-copywriting", "Đăng nhập với SeaTalk");
-
-            showLoading(false);
-
-            // Đảm bảo SDK render (nếu cần)
-            if (typeof SOPAuth !== "undefined" && SOPAuth.render) {
+            loadingEl.style.display = "none";
+            wrapperEl.style.display = "flex";
+            if (typeof SOPAuth !== "undefined" && SOPAuth.render)
               SOPAuth.render();
-            }
-          } catch (err) {
-            console.error(err);
-            showError("Không thể khởi tạo đăng nhập. Vui lòng thử lại sau.");
-            showLoading(false);
+          } catch (e) {
+            showError("Không thể tải cấu hình SeaTalk");
           }
         }
 
-        // 4. Main
-        (async function main() {
-          hideError();
-          showLoading(true);
-
-          const hasValidToken = await checkExistingToken();
-          if (hasValidToken) return; // đã redirect
-
-          const hasError = handleUrlError();
-          if (hasError) {
-            showLoading(false);
-            return;
+        // Đăng nhập bằng email
+        emailForm.addEventListener("submit", async (e) => {
+          e.preventDefault();
+          const email = $("login-email").value.trim();
+          const password = $("login-password").value;
+          emailError.classList.add("hidden");
+          try {
+            const res = await fetch("/api/auth/login", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ email, password }),
+            });
+            const data = await res.json();
+            if (res.ok && data.success) {
+              localStorage.setItem("qc_session_token", data.token);
+              window.location.href = "/index.html";
+            } else {
+              emailError.textContent = data.error || "Đăng nhập thất bại";
+              emailError.classList.remove("hidden");
+            }
+          } catch (err) {
+            emailError.textContent = "Lỗi kết nối";
+            emailError.classList.remove("hidden");
           }
+        });
 
-          await initLoginButton();
+        // Main
+        (async function main() {
+          if (await checkExistingToken()) return;
+          if (handleUrlError()) return;
+          await initSeaTalk();
         })();
       })();
     </script>

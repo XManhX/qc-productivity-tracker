@@ -112,9 +112,9 @@ class UserStore {
     this.notify();
   }
 
-  async addUser({ name, email, role_key }) {
+  async addUser({ name, email, role_key, password }) {
     try {
-      await createUser({ name, email, role_key });
+      await createUser({ name, email, role_key, password });
       await this.loadUsers();
       return { success: true };
     } catch (err) {

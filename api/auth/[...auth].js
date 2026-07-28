@@ -1,15 +1,28 @@
-// api/auth/[...auth].js
 import callbackHandler from '../../lib/auth/callback.js';
+import loginHandler from '../../lib/auth/login.js';
 import { getPathSegments } from '../../lib/path-utils.js';
 
 export default async function handler(req, res) {
-    console.log('Auth route hit', req.url);
-    const auth = getPathSegments(req, 'auth');
-    // auth = ['seatalk', 'callback'] khi URL là /api/auth/seatalk/callback
+    // Lấy segment từ query parameter (do rewrite)
+    const authParam = req.query.auth || '';
+    const auth = authParam.split('/').filter(Boolean);
 
-    if (auth[0] === 'seatalk' && auth[1] === 'callback' && req.method === 'GET') {
-        return callbackHandler(req, res);
+    // Route: /api/auth/seatalk/callback
+    if (auth[0] === 'seatalk' && auth[1] === 'callback') {
+        if (req.method === 'GET') {
+            return callbackHandler(req, res);
+        }
+        return res.status(405).json({ error: 'Method not allowed' });
     }
 
+    // Route: /api/auth/login (POST)
+    if (auth[0] === 'login') {
+        if (req.method === 'POST') {
+            return loginHandler(req, res);
+        }
+        return res.status(405).json({ error: 'Method not allowed' });
+    }
+
+    // Mặc định 404
     return res.status(404).json({ error: 'Auth endpoint not found' });
 }

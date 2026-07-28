@@ -3,20 +3,40 @@ const BASE_URL = "/api";
 
 export function checkAuth() {
   const token = localStorage.getItem("qc_session_token");
+  console.log("[checkAuth] token:", token);
+
   if (token) {
     try {
       const parts = token.split(".");
+      console.log("[checkAuth] parts:", parts);
+
       if (parts.length === 2) {
+        // Decode base64 chuẩn
         const payload = JSON.parse(atob(parts[0]));
+        console.log("[checkAuth] payload:", payload);
+
         if (payload.email && payload.exp > Date.now()) {
           localStorage.setItem("user_email", payload.email);
+          console.log("[checkAuth] token valid, stay on page");
           return true;
+        } else {
+          console.log("[checkAuth] expired or missing email", {
+            exp: payload.exp,
+            now: Date.now(),
+            email: payload.email
+          });
         }
+      } else {
+        console.log("[checkAuth] parts.length !== 2");
       }
-    } catch (e) { }
+    } catch (e) {
+      console.error("[checkAuth] parse error:", e);
+    }
   }
+
   localStorage.removeItem("qc_session_token");
   localStorage.removeItem("user_email");
+  console.log("[checkAuth] redirect to login");
   window.location.href = "/login.html";
   return false;
 }

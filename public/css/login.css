@@ -35,12 +35,12 @@
   animation: shake 0.4s ease;
 }
 
-/* Scan line – màu cam nhạt */
+/* Scan line trắng mờ */
 .sci-fi-card .scan-line {
   background: linear-gradient(
     0deg,
     transparent,
-    rgba(238, 77, 45, 0.25),
+    rgba(255, 255, 255, 0.08),
     transparent
   );
   height: 200%;
@@ -57,43 +57,41 @@
   }
 }
 
-/* Viền động gradient cam */
+/* Viền ngoài sáng nhẹ, không màu mè */
 .sci-fi-card::before {
   content: "";
   position: absolute;
   inset: -1px;
   border-radius: inherit;
-  background: linear-gradient(45deg, #ee4d2d, #ff6b4a, #ee4d2d, #ff6b4a);
-  background-size: 400% 400%;
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.15),
+    rgba(255, 255, 255, 0.05)
+  );
   z-index: -1;
-  animation: borderGlow 4s ease-in-out infinite;
-  opacity: 0.9;
+  animation: subtleGlow 4s ease-in-out infinite alternate;
+  opacity: 0.5;
 }
-@keyframes borderGlow {
-  0%,
-  100% {
+@keyframes subtleGlow {
+  from {
     background-position: 0% 50%;
   }
-  50% {
+  to {
     background-position: 100% 50%;
   }
 }
 
-/* Đảm bảo nền đè lên viền */
+/* Nền card đủ tối để viền nổi */
 .sci-fi-card {
-  background: rgba(15, 23, 42, 0.85); /* slate-900/85 */
+  background: rgba(15, 23, 42, 0.85);
   backdrop-filter: blur(20px);
 }
 
-/* Input sci‑fi focus glow cam */
+/* Input focus nhẹ nhàng */
 .sci-input:focus {
-  box-shadow:
-    0 0 15px rgba(238, 77, 45, 0.4),
-    0 0 30px rgba(238, 77, 45, 0.2);
-  border-color: rgba(238, 77, 45, 0.6);
+  box-shadow: 0 0 12px rgba(238, 77, 45, 0.3);
+  border-color: rgba(238, 77, 45, 0.5);
 }
-
-/* Nút sci‑fi (đã có style inline trong HTML, không cần thêm) */
 
 /* Checkbox tùy chỉnh */
 input[type="checkbox"]:checked + div i {

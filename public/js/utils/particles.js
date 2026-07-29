@@ -1,12 +1,12 @@
-// public/js/utils/particles.js
+// public/js/particles.js
 (function () {
     const canvas = document.getElementById('particle-canvas');
     const ctx = canvas.getContext('2d');
     let width, height;
     let particles = [];
     const mouse = { x: null, y: null, radius: 120 };
-    const PARTICLE_COLOR = '#ee4d2d';  // Cam Shopee
-    const LINE_COLOR = '#ee4d2d';
+    const PARTICLE_COLOR = '#94a3b8';  // slate-400
+    const LINE_COLOR = '#94a3b8';
 
     function resize() {
         width = window.innerWidth;
@@ -23,9 +23,9 @@
             particles.push({
                 x: Math.random() * width,
                 y: Math.random() * height,
-                vx: (Math.random() - 0.5) * 0.8,
-                vy: (Math.random() - 0.5) * 0.8,
-                radius: Math.random() * 2 + 1,
+                vx: (Math.random() - 0.5) * 0.6,
+                vy: (Math.random() - 0.5) * 0.6,
+                radius: Math.random() * 1.5 + 0.5,
             });
         }
     }
@@ -41,14 +41,14 @@
         });
 
         ctx.strokeStyle = LINE_COLOR;
-        ctx.lineWidth = 0.5;
+        ctx.lineWidth = 0.4;
         for (let i = 0; i < particles.length; i++) {
             for (let j = i + 1; j < particles.length; j++) {
                 const dx = particles[i].x - particles[j].x;
                 const dy = particles[i].y - particles[j].y;
                 const dist = Math.sqrt(dx * dx + dy * dy);
-                if (dist < 120) {
-                    ctx.globalAlpha = 1 - dist / 120;
+                if (dist < 100) {
+                    ctx.globalAlpha = (1 - dist / 100) * 0.5;
                     ctx.beginPath();
                     ctx.moveTo(particles[i].x, particles[i].y);
                     ctx.lineTo(particles[j].x, particles[j].y);
@@ -73,12 +73,12 @@
                 if (dist < mouse.radius) {
                     const force = (mouse.radius - dist) / mouse.radius;
                     const angle = Math.atan2(dy, dx);
-                    p.vx += force * Math.cos(angle) * 0.5;
-                    p.vy += force * Math.sin(angle) * 0.5;
+                    p.vx += force * Math.cos(angle) * 0.3;
+                    p.vy += force * Math.sin(angle) * 0.3;
                 }
             }
 
-            const maxSpeed = 2;
+            const maxSpeed = 1.5;
             const speed = Math.sqrt(p.vx ** 2 + p.vy ** 2);
             if (speed > maxSpeed) {
                 p.vx = (p.vx / speed) * maxSpeed;

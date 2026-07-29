@@ -5,9 +5,10 @@ class DashboardStore {
     this.state = {
       data: [],
       total: 0,
+      stats: null,
       filters: {
         date: "",
-        roles: [],           // mảng các role key được chọn
+        roles: [],
         q: "",
         minTotal: "",
         hourStart: 6,
@@ -17,7 +18,7 @@ class DashboardStore {
         page: 1,
       },
       sort: { key: "total", direction: "desc" },
-      roles: [],             // danh sách role từ DB
+      roles: [],
       alertConfig: null,
       loading: false,
       error: null,
@@ -156,6 +157,7 @@ class DashboardStore {
       const result = await fetchDashboard(params);
       this.state.data = result.items || [];
       this.state.total = result.total || 0;
+      this.state.stats = result.stats || null;
 
       if (this.state.filters.page > this.totalPages) {
         this.state.filters.page = this.totalPages;

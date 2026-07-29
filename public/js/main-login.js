@@ -1,3 +1,4 @@
+// public/js/main-login.js
 import { login, checkSession } from './services/auth.js';
 
 class LoginController {
@@ -11,8 +12,6 @@ class LoginController {
         this.btnSpinner = document.getElementById('btn-spinner');
         this.errorEl = document.getElementById('error-message');
         this.rememberCheck = document.getElementById('remember-email');
-        this.toggleIcon = this.toggleBtn.querySelector('i');
-
         this.init();
     }
 
@@ -50,19 +49,16 @@ class LoginController {
 
         if (eyeOffIcon && eyeIcon) {
             if (isPassword) {
-                // Đang là password → sắp chuyển sang text (hiện mật khẩu)
+                // Chuyển sang text (hiện mật khẩu)
                 eyeOffIcon.classList.add('hidden');
                 eyeIcon.classList.remove('hidden');
                 btn.setAttribute('title', 'Ẩn mật khẩu');
             } else {
-                // Đang là text → chuyển về password
                 eyeOffIcon.classList.remove('hidden');
                 eyeIcon.classList.add('hidden');
                 btn.setAttribute('title', 'Hiển thị mật khẩu');
             }
         }
-
-        // Hiệu ứng nhấn nhá nhẹ
         btn.classList.add('bg-slate-700/30');
         setTimeout(() => btn.classList.remove('bg-slate-700/30'), 150);
     }

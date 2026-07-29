@@ -11,48 +11,44 @@
       rel="stylesheet"
     />
     <script src="https://unpkg.com/lucide@latest"></script>
-    <link rel="stylesheet" href="css/login.css" />
+    <link rel="stylesheet" href="css/login.css?v=3" />
   </head>
   <body
     class="min-h-screen flex items-center justify-center p-4 relative overflow-hidden bg-black"
   >
-    <!-- Nền động: các đốm sáng di chuyển chậm -->
-    <div class="absolute inset-0">
-      <div
-        class="absolute top-1/4 left-1/4 w-96 h-96 bg-amber-500/20 rounded-full blur-[120px] animate-float-slow"
-      ></div>
-      <div
-        class="absolute bottom-1/4 right-1/4 w-96 h-96 bg-blue-500/20 rounded-full blur-[120px] animate-float-slower"
-      ></div>
-    </div>
+    <!-- Canvas cho Particle Network -->
+    <canvas id="particle-canvas" class="absolute inset-0 z-0"></canvas>
 
+    <!-- Nội dung login -->
     <div class="relative w-full max-w-md z-10">
       <!-- Logo -->
       <div class="text-center mb-8">
         <div
-          class="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-gradient-to-br from-amber-400 to-amber-600 text-slate-950 mb-4 shadow-lg shadow-amber-500/30"
+          class="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-gradient-to-br from-cyan-400 to-blue-600 text-white mb-4 shadow-lg shadow-cyan-500/30"
         >
           <i data-lucide="zap" class="w-7 h-7"></i>
         </div>
         <h1 class="text-3xl font-bold text-white tracking-tight">
           WMS QC Monitor
         </h1>
-        <p class="text-slate-400 text-sm mt-1">Hệ thống giám sát năng suất</p>
+        <p class="text-slate-400 text-sm mt-1">Trung tâm giám sát năng suất</p>
       </div>
 
-      <!-- Card đăng nhập -->
+      <!-- Card sci‑fi -->
       <div
-        class="login-card bg-white/5 backdrop-blur-2xl border border-white/10 rounded-3xl shadow-2xl p-8"
+        class="sci-fi-card relative bg-white/5 backdrop-blur-2xl border border-cyan-500/30 rounded-3xl shadow-2xl p-8 overflow-hidden"
       >
+        <!-- Hiệu ứng quét (scan line) -->
+        <div class="scan-line absolute inset-0 pointer-events-none"></div>
         <h2 class="text-xl font-semibold text-white text-center mb-6">
-          Chào mừng trở lại
+          Xác thực danh tính
         </h2>
 
         <form id="login-form" class="space-y-5">
           <!-- Email -->
           <div class="relative group">
             <span
-              class="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-amber-400 transition-colors"
+              class="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-cyan-400 transition-colors"
             >
               <i data-lucide="mail" class="w-5 h-5"></i>
             </span>
@@ -61,17 +57,16 @@
               id="email"
               name="email"
               autocomplete="email"
-              class="w-full bg-slate-800/50 border border-slate-700/50 rounded-xl pl-12 pr-4 py-3 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-amber-500/70 focus:border-transparent transition-all duration-300"
+              class="sci-input w-full bg-slate-800/50 border border-slate-700/50 rounded-xl pl-12 pr-4 py-3 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/70 focus:border-transparent transition-all duration-300"
               placeholder="Email"
               required
             />
           </div>
 
           <!-- Mật khẩu -->
-          <!-- Mật khẩu -->
           <div class="relative group">
             <span
-              class="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-amber-400 transition-colors"
+              class="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-cyan-400 transition-colors"
             >
               <i data-lucide="lock" class="w-5 h-5"></i>
             </span>
@@ -80,14 +75,14 @@
               id="password"
               name="password"
               autocomplete="current-password"
-              class="w-full bg-slate-800/50 border border-slate-700/50 rounded-xl pl-12 pr-14 py-3 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-amber-500/70 focus:border-transparent transition-all duration-300"
+              class="sci-input w-full bg-slate-800/50 border border-slate-700/50 rounded-xl pl-12 pr-14 py-3 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/70 focus:border-transparent transition-all duration-300"
               placeholder="Mật khẩu"
               required
             />
             <button
               type="button"
               id="toggle-password"
-              class="absolute right-2 top-1/2 -translate-y-1/2 p-2 text-slate-400 hover:text-white hover:bg-slate-700/50 rounded-lg transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-amber-500/50"
+              class="absolute right-2 top-1/2 -translate-y-1/2 p-2 text-slate-400 hover:text-white hover:bg-slate-700/50 rounded-lg transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-cyan-500/50"
               title="Hiển thị mật khẩu"
             >
               <!-- Icon mắt (ẩn mật khẩu) -->
@@ -107,7 +102,7 @@
                 />
                 <line x1="1" y1="1" x2="23" y2="23" />
               </svg>
-              <!-- Icon mắt mở (hiện mật khẩu) - mặc định ẩn -->
+              <!-- Icon mắt mở (hiện mật khẩu) - ẩn -->
               <svg
                 id="eye-icon"
                 xmlns="http://www.w3.org/2000/svg"
@@ -139,7 +134,7 @@
                   class="peer sr-only"
                 />
                 <div
-                  class="w-5 h-5 border-2 border-slate-500 rounded-md bg-slate-800/50 peer-checked:bg-amber-500 peer-checked:border-amber-500 transition-all duration-200 flex items-center justify-center"
+                  class="w-5 h-5 border-2 border-slate-500 rounded-md bg-slate-800/50 peer-checked:bg-cyan-500 peer-checked:border-cyan-500 transition-all duration-200 flex items-center justify-center"
                 >
                   <i
                     data-lucide="check"
@@ -151,7 +146,7 @@
             </label>
             <a
               href="#"
-              class="text-sm text-amber-400 hover:text-amber-300 transition-colors font-medium"
+              class="text-sm text-cyan-400 hover:text-cyan-300 transition-colors font-medium"
               >Quên mật khẩu?</a
             >
           </div>
@@ -160,12 +155,12 @@
           <button
             type="submit"
             id="submit-btn"
-            class="w-full bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-semibold py-3.5 rounded-xl transition-all duration-300 disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center space-x-2 shadow-lg shadow-amber-500/25 hover:shadow-amber-500/40 active:scale-[0.98]"
+            class="sci-btn w-full bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white font-semibold py-3.5 rounded-xl transition-all duration-300 disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center space-x-2 shadow-lg shadow-cyan-500/25 hover:shadow-cyan-500/40 active:scale-[0.98]"
           >
             <span id="btn-text">Đăng nhập</span>
             <span id="btn-spinner" class="hidden">
               <svg
-                class="animate-spin h-5 w-5 text-slate-950"
+                class="animate-spin h-5 w-5 text-white"
                 xmlns="http://www.w3.org/2000/svg"
                 fill="none"
                 viewBox="0 0 24 24"
@@ -196,10 +191,12 @@
       </div>
 
       <p class="text-center text-slate-500 text-xs mt-6">
-        &copy; 2025 WMS. Nội bộ
+        &copy; 2025 WMS. Hệ thống nội bộ
       </p>
     </div>
 
+    <!-- Scripts -->
+    <script src="js/utils/particles.js"></script>
     <script type="module" src="js/main-login.js"></script>
     <script>
       window.addEventListener("load", () => {

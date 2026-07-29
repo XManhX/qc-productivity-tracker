@@ -1,4 +1,5 @@
 /* login.css */
+/* Keyframes giữ nguyên */
 @keyframes fadeInUp {
   from {
     opacity: 0;
@@ -9,7 +10,7 @@
     transform: translateY(0) scale(1);
   }
 }
-.login-card {
+.sci-fi-card {
   animation: fadeInUp 0.6s cubic-bezier(0.23, 1, 0.32, 1);
 }
 
@@ -35,30 +36,69 @@
   animation: shake 0.4s ease;
 }
 
-/* Nền động */
-@keyframes float-slow {
+/* Hiệu ứng đường quét (scan line) */
+.sci-fi-card .scan-line {
+  background: linear-gradient(
+    0deg,
+    transparent,
+    rgba(0, 255, 255, 0.2),
+    transparent
+  );
+  height: 200%;
+  width: 100%;
+  top: -50%;
+  animation: scan 3s linear infinite;
+}
+@keyframes scan {
+  0% {
+    transform: translateY(-50%);
+  }
+  100% {
+    transform: translateY(100%);
+  }
+}
+
+/* Viền phát sáng động */
+.sci-fi-card::before {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  background: linear-gradient(45deg, #00ffff, #0066ff, #6600ff, #00ffff);
+  background-size: 400% 400%;
+  z-index: -1;
+  animation: borderGlow 4s ease-in-out infinite;
+  opacity: 0.8;
+}
+@keyframes borderGlow {
   0%,
   100% {
-    transform: translate(0, 0) scale(1);
+    background-position: 0% 50%;
   }
   50% {
-    transform: translate(-30px, -40px) scale(1.05);
+    background-position: 100% 50%;
   }
 }
-@keyframes float-slower {
-  0%,
-  100% {
-    transform: translate(0, 0) scale(1);
-  }
-  50% {
-    transform: translate(40px, 30px) scale(1.08);
-  }
+/* Để viền không che khuất nội dung, cần đặt background đè lên */
+.sci-fi-card {
+  background: rgba(15, 23, 42, 0.8); /* slate-900/80 */
+  backdrop-filter: blur(20px);
 }
-.animate-float-slow {
-  animation: float-slow 12s ease-in-out infinite;
+
+/* Input sci‑fi */
+.sci-input:focus {
+  box-shadow:
+    0 0 15px rgba(0, 255, 255, 0.3),
+    0 0 30px rgba(0, 255, 255, 0.1);
+  border-color: rgba(0, 255, 255, 0.5);
 }
-.animate-float-slower {
-  animation: float-slower 15s ease-in-out infinite;
+
+/* Nút sci‑fi */
+.sci-btn {
+  background-size: 200% auto;
+}
+.sci-btn:hover {
+  background-position: right center;
 }
 
 /* Checkbox tùy chỉnh */

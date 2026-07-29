@@ -1,238 +1,38 @@
-/* ========== Reset & Base ========== */
-*,
-*::before,
-*::after {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
-}
-
-body {
-  font-family: "Inter", sans-serif;
-  background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #0f172a 100%);
-  min-height: 100vh;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 1rem;
-  color: #f8fafc;
-}
-
-/* ========== Loader ========== */
-.loader {
-  width: 30px;
-  height: 30px;
-  border: 3px solid rgba(255, 255, 255, 0.2);
-  border-top: 3px solid #f59e0b;
-  border-radius: 50%;
-  animation: spin 0.8s linear infinite;
-  margin: 0 auto;
-}
-
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-/* ========== Card ========== */
-.login-card {
-  background: rgba(255, 255, 255, 0.05);
-  backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 1rem;
-  padding: 2rem;
-  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
-  width: 100%;
-  max-width: 28rem;
-  animation: fadeInUp 0.5s ease;
-}
-
+/* public/css/login.css */
 @keyframes fadeInUp {
   from {
     opacity: 0;
-    transform: translateY(20px);
+    transform: translateY(10px);
   }
   to {
     opacity: 1;
     transform: translateY(0);
   }
 }
-
-/* ========== Logo ========== */
-.logo-container {
-  text-align: center;
-  margin-bottom: 2rem;
+.login-card {
+  animation: fadeInUp 0.4s ease;
 }
-
-.logo-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 4rem;
-  height: 4rem;
-  border-radius: 1rem;
-  background: rgba(245, 158, 11, 0.1);
-  border: 1px solid rgba(245, 158, 11, 0.2);
-  margin-bottom: 1rem;
-  color: #fbbf24;
-}
-
-.logo-title {
-  font-size: 1.5rem;
-  font-weight: 700;
-  color: #ffffff;
-  letter-spacing: -0.025em;
-}
-
-.logo-subtitle {
-  font-size: 0.875rem;
-  color: #94a3b8;
-  margin-top: 0.25rem;
-}
-
-/* ========== Tabs ========== */
-.tabs {
-  display: flex;
-  margin-bottom: 1.5rem;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-}
-
-.tab-button {
-  flex: 1;
-  padding-bottom: 0.75rem;
-  font-size: 0.875rem;
-  font-weight: 500;
-  background: transparent;
-  border: none;
-  border-bottom: 2px solid transparent;
-  color: #94a3b8;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.tab-button.active {
-  color: #f59e0b;
-  border-bottom-color: #f59e0b;
-}
-
-.tab-button:hover:not(.active) {
-  color: #e2e8f0;
-}
-
-/* ========== Form ========== */
-.login-form {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-}
-
-.form-group {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-}
-
-.form-label {
-  font-size: 0.75rem;
-  font-weight: 500;
-  color: #cbd5e1;
-  margin-bottom: 0.25rem;
-}
-
-.form-input {
-  width: 100%;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 0.75rem;
-  padding: 0.625rem 1rem;
-  font-size: 0.875rem;
-  color: #ffffff;
-  outline: none;
-  transition:
-    border-color 0.2s,
-    box-shadow 0.2s;
-}
-
-.form-input::placeholder {
-  color: #64748b;
-}
-
-.form-input:focus {
-  border-color: #f59e0b;
-  box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.2);
-}
-
-/* ========== Buttons ========== */
-.btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: 600;
-  border-radius: 0.75rem;
-  padding: 0.625rem 1.25rem;
-  transition: all 0.2s;
-  cursor: pointer;
-  border: none;
-}
-
-.btn-primary {
-  background-color: #f59e0b;
-  color: #0f172a;
-  width: 100%;
-  padding: 0.75rem;
-  font-size: 0.875rem;
-}
-
-.btn-primary:hover {
-  background-color: #fbbf24;
-}
-
-.btn-primary:active {
-  background-color: #d97706;
-}
-
-#seatalk_login_button,
-#seatalk_login_button * {
-  font-family: "Inter", sans-serif;
-}
-
-/* ========== Error / Alert ========== */
-.error-message {
-  background: rgba(239, 68, 68, 0.1);
-  border: 1px solid rgba(239, 68, 68, 0.2);
-  border-radius: 0.75rem;
-  padding: 0.75rem;
-  color: #fca5a5;
-  font-size: 0.875rem;
-  text-align: center;
-  margin-top: 1rem;
-}
-
-.error-message.hidden,
-.hidden {
-  display: none;
-}
-
-/* ========== SeaTalk Button Container ========== */
-.seatalk-button-wrapper {
-  width: 100%;
-  display: flex;
-  justify-content: center;
-  margin-top: 1rem;
-}
-
-/* ========== Footer ========== */
-.footer-text {
-  text-align: center;
-  color: #64748b;
-  font-size: 0.75rem;
-  margin-top: 1.5rem;
-}
-
-/* ========== Responsive ========== */
-@media (max-width: 640px) {
-  .login-card {
-    padding: 1.5rem;
+@keyframes shake {
+  0%,
+  100% {
+    transform: translateX(0);
   }
+  25% {
+    transform: translateX(-5px);
+  }
+  50% {
+    transform: translateX(5px);
+  }
+  75% {
+    transform: translateX(-3px);
+  }
+}
+.shake {
+  animation: shake 0.3s ease;
+}
+.form-input {
+  @apply w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-transparent transition;
+}
+.btn-primary {
+  @apply bg-amber-500 hover:bg-amber-600 text-slate-950 font-semibold py-2 px-4 rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed;
 }

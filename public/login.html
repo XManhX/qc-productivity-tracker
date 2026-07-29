@@ -5,242 +5,151 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Đăng nhập - WMS QC Monitor</title>
     <link rel="icon" type="image/x-icon" href="/favicon.ico" />
-    <!-- Tailwind CDN vẫn giữ để dùng các class tiện ích (hidden, flex...) -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
       href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
     <link rel="stylesheet" href="css/login.css" />
   </head>
-  <body>
+  <body
+    class="bg-slate-950 min-h-screen flex items-center justify-center p-4 font-inter"
+    style="font-family: &quot;Inter&quot;, sans-serif"
+  >
     <div class="w-full max-w-md">
       <!-- Logo -->
-      <div class="logo-container">
-        <div class="logo-icon">
+      <div class="text-center mb-8">
+        <div
+          class="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-amber-500 text-slate-950 mb-3"
+        >
           <svg
             xmlns="http://www.w3.org/2000/svg"
-            class="w-8 h-8"
+            class="w-6 h-6"
             viewBox="0 0 24 24"
             fill="currentColor"
           >
             <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
           </svg>
         </div>
-        <h1 class="logo-title">WMS QC Monitor</h1>
-        <p class="logo-subtitle">Hệ thống giám sát năng suất QC</p>
+        <h1 class="text-2xl font-bold text-white">WMS QC Monitor</h1>
+        <p class="text-slate-400 text-sm">Hệ thống giám sát năng suất QC</p>
       </div>
 
       <!-- Card đăng nhập -->
-      <div class="login-card">
-        <!-- Tabs -->
-        <div class="tabs">
-          <button id="tab-email" class="tab-button active">Email</button>
-          <button id="tab-seatalk" class="tab-button">SeaTalk</button>
-        </div>
-
-        <!-- Email Login -->
-        <div id="email-content">
-          <form id="email-login-form" class="login-form">
-            <div class="form-group">
-              <label for="login-email" class="form-label">Email</label>
-              <input
-                type="email"
-                id="login-email"
-                class="form-input"
-                placeholder="you@example.com"
-                required
-              />
-            </div>
-            <div class="form-group">
-              <label for="login-password" class="form-label">Mật khẩu</label>
-              <input
-                type="password"
-                id="login-password"
-                class="form-input"
-                placeholder="••••••••"
-                required
-              />
-            </div>
-            <button type="submit" class="btn btn-primary">Đăng nhập</button>
-            <p id="email-login-error" class="error-message hidden"></p>
-          </form>
-        </div>
-
-        <!-- SeaTalk Login -->
-        <div id="seatalk-content" class="hidden">
-          <div class="flex flex-col items-center">
-            <div
-              id="loading-indicator"
-              class="flex flex-col items-center gap-3"
+      <div
+        class="login-card bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl p-6"
+      >
+        <form id="login-form" class="space-y-5">
+          <div>
+            <label
+              for="email"
+              class="block text-sm font-medium text-slate-300 mb-1"
+              >Email</label
             >
-              <div class="loader"></div>
-              <p class="text-slate-400 text-sm">Đang kiểm tra trạng thái...</p>
-            </div>
-            <div id="seatalk_login_app_info" class="hidden"></div>
-            <div
-              id="seatalk_login_button_wrapper"
-              class="seatalk-button-wrapper hidden"
-            >
-              <div id="seatalk_login_button"></div>
-            </div>
+            <input
+              type="email"
+              id="email"
+              name="email"
+              class="form-input"
+              placeholder="you@example.com"
+              required
+            />
           </div>
-        </div>
-
-        <!-- Lỗi chung -->
-        <div id="error-message" class="error-message hidden"></div>
+          <div class="relative">
+            <label
+              for="password"
+              class="block text-sm font-medium text-slate-300 mb-1"
+              >Mật khẩu</label
+            >
+            <input
+              type="password"
+              id="password"
+              name="password"
+              class="form-input pr-10"
+              placeholder="••••••••"
+              required
+            />
+            <button
+              type="button"
+              id="toggle-password"
+              class="absolute right-2 top-8 text-slate-400 hover:text-white"
+            >
+              <!-- Icon mắt (có thể dùng Lucide hoặc SVG đơn giản) -->
+              <svg
+                class="w-5 h-5"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+                />
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
+                />
+              </svg>
+            </button>
+          </div>
+          <div class="flex items-center justify-between">
+            <label class="flex items-center text-sm text-slate-400">
+              <input
+                type="checkbox"
+                id="remember-email"
+                class="mr-2 rounded bg-slate-700 border-slate-600 text-amber-500 focus:ring-amber-500"
+              />
+              Ghi nhớ email
+            </label>
+            <a href="#" class="text-sm text-amber-400 hover:text-amber-300"
+              >Quên mật khẩu?</a
+            >
+          </div>
+          <button
+            type="submit"
+            id="submit-btn"
+            class="btn-primary w-full flex items-center justify-center"
+          >
+            <span id="btn-text">Đăng nhập</span>
+            <span id="btn-spinner" class="hidden ml-2">
+              <svg
+                class="animate-spin h-4 w-4 text-white"
+                xmlns="http://www.w3.org/2000/svg"
+                fill="none"
+                viewBox="0 0 24 24"
+              >
+                <circle
+                  class="opacity-25"
+                  cx="12"
+                  cy="12"
+                  r="10"
+                  stroke="currentColor"
+                  stroke-width="4"
+                ></circle>
+                <path
+                  class="opacity-75"
+                  fill="currentColor"
+                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+                ></path>
+              </svg>
+            </span>
+          </button>
+          <p
+            id="error-message"
+            class="text-red-400 text-sm hidden text-center"
+          ></p>
+        </form>
       </div>
 
-      <p class="footer-text">
-        &copy; 2025 WMS. Đăng nhập bằng SeaTalk hoặc email.
+      <p class="text-center text-slate-500 text-xs mt-6">
+        &copy; 2026 NXM. Chỉ dành cho nhân viên được ủy quyền.
       </p>
     </div>
 
-    <!-- SeaTalk SDK -->
-    <script src="https://static.cdn.haiserve.com/seatalk/client/shared/sop/auth.js"></script>
-    <script>
-      (function () {
-        const $ = (id) => document.getElementById(id);
-        const errorEl = $("error-message");
-        const loadingEl = $("loading-indicator");
-        const wrapperEl = $("seatalk_login_button_wrapper");
-        const appInfoEl = $("seatalk_login_app_info");
-        const buttonEl = $("seatalk_login_button");
-        const emailForm = $("email-login-form");
-        const emailError = $("email-login-error");
-
-        // Tab switching
-        let activeTab = "seatalk";
-        function setTab(tab) {
-          activeTab = tab;
-          $("tab-seatalk").classList.toggle("active", tab === "seatalk");
-          $("tab-email").classList.toggle("active", tab === "email");
-          $("seatalk-content").classList.toggle("hidden", tab !== "seatalk");
-          $("email-content").classList.toggle("hidden", tab !== "email");
-        }
-        $("tab-seatalk").addEventListener("click", () => setTab("seatalk"));
-        $("tab-email").addEventListener("click", () => setTab("email"));
-
-        // Kiểm tra token cũ
-        async function checkExistingToken() {
-          const token = localStorage.getItem("qc_session_token");
-          if (!token) return false;
-          try {
-            const resp = await fetch("/api/qc/me", {
-              headers: { Authorization: `Bearer ${token}` },
-            });
-            if (resp.ok) {
-              window.location.href = "/index.html";
-              return true;
-            }
-          } catch {}
-          localStorage.removeItem("qc_session_token");
-          return false;
-        }
-
-        function showError(msg) {
-          errorEl.textContent = msg;
-          errorEl.classList.remove("hidden");
-        }
-
-        function handleUrlError() {
-          const params = new URLSearchParams(window.location.search);
-          const error = params.get("error");
-          if (!error) return false;
-          const messages = {
-            missing_code: "Thiếu mã xác thực từ SeaTalk.",
-            token_exchange_failed: "Xác thực không thành công.",
-            sso_failed: "Xác minh SSO thất bại.",
-            unauthorized: "Tài khoản không được phép.",
-            internal_error: "Lỗi hệ thống.",
-          };
-          showError(messages[error] || "Đã xảy ra lỗi.");
-          return true;
-        }
-
-        // Khởi tạo nút SeaTalk
-        async function initSeaTalk() {
-          try {
-            const res = await fetch("/api/config/public");
-            const config = await res.json();
-            const { seatalkAppId, seatalkRedirectUri } = config;
-            if (!seatalkAppId || !seatalkRedirectUri)
-              throw new Error("Thiếu cấu hình");
-
-            const state = crypto.randomUUID();
-            sessionStorage.setItem("seatalk_oauth_state", state);
-            appInfoEl.setAttribute("data-appid", seatalkAppId);
-            appInfoEl.setAttribute("data-redirect_uri", seatalkRedirectUri);
-            appInfoEl.setAttribute("data-response_type", "code");
-            appInfoEl.setAttribute("data-state", state);
-            buttonEl.setAttribute("data-size", "medium");
-            buttonEl.setAttribute("data-theme", "light");
-            buttonEl.setAttribute("data-copywriting", "Đăng nhập với SeaTalk");
-            loadingEl.style.display = "none";
-            wrapperEl.classList.remove("hidden");
-            if (typeof SOPAuth !== "undefined" && SOPAuth.render)
-              SOPAuth.render();
-          } catch (e) {
-            showError("Không thể tải cấu hình SeaTalk");
-          }
-        }
-
-        // Đăng nhập bằng email
-        emailForm.addEventListener("submit", async (e) => {
-          e.preventDefault();
-          const email = $("login-email").value.trim();
-          const password = $("login-password").value;
-          emailError.classList.add("hidden");
-
-          try {
-            const res = await fetch("/api/auth/login", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ email, password }),
-            });
-            const data = await res.json();
-
-            if (res.ok && data.success) {
-              const token = data.token;
-              if (!token) {
-                emailError.textContent = "Token không được trả về.";
-                emailError.classList.remove("hidden");
-                return;
-              }
-
-              // Lưu token
-              localStorage.setItem("qc_session_token", token);
-
-              // Lưu email từ token (nếu có)
-              try {
-                const payload = JSON.parse(atob(token.split(".")[0]));
-                if (payload.email) {
-                  localStorage.setItem("user_email", payload.email);
-                }
-              } catch (e) {}
-
-              // Chuyển trang (dùng replace để không giữ lại trang login trong lịch sử)
-              window.location.replace("/index.html");
-            } else {
-              emailError.textContent = data.error || "Đăng nhập thất bại";
-              emailError.classList.remove("hidden");
-            }
-          } catch (err) {
-            console.error("Login error:", err);
-            emailError.textContent = "Lỗi kết nối";
-            emailError.classList.remove("hidden");
-          }
-        });
-
-        // Main
-        (async function main() {
-          if (await checkExistingToken()) return;
-          if (handleUrlError()) return;
-          await initSeaTalk();
-        })();
-      })();
-    </script>
+    <script type="module" src="js/main-login.js"></script>
   </body>
 </html>

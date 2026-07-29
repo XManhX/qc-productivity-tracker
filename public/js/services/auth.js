@@ -1,5 +1,31 @@
 const BASE_URL = "/api";
 
+// Hàm đăng nhập bằng email/password
+export async function login(email, password) {
+  const res = await fetch(`${BASE_URL}/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, password }),
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.error || "Đăng nhập thất bại");
+  }
+  return data; // { token, ... }
+}
+
+// Hàm kiểm tra token hiện tại có hợp lệ không
+export async function checkSession(token) {
+  try {
+    const res = await fetch(`${BASE_URL}/qc/me`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
 export function checkAuth() {
   const token = localStorage.getItem("qc_session_token");
 

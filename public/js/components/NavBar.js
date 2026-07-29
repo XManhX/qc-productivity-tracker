@@ -1,15 +1,11 @@
-// public/js/components/NavBar.js
-import { fetchMe } from '../services/api.js';
+import userSession from '../services/userSession.js';
 
 export class NavBar {
-  /**
-   * @param {HTMLElement} container - phần tử chứa navigation
-   * @param {string} [currentPage] - 'dashboard' | 'users' | 'targets' | 'alert-config' | 'assignments'
-   */
   constructor(container, currentPage = null) {
     this.container = container;
     this.currentPage = currentPage || this._detectPage();
     this.user = null;
+    this._unsubscribe = null;
     this._render();
     if (typeof lucide !== 'undefined') lucide.createIcons();
     this._initUser();
@@ -17,16 +13,11 @@ export class NavBar {
 
   formatDisplayName(fullName) {
     if (!fullName || typeof fullName !== 'string') return '';
-    const parts = fullName.trim().split(/\s+/); // tách theo khoảng trắng
+    const parts = fullName.trim().split(/\s+/);
     if (parts.length === 0) return '';
-    if (parts.length === 1) return parts[0]; // chỉ có 1 từ thì giữ nguyên
-
-    const lastName = parts[parts.length - 1]; // tên
-    const initials = parts
-      .slice(0, -1) // họ + đệm
-      .map(word => word.charAt(0).toUpperCase())
-      .join('');
-
+    if (parts.length === 1) return parts[0];
+    const lastName = parts[parts.length - 1];
+    const initials = parts.slice(0, -1).map(w => w.charAt(0).toUpperCase()).join('');
     return `${initials} ${lastName}`;
   }
 
@@ -49,7 +40,7 @@ export class NavBar {
     ];
 
     const linksHtml = pages
-      .map((p) => {
+      .map(p => {
         const isActive = this.currentPage === p.key;
         const activeClass = isActive
           ? 'bg-slate-800 text-amber-400 border border-slate-700'
@@ -74,7 +65,6 @@ export class NavBar {
             </div>
             <div class="flex items-center space-x-1">
               ${linksHtml}
-              <!-- Khu vực user menu sẽ được cập nhật sau khi fetchMe hoàn tất -->
               <div id="user-menu-area" class="ml-4 relative">
                 <div class="h-8 w-8 rounded-full bg-slate-700 animate-pulse"></div>
               </div>
@@ -87,13 +77,16 @@ export class NavBar {
 
   async _initUser() {
     try {
-      this.user = await fetchMe();
+      this.user = await userSession.getUser();
       this._updateUserUI();
     } catch (err) {
       console.error('Không thể lấy thông tin người dùng:', err);
-      // Token không hợp lệ hoặc hết hạn -> đăng xuất
-      this._handleLogout();
     }
+
+    this._unsubscribe = userSession.onUserLoaded((user) => {
+      this.user = user;
+      this._updateUserUI();
+    });
   }
 
   _updateUserUI() {
@@ -101,23 +94,29 @@ export class NavBar {
     const userArea = this.container.querySelector('#user-menu-area');
     if (!userArea) return;
 
-    // Chuẩn bị dữ liệu hiển thị
-    const displayName = this.formatDisplayName(this.user.name) || this.user.email; // fallback email nếu không có tên
+    const displayName = this.formatDisplayName(this.user.name) || this.user.email;
     const initials = (displayName || '?')[0].toUpperCase();
     const fullName = this.user.name || this.user.email;
     const email = this.user.email;
+    const isAdmin = this.user.role_key === 'admin';
 
     userArea.innerHTML = `
       <div class="relative ml-3">
         <button id="user-menu-btn" class="flex items-center text-sm rounded-full pr-2 focus:outline-none focus:ring-2 focus:ring-amber-400 transition">
           <span class="sr-only">Mở menu người dùng</span>
           <div class="h-8 w-8 rounded-full bg-amber-500 flex items-center justify-center text-slate-900 font-bold text-sm">${initials}</div>
-          <span class="ml-2 text-slate-300 text-sm hidden md:block">${displayName}</span>   <!-- hiển thị tên rút gọn -->
+          <span class="ml-2 text-slate-300 text-sm hidden md:flex items-center">
+            ${displayName}
+            ${isAdmin ? '<i data-lucide="key" class="w-3.5 h-3.5 text-amber-400 ml-1" title="Quản trị viên"></i>' : ''}
+          </span>
         </button>
         <div id="user-dropdown" class="hidden absolute right-0 mt-2 w-56 bg-white rounded-xl shadow-lg ring-1 ring-black ring-opacity-5 z-50 border border-slate-200">
           <div class="px-4 py-3 border-b border-slate-100">
-            <p class="text-sm font-medium text-slate-900">${fullName}</p>    <!-- tên đầy đủ -->
-            <p class="text-xs text-slate-500 truncate">${email}</p>          <!-- vẫn hiển thị email phía dưới -->
+            <p class="text-sm font-medium text-slate-900 flex items-center gap-1">
+              ${fullName}
+              ${isAdmin ? '<i data-lucide="key" class="w-3.5 h-3.5 text-amber-500" title="Quản trị viên"></i>' : ''}
+            </p>
+            <p class="text-xs text-slate-500 truncate">${email}</p>
           </div>
           <button id="logout-btn" class="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-2 rounded-b-xl transition">
             <i data-lucide="log-out" class="w-4 h-4"></i>
@@ -138,9 +137,7 @@ export class NavBar {
       dropdown.classList.toggle('hidden');
     });
 
-    logoutBtn.addEventListener('click', () => {
-      this._handleLogout();
-    });
+    logoutBtn.addEventListener('click', () => this._handleLogout());
 
     window.addEventListener('click', (e) => {
       if (!menuBtn.contains(e.target) && !dropdown.contains(e.target)) {
@@ -151,8 +148,11 @@ export class NavBar {
 
   _handleLogout() {
     localStorage.removeItem('qc_session_token');
-    // Có thể gọi API logout nếu có (không bắt buộc)
-    // Chuyển về trang đăng nhập
+    userSession.clear();
     window.location.href = '/login.html';
+  }
+
+  destroy() {
+    if (this._unsubscribe) this._unsubscribe();
   }
 }

@@ -11,6 +11,7 @@ class LoginController {
         this.btnSpinner = document.getElementById('btn-spinner');
         this.errorEl = document.getElementById('error-message');
         this.rememberCheck = document.getElementById('remember-email');
+        this.toggleIcon = this.toggleBtn.querySelector('i');
 
         this.init();
     }
@@ -42,11 +43,19 @@ class LoginController {
     togglePassword() {
         const isPassword = this.passwordInput.type === 'password';
         this.passwordInput.type = isPassword ? 'text' : 'password';
-        const icon = this.toggleBtn.querySelector('i');
-        if (icon) {
-            icon.setAttribute('data-lucide', isPassword ? 'eye' : 'eye-off');
+
+        // Cập nhật icon và tooltip
+        if (this.toggleIcon) {
+            const newIcon = isPassword ? 'eye' : 'eye-off';
+            const newTitle = isPassword ? 'Ẩn mật khẩu' : 'Hiển thị mật khẩu';
+            this.toggleIcon.setAttribute('data-lucide', newIcon);
+            this.toggleBtn.setAttribute('title', newTitle);
             if (typeof lucide !== 'undefined') lucide.createIcons();
         }
+
+        // Thêm hiệu ứng nhấn nhá
+        this.toggleBtn.classList.add('bg-slate-700/30');
+        setTimeout(() => this.toggleBtn.classList.remove('bg-slate-700/30'), 150);
     }
 
     async handleSubmit(e) {

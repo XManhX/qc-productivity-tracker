@@ -15,6 +15,21 @@ export class NavBar {
     this._initUser();
   }
 
+  formatDisplayName(fullName) {
+    if (!fullName || typeof fullName !== 'string') return '';
+    const parts = fullName.trim().split(/\s+/); // tách theo khoảng trắng
+    if (parts.length === 0) return '';
+    if (parts.length === 1) return parts[0]; // chỉ có 1 từ thì giữ nguyên
+
+    const lastName = parts[parts.length - 1]; // tên
+    const initials = parts
+      .slice(0, -1) // họ + đệm
+      .map(word => word.charAt(0).toUpperCase())
+      .join('');
+
+    return `${initials} ${lastName}`;
+  }
+
   _detectPage() {
     const path = window.location.pathname;
     if (path.endsWith('/users.html') || path.endsWith('/users')) return 'users';
@@ -86,20 +101,23 @@ export class NavBar {
     const userArea = this.container.querySelector('#user-menu-area');
     if (!userArea) return;
 
-    const initials = (this.user.email || '?')[0].toUpperCase();
+    // Chuẩn bị dữ liệu hiển thị
+    const displayName = this.formatDisplayName(this.user.name) || this.user.email; // fallback email nếu không có tên
+    const initials = (displayName || '?')[0].toUpperCase();
+    const fullName = this.user.name || this.user.email;
+    const email = this.user.email;
 
     userArea.innerHTML = `
       <div class="relative ml-3">
         <button id="user-menu-btn" class="flex items-center text-sm rounded-full focus:outline-none focus:ring-2 focus:ring-amber-400 transition">
           <span class="sr-only">Mở menu người dùng</span>
           <div class="h-8 w-8 rounded-full bg-amber-500 flex items-center justify-center text-slate-900 font-bold text-sm">${initials}</div>
-          <span class="ml-2 text-slate-300 text-sm hidden md:block">${this.user.email}</span>
+          <span class="ml-2 text-slate-300 text-sm hidden md:block">${displayName}</span>   <!-- hiển thị tên rút gọn -->
         </button>
-        <!-- Dropdown menu -->
         <div id="user-dropdown" class="hidden absolute right-0 mt-2 w-56 bg-white rounded-xl shadow-lg ring-1 ring-black ring-opacity-5 z-50 border border-slate-200">
           <div class="px-4 py-3 border-b border-slate-100">
-            <p class="text-sm font-medium text-slate-900">${this.user.name || 'Người dùng'}</p>
-            <p class="text-xs text-slate-500 truncate">${this.user.email}</p>
+            <p class="text-sm font-medium text-slate-900">${fullName}</p>    <!-- tên đầy đủ -->
+            <p class="text-xs text-slate-500 truncate">${email}</p>          <!-- vẫn hiển thị email phía dưới -->
           </div>
           <button id="logout-btn" class="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-2 rounded-b-xl transition">
             <i data-lucide="log-out" class="w-4 h-4"></i>
@@ -109,10 +127,8 @@ export class NavBar {
       </div>
     `;
 
-    // Khởi tạo lại icon Lucide
     if (typeof lucide !== 'undefined') lucide.createIcons();
 
-    // Gán sự kiện
     const menuBtn = userArea.querySelector('#user-menu-btn');
     const dropdown = userArea.querySelector('#user-dropdown');
     const logoutBtn = userArea.querySelector('#logout-btn');
@@ -126,7 +142,6 @@ export class NavBar {
       this._handleLogout();
     });
 
-    // Đóng dropdown khi click bên ngoài
     window.addEventListener('click', (e) => {
       if (!menuBtn.contains(e.target) && !dropdown.contains(e.target)) {
         dropdown.classList.add('hidden');

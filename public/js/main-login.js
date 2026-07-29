@@ -2,14 +2,21 @@
 import { login, checkSession } from './services/auth.js';
 
 const QUOTES = [
-    "“Chất lượng là danh tiếng, năng suất là sức mạnh.”",
-    "“Đo lường được mới cải tiến được.” — Peter Drucker",
-    "“Không có kiểm soát chất lượng, chỉ có niềm tin mù quáng.”",
-    "“Mỗi con số là một câu chuyện. Hãy đọc nó.”",
+    "“Chất lượng không phải là một hành động, mà là một thói quen.” — Aristotle",
+    "“Đo lường những gì có thể đo được, và làm cho những gì không thể đo được trở nên có thể.” — Galileo",
+    "“Sự xuất sắc nằm trong từng chi tiết. Hãy giám sát chúng.”",
+    "“Không có QC, bạn chỉ đang đoán mò.”",
+    "“Dữ liệu là vua, QC là vương miện.”",
+    "“Mỗi con số là một câu chuyện. Hãy lắng nghe nó.”",
     "“Năng suất không đến từ sự bận rộn, mà từ sự tập trung.”",
-    "“QC là nghệ thuật biến dữ liệu thành quyết định.”",
     "“Hôm nay bạn giám sát, ngày mai bạn dẫn đầu.”",
-    "“Sự xuất sắc nằm trong từng chi tiết.”",
+    "“Trung tâm giám sát là trái tim của hệ thống.”",
+    "“Từng giờ trôi qua, từng sản phẩm được kiểm soát – đó là sức mạnh.”",
+    "“Không có kiểm soát chất lượng, chỉ có niềm tin mù quáng.”",
+    "“QC là nghệ thuật biến dữ liệu thành quyết định.”",
+    "“Thành công là tổng của những nỗ lực nhỏ được lặp đi lặp lại.” — Robert Collier",
+    "“Hãy luôn kiểm tra hai lần, giao hàng một lần.”",
+    "“Chất lượng là danh tiếng, năng suất là sức mạnh.”",
 ];
 
 class LoginController {
@@ -23,24 +30,44 @@ class LoginController {
         this.btnSpinner = document.getElementById('btn-spinner');
         this.errorEl = document.getElementById('error-message');
         this.rememberCheck = document.getElementById('remember-email');
+        this.quoteEl = document.getElementById('login-quote');
+        this.quoteTimer = null;
+
         this.init();
     }
 
     init() {
-        this.showRandomQuote()
         this.autoLogin();
         this.emailInput.focus();
         this.loadRememberedEmail();
         this.form.addEventListener('submit', (e) => this.handleSubmit(e));
         this.toggleBtn.addEventListener('click', () => this.togglePassword());
+
+        // Khởi động quote
+        this.showRandomQuote();
+        this.startQuoteRotation();
     }
 
     showRandomQuote() {
-        const quoteEl = document.getElementById('login-quote');
-        if (quoteEl) {
-            const randomQuote = QUOTES[Math.floor(Math.random() * QUOTES.length)];
-            quoteEl.textContent = randomQuote;
-            quoteEl.classList.add('fade-in');
+        if (!this.quoteEl) return;
+        const randomIndex = Math.floor(Math.random() * QUOTES.length);
+        this.quoteEl.textContent = QUOTES[randomIndex];
+        // Trigger animation (thêm class tạm)
+        this.quoteEl.classList.add('quote-fade');
+        setTimeout(() => this.quoteEl.classList.remove('quote-fade'), 600);
+    }
+
+    startQuoteRotation() {
+        this.stopQuoteRotation();
+        this.quoteTimer = setInterval(() => {
+            this.showRandomQuote();
+        }, 30000); // 30 giây
+    }
+
+    stopQuoteRotation() {
+        if (this.quoteTimer) {
+            clearInterval(this.quoteTimer);
+            this.quoteTimer = null;
         }
     }
 

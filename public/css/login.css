@@ -98,17 +98,20 @@ input[type="checkbox"]:checked + div i {
   opacity: 1;
 }
 
-/* Quote fade-in */
+/* Quote transition */
 #login-quote {
-  animation: fadeInQuote 0.8s ease forwards;
+  transition: opacity 0.5s ease;
 }
-@keyframes fadeInQuote {
-  from {
+.quote-fade {
+  animation: quoteFadeIn 0.6s ease;
+}
+@keyframes quoteFadeIn {
+  0% {
     opacity: 0;
-    transform: translateY(6px);
+    transform: translateY(5px);
   }
-  to {
-    opacity: 0.7;
+  100% {
+    opacity: 0.85;
     transform: translateY(0);
   }
 }

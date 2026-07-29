@@ -11,20 +11,25 @@
       rel="stylesheet"
     />
     <script src="https://unpkg.com/lucide@latest"></script>
-    <link rel="stylesheet" href="css/login.css?v=3" />
+    <link rel="stylesheet" href="css/login.css?v=4" />
+    <style>
+      /* Màu cam shopee tùy chỉnh */
+      :root {
+        --shopee: #ee4d2d;
+        --shopee-light: #ff6b4a;
+      }
+    </style>
   </head>
   <body
     class="min-h-screen flex items-center justify-center p-4 relative overflow-hidden bg-black"
   >
-    <!-- Canvas cho Particle Network -->
     <canvas id="particle-canvas" class="absolute inset-0 z-0"></canvas>
 
-    <!-- Nội dung login -->
     <div class="relative w-full max-w-md z-10">
       <!-- Logo -->
       <div class="text-center mb-8">
         <div
-          class="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-gradient-to-br from-cyan-400 to-blue-600 text-white mb-4 shadow-lg shadow-cyan-500/30"
+          class="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-gradient-to-br from-orange-400 to-[var(--shopee)] text-white mb-4 shadow-lg shadow-orange-500/30"
         >
           <i data-lucide="zap" class="w-7 h-7"></i>
         </div>
@@ -34,11 +39,10 @@
         <p class="text-slate-400 text-sm mt-1">Trung tâm giám sát năng suất</p>
       </div>
 
-      <!-- Card sci‑fi -->
+      <!-- Card sci‑fi cam -->
       <div
-        class="sci-fi-card relative bg-white/5 backdrop-blur-2xl border border-cyan-500/30 rounded-3xl shadow-2xl p-8 overflow-hidden"
+        class="sci-fi-card relative bg-white/5 backdrop-blur-2xl border border-orange-500/30 rounded-3xl shadow-2xl p-8 overflow-hidden"
       >
-        <!-- Hiệu ứng quét (scan line) -->
         <div class="scan-line absolute inset-0 pointer-events-none"></div>
         <h2 class="text-xl font-semibold text-white text-center mb-6">
           Xác thực danh tính
@@ -48,7 +52,7 @@
           <!-- Email -->
           <div class="relative group">
             <span
-              class="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-cyan-400 transition-colors"
+              class="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-[var(--shopee)] transition-colors"
             >
               <i data-lucide="mail" class="w-5 h-5"></i>
             </span>
@@ -57,7 +61,7 @@
               id="email"
               name="email"
               autocomplete="email"
-              class="sci-input w-full bg-slate-800/50 border border-slate-700/50 rounded-xl pl-12 pr-4 py-3 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/70 focus:border-transparent transition-all duration-300"
+              class="sci-input w-full bg-slate-800/50 border border-slate-700/50 rounded-xl pl-12 pr-4 py-3 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-[var(--shopee)]/70 focus:border-transparent transition-all duration-300"
               placeholder="Email"
               required
             />
@@ -66,7 +70,7 @@
           <!-- Mật khẩu -->
           <div class="relative group">
             <span
-              class="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-cyan-400 transition-colors"
+              class="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-[var(--shopee)] transition-colors"
             >
               <i data-lucide="lock" class="w-5 h-5"></i>
             </span>
@@ -75,17 +79,16 @@
               id="password"
               name="password"
               autocomplete="current-password"
-              class="sci-input w-full bg-slate-800/50 border border-slate-700/50 rounded-xl pl-12 pr-14 py-3 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/70 focus:border-transparent transition-all duration-300"
+              class="sci-input w-full bg-slate-800/50 border border-slate-700/50 rounded-xl pl-12 pr-14 py-3 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-[var(--shopee)]/70 focus:border-transparent transition-all duration-300"
               placeholder="Mật khẩu"
               required
             />
             <button
               type="button"
               id="toggle-password"
-              class="absolute right-2 top-1/2 -translate-y-1/2 p-2 text-slate-400 hover:text-white hover:bg-slate-700/50 rounded-lg transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-cyan-500/50"
+              class="absolute right-2 top-1/2 -translate-y-1/2 p-2 text-slate-400 hover:text-white hover:bg-slate-700/50 rounded-lg transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-[var(--shopee)]/50"
               title="Hiển thị mật khẩu"
             >
-              <!-- Icon mắt (ẩn mật khẩu) -->
               <svg
                 id="eye-off-icon"
                 xmlns="http://www.w3.org/2000/svg"
@@ -102,7 +105,6 @@
                 />
                 <line x1="1" y1="1" x2="23" y2="23" />
               </svg>
-              <!-- Icon mắt mở (hiện mật khẩu) - ẩn -->
               <svg
                 id="eye-icon"
                 xmlns="http://www.w3.org/2000/svg"
@@ -134,11 +136,11 @@
                   class="peer sr-only"
                 />
                 <div
-                  class="w-5 h-5 border-2 border-slate-500 rounded-md bg-slate-800/50 peer-checked:bg-cyan-500 peer-checked:border-cyan-500 transition-all duration-200 flex items-center justify-center"
+                  class="w-5 h-5 border-2 border-slate-500 rounded-md bg-slate-800/50 peer-checked:bg-[var(--shopee)] peer-checked:border-[var(--shopee)] transition-all duration-200 flex items-center justify-center"
                 >
                   <i
                     data-lucide="check"
-                    class="w-4 h-4 text-slate-950 opacity-0 peer-checked:opacity-100 transition-opacity duration-200 absolute"
+                    class="w-4 h-4 text-white opacity-0 peer-checked:opacity-100 transition-opacity duration-200 absolute"
                   ></i>
                 </div>
               </div>
@@ -146,7 +148,7 @@
             </label>
             <a
               href="#"
-              class="text-sm text-cyan-400 hover:text-cyan-300 transition-colors font-medium"
+              class="text-sm text-[var(--shopee)] hover:text-[var(--shopee-light)] transition-colors font-medium"
               >Quên mật khẩu?</a
             >
           </div>
@@ -155,7 +157,8 @@
           <button
             type="submit"
             id="submit-btn"
-            class="sci-btn w-full bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white font-semibold py-3.5 rounded-xl transition-all duration-300 disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center space-x-2 shadow-lg shadow-cyan-500/25 hover:shadow-cyan-500/40 active:scale-[0.98]"
+            class="sci-btn w-full bg-gradient-to-r from-[var(--shopee)] to-[var(--shopee-light)] hover:from-[var(--shopee-light)] hover:to-[var(--shopee)] text-white font-semibold py-3.5 rounded-xl transition-all duration-300 disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center space-x-2 shadow-lg shadow-orange-500/25 hover:shadow-orange-500/40 active:scale-[0.98]"
+            style="background-size: 200% auto"
           >
             <span id="btn-text">Đăng nhập</span>
             <span id="btn-spinner" class="hidden">
@@ -182,7 +185,6 @@
             </span>
           </button>
 
-          <!-- Thông báo lỗi -->
           <div
             id="error-message"
             class="hidden bg-red-400/10 border border-red-400/30 rounded-xl py-2.5 px-4 text-red-400 text-sm text-center"
@@ -191,11 +193,10 @@
       </div>
 
       <p class="text-center text-slate-500 text-xs mt-6">
-        &copy; 2025 WMS. Hệ thống nội bộ
+        &copy; 2026 WMS. Hệ thống nội bộ
       </p>
     </div>
 
-    <!-- Scripts -->
     <script src="js/utils/particles.js"></script>
     <script type="module" src="js/main-login.js"></script>
     <script>

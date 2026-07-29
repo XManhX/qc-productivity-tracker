@@ -1,4 +1,3 @@
-// public/js/main-login.js
 import { login, checkSession } from './services/auth.js';
 
 class LoginController {
@@ -8,29 +7,30 @@ class LoginController {
         this.passwordInput = document.getElementById('password');
         this.toggleBtn = document.getElementById('toggle-password');
         this.submitBtn = document.getElementById('submit-btn');
+        this.btnText = document.getElementById('btn-text');
+        this.btnSpinner = document.getElementById('btn-spinner');
         this.errorEl = document.getElementById('error-message');
         this.rememberCheck = document.getElementById('remember-email');
 
+        // Khởi tạo
         this.init();
     }
 
     init() {
-        // 1. Kiểm tra nếu đã có token hợp lệ → chuyển trang
+        // Tự động đăng nhập nếu token còn hạn
         this.autoLogin();
 
-        // 2. Focus vào ô email
+        // Focus vào email
         this.emailInput.focus();
 
-        // 3. Tải email đã ghi nhớ (nếu có)
-        const savedEmail = localStorage.getItem('remembered_email');
-        if (savedEmail) {
-            this.emailInput.value = savedEmail;
-            this.rememberCheck.checked = true;
-        }
+        // Tải email đã ghi nhớ
+        this.loadRememberedEmail();
 
-        // 4. Gán sự kiện
+        // Sự kiện
         this.form.addEventListener('submit', (e) => this.handleSubmit(e));
         this.toggleBtn.addEventListener('click', () => this.togglePassword());
+        // Đồng bộ icon Lucide (vì chúng ta thêm động)
+        if (typeof lucide !== 'undefined') lucide.createIcons();
     }
 
     async autoLogin() {
@@ -44,10 +44,26 @@ class LoginController {
         }
     }
 
+    loadRememberedEmail() {
+        const saved = localStorage.getItem('remembered_email');
+        if (saved) {
+            this.emailInput.value = saved;
+            this.rememberCheck.checked = true;
+        }
+    }
+
     togglePassword() {
-        const type = this.passwordInput.type === 'password' ? 'text' : 'password';
-        this.passwordInput.type = type;
-        // Đổi icon mắt (nếu dùng Lucide thì cập nhật sau)
+        const currentType = this.passwordInput.type;
+        const newType = currentType === 'password' ? 'text' : 'password';
+        this.passwordInput.type = newType;
+
+        // Đổi icon Lucide
+        const icon = this.toggleBtn.querySelector('i');
+        if (icon) {
+            const newIcon = newType === 'password' ? 'eye-off' : 'eye';
+            icon.setAttribute('data-lucide', newIcon);
+            if (typeof lucide !== 'undefined') lucide.createIcons();
+        }
     }
 
     async handleSubmit(e) {
@@ -57,11 +73,10 @@ class LoginController {
 
         // Validate cơ bản
         if (!email || !password) {
-            this.showError('Vui lòng nhập email và mật khẩu');
+            this.showError('Vui lòng nhập đầy đủ email và mật khẩu.');
             return;
         }
 
-        // Xóa lỗi cũ, bật loading
         this.hideError();
         this.setLoading(true);
 
@@ -70,15 +85,13 @@ class LoginController {
             // Lưu token
             localStorage.setItem('qc_session_token', data.token);
 
-            // Giải mã email từ token
+            // Giải mã để lấy email (nếu có)
             try {
                 const payload = JSON.parse(atob(data.token.split('.')[0]));
-                if (payload.email) {
-                    localStorage.setItem('user_email', payload.email);
-                }
+                if (payload.email) localStorage.setItem('user_email', payload.email);
             } catch { }
 
-            // Ghi nhớ email nếu chọn
+            // Ghi nhớ email
             if (this.rememberCheck.checked) {
                 localStorage.setItem('remembered_email', email);
             } else {
@@ -88,12 +101,23 @@ class LoginController {
             // Chuyển hướng
             window.location.replace('/index.html');
         } catch (err) {
-            this.showError(err.message);
-            // Thêm class shake cho input
+            this.showError(err.message || 'Đăng nhập thất bại.');
+            // Rung input mật khẩu
             this.passwordInput.classList.add('shake');
-            setTimeout(() => this.passwordInput.classList.remove('shake'), 300);
+            setTimeout(() => this.passwordInput.classList.remove('shake'), 350);
         } finally {
             this.setLoading(false);
+        }
+    }
+
+    setLoading(loading) {
+        this.submitBtn.disabled = loading;
+        if (loading) {
+            this.btnText.classList.add('hidden');
+            this.btnSpinner.classList.remove('hidden');
+        } else {
+            this.btnText.classList.remove('hidden');
+            this.btnSpinner.classList.add('hidden');
         }
     }
 
@@ -105,12 +129,7 @@ class LoginController {
     hideError() {
         this.errorEl.classList.add('hidden');
     }
-
-    setLoading(state) {
-        this.submitBtn.disabled = state;
-        // Thay đổi nội dung nút: có spinner hoặc chữ "Đang đăng nhập..."
-    }
 }
 
-// Khởi chạy khi DOM ready
+// Khởi động khi DOM ready
 document.addEventListener('DOMContentLoaded', () => new LoginController());

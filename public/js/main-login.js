@@ -44,18 +44,27 @@ class LoginController {
         const isPassword = this.passwordInput.type === 'password';
         this.passwordInput.type = isPassword ? 'text' : 'password';
 
-        // Cập nhật icon và tooltip
-        if (this.toggleIcon) {
-            const newIcon = isPassword ? 'eye' : 'eye-off';
-            const newTitle = isPassword ? 'Ẩn mật khẩu' : 'Hiển thị mật khẩu';
-            this.toggleIcon.setAttribute('data-lucide', newIcon);
-            this.toggleBtn.setAttribute('title', newTitle);
-            if (typeof lucide !== 'undefined') lucide.createIcons();
+        const eyeOffIcon = document.getElementById('eye-off-icon');
+        const eyeIcon = document.getElementById('eye-icon');
+        const btn = this.toggleBtn;
+
+        if (eyeOffIcon && eyeIcon) {
+            if (isPassword) {
+                // Đang là password → sắp chuyển sang text (hiện mật khẩu)
+                eyeOffIcon.classList.add('hidden');
+                eyeIcon.classList.remove('hidden');
+                btn.setAttribute('title', 'Ẩn mật khẩu');
+            } else {
+                // Đang là text → chuyển về password
+                eyeOffIcon.classList.remove('hidden');
+                eyeIcon.classList.add('hidden');
+                btn.setAttribute('title', 'Hiển thị mật khẩu');
+            }
         }
 
-        // Thêm hiệu ứng nhấn nhá
-        this.toggleBtn.classList.add('bg-slate-700/30');
-        setTimeout(() => this.toggleBtn.classList.remove('bg-slate-700/30'), 150);
+        // Hiệu ứng nhấn nhá nhẹ
+        btn.classList.add('bg-slate-700/30');
+        setTimeout(() => btn.classList.remove('bg-slate-700/30'), 150);
     }
 
     async handleSubmit(e) {

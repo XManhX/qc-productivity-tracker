@@ -68,6 +68,7 @@
           </div>
 
           <!-- Mật khẩu -->
+          <!-- Mật khẩu -->
           <div class="relative group">
             <span
               class="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-amber-400 transition-colors"
@@ -89,7 +90,40 @@
               class="absolute right-2 top-1/2 -translate-y-1/2 p-2 text-slate-400 hover:text-white hover:bg-slate-700/50 rounded-lg transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-amber-500/50"
               title="Hiển thị mật khẩu"
             >
-              <i data-lucide="eye-off" class="w-5 h-5 pointer-events-none"></i>
+              <!-- Icon mắt (ẩn mật khẩu) -->
+              <svg
+                id="eye-off-icon"
+                xmlns="http://www.w3.org/2000/svg"
+                class="w-5 h-5"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                stroke-width="2"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24"
+                />
+                <line x1="1" y1="1" x2="23" y2="23" />
+              </svg>
+              <!-- Icon mắt mở (hiện mật khẩu) - mặc định ẩn -->
+              <svg
+                id="eye-icon"
+                xmlns="http://www.w3.org/2000/svg"
+                class="w-5 h-5 hidden"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                stroke-width="2"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"
+                />
+                <circle cx="12" cy="12" r="3" />
+              </svg>
             </button>
           </div>
 

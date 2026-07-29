@@ -52,6 +52,20 @@ export class HeatmapTable {
     this._updateStatusDisplay();
   }
 
+  _getInitials(name, email) {
+    const raw = name || email || '';
+    const parts = raw.trim().split(/\s+/);
+    if (parts.length === 0) return '?';
+    if (parts.length === 1) {
+      // Nếu chỉ có 1 từ, lấy 2 ký tự đầu (nếu đủ dài)
+      return parts[0].substring(0, 2).toUpperCase();
+    }
+    // Lấy chữ cái đầu của từ đầu và từ cuối
+    const first = parts[0].charAt(0);
+    const last = parts[parts.length - 1].charAt(0);
+    return (first + last).toUpperCase();
+  }
+
   // ==================== WORK & BREAK CONFIG ====================
   _getWorkConfig() {
     const cfg = store.getAlertConfig();
@@ -464,7 +478,7 @@ export class HeatmapTable {
     tds[0].innerHTML = `
       <div class="flex items-center gap-3 min-w-0">
         <div class="w-9 h-9 rounded-full bg-slate-100 flex items-center justify-center text-xs font-bold text-slate-600 uppercase border border-slate-200 flex-shrink-0">
-          ${(user.name || user.email).substring(0, 2)}
+          ${this._getInitials(user.name, user.email)}
         </div>
         <div class="min-w-0">
           <div class="font-semibold text-slate-800 truncate" title="${user.name || user.email}">${user.name || user.email}</div>
@@ -524,7 +538,7 @@ export class HeatmapTable {
     tdName.innerHTML = `
       <div class="flex items-center gap-3 min-w-0">
         <div class="w-9 h-9 rounded-full bg-slate-100 flex items-center justify-center text-xs font-bold text-slate-600 uppercase border border-slate-200 flex-shrink-0">
-          ${(user.name || user.email).substring(0, 2)}
+          ${this._getInitials(user.name, user.email)}
         </div>
         <div class="min-w-0">
           <div class="font-semibold text-slate-800 truncate" title="${user.name || user.email}">${user.name || user.email}</div>
@@ -586,7 +600,7 @@ export class HeatmapTable {
       tds[0].innerHTML = `
         <div class="flex items-center gap-3 min-w-0">
           <div class="w-9 h-9 rounded-full bg-slate-100 flex items-center justify-center text-xs font-bold text-slate-600 uppercase border border-slate-200 flex-shrink-0">
-            ${(user.name || user.email).substring(0, 2)}
+            ${this._getInitials(user.name, user.email)}
           </div>
           <div class="min-w-0">
             <div class="font-semibold text-slate-800 truncate" title="${user.name || user.email}">${user.name || user.email}</div>

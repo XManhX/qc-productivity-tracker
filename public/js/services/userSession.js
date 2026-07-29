@@ -1,158 +1,86 @@
-import userSession from '../services/userSession.js';
+import { fetchMe } from './api.js';
 
-export class NavBar {
-    constructor(container, currentPage = null) {
-        this.container = container;
-        this.currentPage = currentPage || this._detectPage();
-        this.user = null;
-        this._unsubscribe = null;
-        this._render();
-        if (typeof lucide !== 'undefined') lucide.createIcons();
-        this._initUser();
+const CACHE_KEY = 'qc_user_cache';
+const CACHE_DURATION = 5 * 60 * 1000; // 5 phút
+
+class UserSessionManager {
+    constructor() {
+        this._listeners = [];
+        this._user = null;
+        this._loadingPromise = null;
     }
 
-    formatDisplayName(fullName) {
-        if (!fullName || typeof fullName !== 'string') return '';
-        const parts = fullName.trim().split(/\s+/);
-        if (parts.length === 0) return '';
-        if (parts.length === 1) return parts[0];
-        const lastName = parts[parts.length - 1];
-        const initials = parts.slice(0, -1).map(w => w.charAt(0).toUpperCase()).join('');
-        return `${initials} ${lastName}`;
-    }
-
-    _detectPage() {
-        const path = window.location.pathname;
-        if (path.endsWith('/users.html') || path.endsWith('/users')) return 'users';
-        if (path.endsWith('/targets.html') || path.endsWith('/targets')) return 'targets';
-        if (path.endsWith('/assignments.html') || path.endsWith('/assignments')) return 'assignments';
-        if (path.endsWith('/alert-config.html') || path.endsWith('/alert-config')) return 'alert-config';
-        return 'dashboard';
-    }
-
-    _render() {
-        const pages = [
-            { key: 'dashboard', href: '/', icon: 'bar-chart-3', label: 'Dashboard' },
-            { key: 'users', href: '/users.html', icon: 'users', label: 'Nhân Sự' },
-            { key: 'targets', href: '/targets.html', icon: 'target', label: 'Roles & Targets' },
-            { key: 'assignments', href: '/assignments.html', icon: 'clipboard-list', label: 'Phân công' },
-            { key: 'alert-config', href: '/alert-config.html', icon: 'bell-ring', label: 'Cấu hình Alert' }
-        ];
-
-        const linksHtml = pages
-            .map(p => {
-                const isActive = this.currentPage === p.key;
-                const activeClass = isActive
-                    ? 'bg-slate-800 text-amber-400 border border-slate-700'
-                    : 'text-slate-300 hover:bg-slate-800 hover:text-white transition';
-                return `
-        <a href="${p.href}" class="flex items-center space-x-2 px-4 py-2 rounded-lg text-sm font-medium ${activeClass}">
-          <i data-lucide="${p.icon}" class="w-4 h-4"></i>
-          <span>${p.label}</span>
-        </a>`;
-            })
-            .join('');
-
-        this.container.innerHTML = `
-      <nav class="bg-slate-900 border-b border-slate-800 sticky top-0 z-50 shadow-md">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div class="flex items-center justify-between h-16">
-            <div class="flex items-center space-x-3">
-              <div class="bg-amber-500 text-slate-950 p-2 rounded-lg flex items-center justify-center shadow-inner">
-                <i data-lucide="zap" class="w-5 h-5"></i>
-              </div>
-              <span class="text-white font-bold text-lg tracking-wider">WMS QC MONITOR</span>
-            </div>
-            <div class="flex items-center space-x-1">
-              ${linksHtml}
-              <div id="user-menu-area" class="ml-4 relative">
-                <div class="h-8 w-8 rounded-full bg-slate-700 animate-pulse"></div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </nav>
-    `;
-    }
-
-    async _initUser() {
-        try {
-            this.user = await userSession.getUser();
-            this._updateUserUI();
-        } catch (err) {
-            console.error('Không thể lấy thông tin người dùng:', err);
+    // Lấy user từ cache hoặc fetch mới
+    getUser() {
+        const cached = this._getFromCache();
+        if (cached) {
+            this._user = cached;
+            return Promise.resolve(cached);
         }
 
-        this._unsubscribe = userSession.onUserLoaded((user) => {
-            this.user = user;
-            this._updateUserUI();
-        });
+        if (this._loadingPromise) return this._loadingPromise;
+
+        this._loadingPromise = fetchMe()
+            .then(user => {
+                this._user = user;
+                this._saveToCache(user);
+                this._notifyListeners(user);
+                this._loadingPromise = null;
+                return user;
+            })
+            .catch(err => {
+                this._loadingPromise = null;
+                if (err.message.includes('401') || err.message.includes('token')) {
+                    this.clear();
+                    window.location.href = '/login.html';
+                }
+                throw err;
+            });
+
+        return this._loadingPromise;
     }
 
-    _updateUserUI() {
-        if (!this.user) return;
-        const userArea = this.container.querySelector('#user-menu-area');
-        if (!userArea) return;
+    // Đăng ký callback khi user được tải (cho component khác)
+    onUserLoaded(callback) {
+        this._listeners.push(callback);
+        if (this._user) callback(this._user);
+        return () => {
+            this._listeners = this._listeners.filter(cb => cb !== callback);
+        };
+    }
 
-        const displayName = this.formatDisplayName(this.user.name) || this.user.email;
-        const initials = (displayName || '?')[0].toUpperCase();
-        const fullName = this.user.name || this.user.email;
-        const email = this.user.email;
-        const isAdmin = this.user.role_key === 'admin';
+    clear() {
+        this._user = null;
+        this._loadingPromise = null;
+        sessionStorage.removeItem(CACHE_KEY);
+    }
 
-        userArea.innerHTML = `
-      <div class="relative ml-3">
-        <button id="user-menu-btn" class="flex items-center text-sm rounded-full pr-2 focus:outline-none focus:ring-2 focus:ring-amber-400 transition">
-          <span class="sr-only">Mở menu người dùng</span>
-          <div class="h-8 w-8 rounded-full bg-amber-500 flex items-center justify-center text-slate-900 font-bold text-sm">${initials}</div>
-          <span class="ml-2 text-slate-300 text-sm hidden md:flex items-center">
-            ${displayName}
-            ${isAdmin ? '<i data-lucide="key" class="w-3.5 h-3.5 text-amber-400 ml-1" title="Quản trị viên"></i>' : ''}
-          </span>
-        </button>
-        <div id="user-dropdown" class="hidden absolute right-0 mt-2 w-56 bg-white rounded-xl shadow-lg ring-1 ring-black ring-opacity-5 z-50 border border-slate-200">
-          <div class="px-4 py-3 border-b border-slate-100">
-            <p class="text-sm font-medium text-slate-900 flex items-center gap-1">
-              ${fullName}
-              ${isAdmin ? '<i data-lucide="key" class="w-3.5 h-3.5 text-amber-500" title="Quản trị viên"></i>' : ''}
-            </p>
-            <p class="text-xs text-slate-500 truncate">${email}</p>
-          </div>
-          <button id="logout-btn" class="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-2 rounded-b-xl transition">
-            <i data-lucide="log-out" class="w-4 h-4"></i>
-            Đăng xuất
-          </button>
-        </div>
-      </div>
-    `;
-
-        if (typeof lucide !== 'undefined') lucide.createIcons();
-
-        const menuBtn = userArea.querySelector('#user-menu-btn');
-        const dropdown = userArea.querySelector('#user-dropdown');
-        const logoutBtn = userArea.querySelector('#logout-btn');
-
-        menuBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            dropdown.classList.toggle('hidden');
-        });
-
-        logoutBtn.addEventListener('click', () => this._handleLogout());
-
-        window.addEventListener('click', (e) => {
-            if (!menuBtn.contains(e.target) && !dropdown.contains(e.target)) {
-                dropdown.classList.add('hidden');
+    _getFromCache() {
+        try {
+            const raw = sessionStorage.getItem(CACHE_KEY);
+            if (!raw) return null;
+            const { data, timestamp } = JSON.parse(raw);
+            if (Date.now() - timestamp > CACHE_DURATION) {
+                sessionStorage.removeItem(CACHE_KEY);
+                return null;
             }
-        });
+            return data;
+        } catch { return null; }
     }
 
-    _handleLogout() {
-        localStorage.removeItem('qc_session_token');
-        userSession.clear();
-        window.location.href = '/login.html';
+    _saveToCache(user) {
+        try {
+            sessionStorage.setItem(CACHE_KEY, JSON.stringify({
+                data: user,
+                timestamp: Date.now()
+            }));
+        } catch { }
     }
 
-    destroy() {
-        if (this._unsubscribe) this._unsubscribe();
+    _notifyListeners(user) {
+        this._listeners.forEach(cb => cb(user));
     }
 }
+
+const userSession = new UserSessionManager();
+export default userSession;

@@ -41,28 +41,8 @@
           <button id="tab-seatalk" class="tab-button">SeaTalk</button>
         </div>
 
-        <!-- SeaTalk Login -->
-        <div id="seatalk-content">
-          <div class="flex flex-col items-center">
-            <div
-              id="loading-indicator"
-              class="flex flex-col items-center gap-3"
-            >
-              <div class="loader"></div>
-              <p class="text-slate-400 text-sm">Đang kiểm tra trạng thái...</p>
-            </div>
-            <div id="seatalk_login_app_info" class="hidden"></div>
-            <div
-              id="seatalk_login_button_wrapper"
-              class="seatalk-button-wrapper hidden"
-            >
-              <div id="seatalk_login_button"></div>
-            </div>
-          </div>
-        </div>
-
         <!-- Email Login -->
-        <div id="email-content" class="hidden">
+        <div id="email-content">
           <form id="email-login-form" class="login-form">
             <div class="form-group">
               <label for="login-email" class="form-label">Email</label>
@@ -87,6 +67,26 @@
             <button type="submit" class="btn btn-primary">Đăng nhập</button>
             <p id="email-login-error" class="error-message hidden"></p>
           </form>
+        </div>
+
+        <!-- SeaTalk Login -->
+        <div id="seatalk-content" class="hidden">
+          <div class="flex flex-col items-center">
+            <div
+              id="loading-indicator"
+              class="flex flex-col items-center gap-3"
+            >
+              <div class="loader"></div>
+              <p class="text-slate-400 text-sm">Đang kiểm tra trạng thái...</p>
+            </div>
+            <div id="seatalk_login_app_info" class="hidden"></div>
+            <div
+              id="seatalk_login_button_wrapper"
+              class="seatalk-button-wrapper hidden"
+            >
+              <div id="seatalk_login_button"></div>
+            </div>
+          </div>
         </div>
 
         <!-- Lỗi chung -->

@@ -109,7 +109,7 @@ export class NavBar {
 
     userArea.innerHTML = `
       <div class="relative ml-3">
-        <button id="user-menu-btn" class="flex items-center text-sm rounded-full focus:outline-none focus:ring-2 focus:ring-amber-400 transition">
+        <button id="user-menu-btn" class="flex items-center text-sm rounded-full pr-2 focus:outline-none focus:ring-2 focus:ring-amber-400 transition">
           <span class="sr-only">Mở menu người dùng</span>
           <div class="h-8 w-8 rounded-full bg-amber-500 flex items-center justify-center text-slate-900 font-bold text-sm">${initials}</div>
           <span class="ml-2 text-slate-300 text-sm hidden md:block">${displayName}</span>   <!-- hiển thị tên rút gọn -->

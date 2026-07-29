@@ -1,6 +1,17 @@
 // public/js/main-login.js
 import { login, checkSession } from './services/auth.js';
 
+const QUOTES = [
+    "“Chất lượng là danh tiếng, năng suất là sức mạnh.”",
+    "“Đo lường được mới cải tiến được.” — Peter Drucker",
+    "“Không có kiểm soát chất lượng, chỉ có niềm tin mù quáng.”",
+    "“Mỗi con số là một câu chuyện. Hãy đọc nó.”",
+    "“Năng suất không đến từ sự bận rộn, mà từ sự tập trung.”",
+    "“QC là nghệ thuật biến dữ liệu thành quyết định.”",
+    "“Hôm nay bạn giám sát, ngày mai bạn dẫn đầu.”",
+    "“Sự xuất sắc nằm trong từng chi tiết.”",
+];
+
 class LoginController {
     constructor() {
         this.form = document.getElementById('login-form');
@@ -16,11 +27,21 @@ class LoginController {
     }
 
     init() {
+        this.showRandomQuote()
         this.autoLogin();
         this.emailInput.focus();
         this.loadRememberedEmail();
         this.form.addEventListener('submit', (e) => this.handleSubmit(e));
         this.toggleBtn.addEventListener('click', () => this.togglePassword());
+    }
+
+    showRandomQuote() {
+        const quoteEl = document.getElementById('login-quote');
+        if (quoteEl) {
+            const randomQuote = QUOTES[Math.floor(Math.random() * QUOTES.length)];
+            quoteEl.textContent = randomQuote;
+            quoteEl.classList.add('fade-in');
+        }
     }
 
     async autoLogin() {

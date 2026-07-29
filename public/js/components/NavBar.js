@@ -102,31 +102,32 @@ export class NavBar {
 
     userArea.innerHTML = `
       <div class="relative ml-3">
-        <button id="user-menu-btn" class="flex items-center text-sm rounded-full pr-2 focus:outline-none focus:ring-2 focus:ring-amber-400 transition overflow-visible">
+        <button id="user-menu-btn" class="group flex items-center text-sm rounded-full pr-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 transition overflow-visible">
           <span class="sr-only">Mở menu người dùng</span>
           
-          <!-- Avatar có badge admin -->
-          <div class="relative h-8 w-8 rounded-full bg-amber-500 flex items-center justify-center text-slate-900 font-bold text-sm">
+          <!-- Avatar -->
+          <div class="relative h-8 w-8 rounded-full bg-gradient-to-br from-amber-400 to-amber-600 flex items-center justify-center text-slate-900 font-bold text-sm shadow-md group-hover:shadow-lg group-hover:scale-105 transition-all duration-200">
             ${initials}
             ${isAdmin ? `
-            <span class="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-amber-400 text-slate-900 rounded-full flex items-center justify-center border-2 border-slate-900" title="Quản trị viên">
-              <i data-lucide="key" class="w-2.5 h-2.5"></i>
+            <!-- Badge admin -->
+            <span class="absolute -bottom-0.5 -right-0.5 w-4 h-4 bg-gradient-to-br from-yellow-300 to-amber-400 text-slate-900 rounded-full flex items-center justify-center border-2 border-slate-900 shadow-sm" title="Quản trị viên">
+              <i data-lucide="key" class="w-2.5 h-2.5 stroke-[2.5]"></i>
             </span>` : ''}
           </div>
           
-          <span class="ml-2 text-slate-300 text-sm hidden md:block">${displayName}</span>
+          <span class="ml-2.5 text-slate-300 text-sm hidden md:block group-hover:text-white transition-colors">${displayName}</span>
         </button>
         
         <!-- Dropdown -->
-        <div id="user-dropdown" class="hidden absolute right-0 mt-2 w-56 bg-white rounded-xl shadow-lg ring-1 ring-black ring-opacity-5 z-50 border border-slate-200">
+        <div id="user-dropdown" class="hidden absolute right-0 mt-2 w-56 bg-white rounded-xl shadow-lg ring-1 ring-black ring-opacity-5 z-50 border border-slate-200 overflow-hidden">
           <div class="px-4 py-3 border-b border-slate-100">
             <p class="text-sm font-medium text-slate-900 flex items-center gap-1">
               ${fullName}
-              ${isAdmin ? '<i data-lucide="key" class="w-3.5 h-3.5 text-amber-500" title="Quản trị viên"></i>' : ''}
+              ${isAdmin ? '<i data-lucide="key" class="w-3.5 h-3.5 text-amber-500 ml-1" title="Quản trị viên"></i>' : ''}
             </p>
-            <p class="text-xs text-slate-500 truncate">${email}</p>
+            <p class="text-xs text-slate-500 truncate mt-0.5">${email}</p>
           </div>
-          <button id="logout-btn" class="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-2 rounded-b-xl transition">
+          <button id="logout-btn" class="w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 flex items-center gap-2 transition-colors">
             <i data-lucide="log-out" class="w-4 h-4"></i>
             Đăng xuất
           </button>

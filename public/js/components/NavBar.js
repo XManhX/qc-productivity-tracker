@@ -106,13 +106,9 @@ export class NavBar {
           <span class="sr-only">Mở menu người dùng</span>
           
           <!-- Avatar -->
-          <div class="relative h-8 w-8 rounded-full bg-gradient-to-br from-amber-400 to-amber-600 flex items-center justify-center text-slate-900 font-bold text-sm shadow-md
-            group-hover:shadow-lg
-            group-hover:ring-2 group-hover:ring-amber-400/60
-            transition-all duration-200">
+          <div class="relative h-8 w-8 rounded-full bg-gradient-to-br from-amber-400 to-amber-600 flex items-center justify-center text-slate-900 font-bold text-sm shadow-md group-hover:shadow-lg group-hover:ring-2 group-hover:ring-amber-400/60 transition-all duration-200">
             ${initials}
             ${isAdmin ? `
-            <!-- Badge admin -->
             <span class="absolute -bottom-0.5 -right-0.5 w-4 h-4 bg-gradient-to-br from-yellow-300 to-amber-400 text-slate-900 rounded-full flex items-center justify-center border-2 border-slate-900 shadow-sm" title="Quản trị viên">
               <i data-lucide="key" class="w-2.5 h-2.5 stroke-[2.5]"></i>
             </span>` : ''}

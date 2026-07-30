@@ -42,7 +42,7 @@ async function init() {
       // Vẫn đang trong ngày hiện tại → refresh dữ liệu
       store.loadData();
     }
-  }, 120_000); // 2 phút
+  }, 600_000); // 10 phút
 }
 
 document.addEventListener("DOMContentLoaded", init);

@@ -1,0 +1,19 @@
+{
+  "manifest_version": 3,
+  "name": "QC Arrival Manager",
+  "version": "2.0.0",
+  "permissions": ["storage", "activeTab", "scripting", "printing"],
+  "host_permissions": [
+    "https://wms.ssc.shopee.vn/*",
+    "https://script.google.com/*",
+    "https://<your-vercel>.vercel.app/*"
+  ],
+  "background": { "service_worker": "background.js" },
+  "content_scripts": [
+    {
+      "matches": ["https://wms.ssc.shopee.vn/v2/returninbound/arrving*"],
+      "js": ["content.js"],
+      "run_at": "document_start"
+    }
+  ]
+}

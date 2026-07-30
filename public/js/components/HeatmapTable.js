@@ -38,7 +38,7 @@ export class HeatmapTable {
     // Live update indicator
     this._lastUpdateTime = null;
     this._updateStatus = "idle";
-    this._refreshInterval = 120; // giây
+    this._refreshInterval = 600; // giây
     this._statusTimer = null;
 
     // Sử dụng debounce khi store update (NEW)

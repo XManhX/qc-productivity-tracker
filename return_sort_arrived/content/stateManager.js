@@ -4,9 +4,10 @@ export class StateManager {
     constructor(masterData, email) {
         this.masterData = masterData;
         this.email = email;
+        this.apiBase = 'https://arrival-manager.vercel.app/api/scan';
         this.ui = null;
-        this.typeToId = {};
         this.sessions = [];
+        this.typeToId = {};
         this._pendingEvents = []; // queue cho các sự kiện đến trước khi UI sẵn sàng
         this._loadTypeMapping();
 
@@ -21,14 +22,14 @@ export class StateManager {
         });
     }
 
-    async _loadTypeMapping() {
-        return new Promise((resolve) => {
-            chrome.runtime.sendMessage({ action: 'GET_TYPE_MAPPING' }, (response) => {
-                if (response?.mapping) {
-                    this.typeToId = response.mapping;
-                }
-                resolve();
-            });
+    _loadTypeMapping() {
+        chrome.runtime.sendMessage({ action: 'GET_TYPE_MAPPING' }, (response) => {
+            if (response?.mapping) {
+                this.typeToId = response.mapping;
+                console.log('[StateManager] Type mapping loaded:', Object.keys(this.typeToId).length);
+            } else {
+                console.warn('[StateManager] No type mapping received, using empty object');
+            }
         });
     }
 

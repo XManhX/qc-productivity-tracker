@@ -11,8 +11,6 @@ async function init() {
   handleAuthToken();
   checkAuth(); // Kiểm tra đăng nhập, nếu không có token hợp lệ sẽ redirect
 
-  new NavBar(document.getElementById("nav-container"));
-
   // 1. Khôi phục filter từ URL/localStorage
   store.loadFiltersFromStorage();
 
@@ -24,6 +22,7 @@ async function init() {
 
   store.validateFilters();
   // 3. Khởi tạo các component (chúng tự subscribe store)
+  new NavBar(document.getElementById("nav-container"));
   new FilterBar(document.getElementById("filter-bar-container"));
   new StatsOverview(document.getElementById("stats-overview"));
   new HeatmapTable(document.getElementById("heatmap-table"));

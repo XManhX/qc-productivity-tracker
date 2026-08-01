@@ -5,11 +5,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>⚡ WMS QC MONITOR - Dashboard</title>
     <link rel="icon" type="image/x-icon" href="/favicon.ico" />
-    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- <script src="https://cdn.tailwindcss.com/3.4.17"></script> -->
     <script src="https://cdn.jsdelivr.net/npm/lucide@latest/dist/umd/lucide.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-    <link rel="stylesheet" href="css/dashboard.css" />
+    <!-- <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script> -->
+    <!-- <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script> -->
+    <link rel="stylesheet" href="/css/tailwind.css" />
+    <link rel="stylesheet" href="/css/dashboard.css" />
     <style>
       /* Font chữ có thể giữ ở đây */
       @import url("https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap");
@@ -26,7 +27,26 @@
       <div
         id="filter-bar-container"
         class="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 mb-6"
-      ></div>
+      >
+        <!-- Nội dung tĩnh cho LCP -->
+        <div
+          class="flex flex-col md:flex-row md:items-center md:justify-between gap-4"
+        >
+          <div>
+            <h1
+              class="text-2xl font-bold text-slate-900 flex items-center gap-2"
+            >
+              <i data-lucide="trending-up" class="text-emerald-500"></i>
+              Theo Dõi Năng Suất Thời Gian Thực
+            </h1>
+            <p class="text-slate-500 text-sm mt-1">
+              Phân tích chi tiết lượng đơn quét của từng QC theo từng khung giờ
+              trong ngày.
+            </p>
+          </div>
+          <!-- Các control lọc có thể để trống, sẽ được thay thế bởi FilterBar -->
+        </div>
+      </div>
 
       <!-- Stats overview -->
       <div

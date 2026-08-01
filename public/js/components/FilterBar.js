@@ -274,7 +274,13 @@ export class FilterBar {
     }
   }
 
-  _exportExcel() {
+  async _exportExcel() {
+    // Load XLSX nếu chưa có
+    if (typeof XLSX === 'undefined') {
+      const { loadScript } = await import('../utils/loadScript.js');
+      await loadScript('https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js');
+    }
+
     const { data, hourStart, hourEnd } = store.getExportData();
     if (!data.length) return alert("Không có dữ liệu!");
     const sheetData = data.map((u, i) => {

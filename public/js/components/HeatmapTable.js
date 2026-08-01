@@ -731,6 +731,11 @@ export class HeatmapTable {
 
   // ==================== EXPORT IMAGE ====================
   async exportToImage() {
+    if (typeof html2canvas === 'undefined') {
+      const { loadScript } = await import('../utils/loadScript.js');
+      await loadScript('https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js');
+    }
+
     const exportBtn = this.container.querySelector("#btn-export-image");
     if (!exportBtn) return;
 

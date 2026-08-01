@@ -38,7 +38,7 @@ export default async function handler(req, res) {
         return resource === 'alert' ? alertHandler(req, res) : targetsHandler(req, res);
     }
 
-    if (resource === 'type_mappings') {
+    if (resource === 'mappings') {
         return mappingsHandler(req, res);
     }
 

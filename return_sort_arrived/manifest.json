@@ -6,7 +6,7 @@
   "host_permissions": [
     "https://wms.ssc.shopee.vn/*",
     "https://script.google.com/*",
-    "https://<your-vercel>.vercel.app/*"
+    "https://qc-productivity-tracker.vercel.app/*"
   ],
   "background": { "service_worker": "background.js" },
   "content_scripts": [

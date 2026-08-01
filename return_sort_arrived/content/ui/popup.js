@@ -18,7 +18,6 @@ const STYLES = `
   z-index: 999999; overflow: hidden;
   transition: width 0.3s ease, height 0.3s ease, border-radius 0.3s ease;
   display: flex; flex-direction: column;
-  /* vị trí mặc định sẽ được ghi đè bởi JS */
   top: 50px; left: 50px;
 }
 .popup.minimized {
@@ -101,6 +100,17 @@ const STYLES = `
 .btn-close-early:hover { background: #1976D2; }
 .btn-warning { background: #f97316; color: white; }
 .btn-warning:hover { background: #ea580c; }
+.test-print-container {
+  display: flex; justify-content: center; margin-top: 8px;
+}
+.btn-test-print {
+  background: transparent; border: 1px dashed #94a3b8; color: #64748b;
+  padding: 8px 20px; border-radius: 12px; font-size: 14px; font-weight: 500;
+  cursor: pointer; transition: all 0.2s;
+}
+.btn-test-print:hover {
+  background: #f1f5f9; border-color: #64748b; color: #334155;
+}
 .print-status { display: flex; align-items: center; gap: 12px; font-size: 20px; color: #334155; }
 .spinner {
   width: 24px; height: 24px; border: 3px solid #cbd5e1; border-top-color: #ee4d2d; border-radius: 50%; animation: spin 0.8s linear infinite;
@@ -117,7 +127,28 @@ export class UIManager {
     this.popup = null;
     this.minimized = false;
     this.currentId = '';
+    this._currentUrl = window.location.href;
     this._init();
+    document.addEventListener('qc-url-change', (e) => this._onUrlChange(e.detail.url));
+  }
+
+  _onUrlChange(newUrl) {
+    if (newUrl !== this._currentUrl) {
+      this._currentUrl = newUrl;
+      this._updateVisibility();
+    }
+  }
+
+  _isArrivingPage() {
+    return this._currentUrl.includes('/v2/returninbound/arrving');
+  }
+
+  _updateVisibility() {
+    if (!this.host) return;
+    this.host.style.display = this._isArrivingPage() ? '' : 'none';
+    if (this._isArrivingPage()) {
+      this._updateTop5();
+    }
   }
 
   _init() {
@@ -125,7 +156,6 @@ export class UIManager {
       document.addEventListener('DOMContentLoaded', () => this._init());
       return;
     }
-    // Lấy vị trí đã lưu trước khi tạo popup
     chrome.storage.local.get('popupPosition', (result) => {
       const savedPos = result.popupPosition || { left: 50, top: 50 };
       this._createHost(savedPos);
@@ -143,7 +173,6 @@ export class UIManager {
 
     this.popup = document.createElement('div');
     this.popup.className = 'popup';
-    // Đặt vị trí ngay khi tạo, tránh nháy
     this.popup.style.left = left + 'px';
     this.popup.style.top = top + 'px';
 
@@ -159,23 +188,56 @@ export class UIManager {
       </div>
       <div class="body" id="body">
         <div class="state-card" id="state-card">
-          <div id="id-box" class="id-big" style="background:#cbd5e1; color:#fff; min-width: 80px;">?</div>
+          <div id="id-box" class="id-big" style="background:#cbd5e1; color:#fff;">?</div>
           <div class="type-text" id="type-el">--</div>
           <div class="rv-text" id="rv-el">----</div>
           <div class="progress-bar"><div id="progress-fill" class="progress-fill" style="width:0%"></div></div>
           <div class="count-text" id="count-el">0/30</div>
           <div id="button-container"></div>
         </div>
+        <div class="test-print-container">
+          <button class="btn-test-print" id="btn-test-print">🖨️ In thử</button>
+        </div>
       </div>
     `;
     this.shadowRoot.appendChild(this.popup);
     document.body.appendChild(this.host);
 
-    // Đảm bảo vị trí không vượt quá viewport
+    this._updateVisibility();
     this._clampPosition();
     this._setupDrag();
     this._bindEvents();
     this._updateTop5();
+    // Gán sự kiện cho nút In thử
+    this.shadowRoot.getElementById('btn-test-print').addEventListener('click', () => this._printTestLabel());
+  }
+
+  // ... (các phương thức khác giữ nguyên)
+
+  _printTestLabel() {
+    const testData = {
+      toNumber: 'TO-TEST-0-010825-000001',
+      type: 'TEST',
+      id: '0',
+      dateStr: new Date().toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: '2-digit' }).replace(/\//g, ' '),
+      number: '000001',
+      email: this.state.email || 'test@shopee.com',
+      itemCount: 0
+    };
+    // Gọi printer với dữ liệu mẫu
+    printLabel(testData.toNumber, testData.type, testData.id, testData.dateStr, testData.number, testData.email, testData.itemCount)
+      .then(() => {
+        console.log('Test print sent.');
+      })
+      .catch(err => {
+        console.error('Test print failed:', err);
+      });
+  }
+
+  destroy() {
+    if (this.host && this.host.parentNode) {
+      this.host.parentNode.removeChild(this.host);
+    }
   }
 
   _clampPosition() {

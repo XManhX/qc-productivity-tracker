@@ -2,6 +2,7 @@ import { requireAdmin } from '../../lib/auth/auth.js';
 import publicHandler from '../../lib/config/public.js';
 import alertHandler from '../../lib/config/alert.js';
 import targetsHandler from '../../lib/config/targets.js';
+import mappingsHandler from '../../lib/config/mappings.js';
 import { getPathSegments } from '../../lib/path-utils.js';
 
 export default async function handler(req, res) {
@@ -35,6 +36,10 @@ export default async function handler(req, res) {
             return res.status(403).json({ error: 'Forbidden - Admin access required' });
         }
         return resource === 'alert' ? alertHandler(req, res) : targetsHandler(req, res);
+    }
+
+    if (resource === 'type_mappings') {
+        return mappingsHandler(req, res);
     }
 
     return res.status(404).json({ error: 'Config not found' });

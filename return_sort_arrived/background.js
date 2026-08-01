@@ -6,7 +6,10 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 const APPS_SCRIPT_URL = 'https://script.google.com/a/macros/shopee.com/s/AKfycbxvt58g6NXM8gAC4mCMq2j6ZTWKkiF85qWxWYMW2KNLw00gweL4fMjvIE4J3sYeq-75/exec';
 
 const supabaseClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const API_BASE = 'https://return-sort-arrived.vercel.app/api/config';
 let masterDataMap = {};
+let typeToIdMap = {};
+
 
 async function fetchMasterData() {
   try {
@@ -25,6 +28,20 @@ async function fetchMasterData() {
     }
   } catch (e) {
     console.error('[BG] Master data fetch error:', e);
+  }
+}
+
+// Hàm lấy type mapping từ Supabase và lưu vào storage
+async function fetchTypeMappings() {
+  try {
+    const res = await fetch(`${API_BASE}/mappings`);
+    if (res.ok) {
+      const json = await res.json();
+      typeToIdMap = json;
+      console.log('[BG] Type mappings updated:', Object.keys(typeToIdMap).length);
+    }
+  } catch (e) {
+    console.error('[BG] Fetch type mappings error:', e);
   }
 }
 
@@ -75,6 +92,10 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     sendResponse({ masterData: masterDataMap });
     return true;
   }
+  if (msg.action === 'GET_TYPE_MAPPING') {
+    sendResponse({ mapping: typeToIdMap });
+    return true;
+  }
 });
 
 // Keep alive
@@ -86,4 +107,6 @@ chrome.runtime.onConnect.addListener((port) => {
 });
 
 setInterval(fetchMasterData, 5 * 60 * 1000);
+
+fetchTypeMappings();
 fetchMasterData();

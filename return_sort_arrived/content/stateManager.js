@@ -5,8 +5,10 @@ export class StateManager {
         this.masterData = masterData;
         this.email = email;
         this.ui = null;
+        this.typeToId = {};
         this.sessions = [];
         this._pendingEvents = []; // queue cho các sự kiện đến trước khi UI sẵn sàng
+        this._loadTypeMapping();
 
         chrome.runtime.onMessage.addListener((msg) => {
             if (msg.action === 'UPDATE_SESSIONS' && this.ui) {
@@ -16,6 +18,17 @@ export class StateManager {
 
         chrome.runtime.sendMessage({ action: 'GET_SESSIONS' }, (response) => {
             if (response?.sessions) this._onSessionsUpdate(response.sessions);
+        });
+    }
+
+    async _loadTypeMapping() {
+        return new Promise((resolve) => {
+            chrome.runtime.sendMessage({ action: 'GET_TYPE_MAPPING' }, (response) => {
+                if (response?.mapping) {
+                    this.typeToId = response.mapping;
+                }
+                resolve();
+            });
         });
     }
 
@@ -69,8 +82,13 @@ export class StateManager {
         }
     }
 
-    getType(rv) { return this.masterData[rv.toUpperCase().replace(/\s+/g, '')] || null; }
-    getId(type) { return TYPE_TO_ID[type] || null; }
+    getType(rv) {
+        return this.masterData[rv.toUpperCase().replace(/\s+/g, '')] || null;
+    }
+
+    getId(type) {
+        return this.typeToId[type] || null;
+    }
 
     handleDetected(rv) {
         const type = this.getType(rv);

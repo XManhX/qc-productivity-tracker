@@ -11,13 +11,43 @@
     <!-- <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script> -->
     <link rel="stylesheet" href="/css/tailwind.css" />
     <link rel="stylesheet" href="/css/dashboard.css" />
+    <!-- Preconnect để tăng tốc kết nối tới Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+
+    <!-- Load font stylesheet với display=swap, không render-blocking -->
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap"
+      media="print"
+      onload="this.media = 'all'"
+    />
+
+    <!-- Fallback font ngay trong style inline để đảm bảo text hiển thị ngay với font hệ thống -->
     <style>
-      /* Font chữ có thể giữ ở đây */
-      @import url("https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap");
       body {
-        font-family: "Inter", sans-serif;
+        font-family:
+          -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          "Helvetica Neue", Arial, "Noto Sans", sans-serif;
+      }
+      /* Khi font Inter đã tải, nó sẽ được áp dụng nhờ class hoặc font-family kế thừa */
+      .fonts-loaded body {
+        font-family:
+          "Inter",
+          -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          Roboto,
+          sans-serif;
       }
     </style>
+    <script>
+      if (document.fonts && document.fonts.ready) {
+        document.fonts.ready.then(function () {
+          document.documentElement.classList.add("fonts-loaded");
+        });
+      }
+    </script>
   </head>
   <body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col">
     <div id="nav-container"></div>

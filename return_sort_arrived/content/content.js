@@ -14,12 +14,10 @@ chrome.runtime.connect({ name: 'qc-keepalive' });
 
     let email = localStorage.getItem('useremail');
     if (!email) {
-        if (document.body) {
-            const match = document.body.innerText.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
-            email = match ? match[0] : 'unknown@shopee.com';
-        } else {
-            email = 'unknown@shopee.com';
-        }
+        const bodyText = document.body?.innerText || '';
+        const match = bodyText.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
+        email = match?.[0] || 'unknown@shopee.com';
+        localStorage.setItem('useremail', email);
     }
 
     const stateManager = new StateManager(masterData, email);

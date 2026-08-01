@@ -13,11 +13,13 @@ function getTextColor(bg) {
 const STYLES = `
 :host { all: initial; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; }
 .popup {
-  position: fixed; top: 50px; left: 50px; width: 600px; background: #fff;
+  position: fixed; width: 622px; background: #fff;
   border-radius: 20px; box-shadow: 0 20px 60px rgba(0,0,0,0.2), 0 0 0 2px rgba(0,0,0,0.05);
   z-index: 999999; overflow: hidden;
   transition: width 0.3s ease, height 0.3s ease, border-radius 0.3s ease;
   display: flex; flex-direction: column;
+  /* vị trí mặc định sẽ được ghi đè bởi JS */
+  top: 50px; left: 50px;
 }
 .popup.minimized {
   width: 56px; height: 56px; border-radius: 50%; cursor: pointer;
@@ -29,8 +31,14 @@ const STYLES = `
   cursor: move; user-select: none;
 }
 .minimized .header {
-  padding: 0; justify-content: center; width: 56px; height: 56px; border-radius: 50%; cursor: pointer;
-  background: #1E293B;
+  padding: 0; justify-content: center; width: 56px; height: 56px; border-radius: 50%;
+  cursor: pointer; background: #1E293B; position: relative; overflow: hidden;
+}
+.minimized .header::after {
+  content: attr(data-current-id);
+  position: absolute; top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 24px; font-weight: 700; color: white;
 }
 .header-left { display: flex; flex-direction: column; gap: 8px; flex: 1; min-width: 0; }
 .title-row { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 16px; }
@@ -69,9 +77,6 @@ const STYLES = `
 .minimized .body { display: none; }
 .minimized .header-left { display: none; }
 .minimized .actions { display: none; }
-.minimized .header::after {
-  content: attr(data-current-id); font-size: 28px; font-weight: 700; color: white;
-}
 .state-card {
   border-radius: 20px; padding: 24px; text-align: center; transition: background 0.3s;
   width: 100%; box-sizing: border-box; display: flex; flex-direction: column; align-items: center; gap: 12px;
@@ -112,18 +117,24 @@ export class UIManager {
     this.popup = null;
     this.minimized = false;
     this.currentId = '';
-    this._createHost();
+    this._init();
   }
 
-  _createHost() {
+  _init() {
     if (!document.body) {
-      document.addEventListener('DOMContentLoaded', () => this._createHost());
+      document.addEventListener('DOMContentLoaded', () => this._init());
       return;
     }
-    if (this.host) return;
+    // Lấy vị trí đã lưu trước khi tạo popup
+    chrome.storage.local.get('popupPosition', (result) => {
+      const savedPos = result.popupPosition || { left: 50, top: 50 };
+      this._createHost(savedPos);
+    });
+  }
+
+  _createHost({ left, top }) {
     this.host = document.createElement('div');
     this.host.id = 'qc-popup-host';
-    document.body.appendChild(this.host);
     this.shadowRoot = this.host.attachShadow({ mode: 'open' });
 
     const style = document.createElement('style');
@@ -132,6 +143,10 @@ export class UIManager {
 
     this.popup = document.createElement('div');
     this.popup.className = 'popup';
+    // Đặt vị trí ngay khi tạo, tránh nháy
+    this.popup.style.left = left + 'px';
+    this.popup.style.top = top + 'px';
+
     this.popup.innerHTML = `
       <div class="header" id="header">
         <div class="header-left">
@@ -144,7 +159,7 @@ export class UIManager {
       </div>
       <div class="body" id="body">
         <div class="state-card" id="state-card">
-          <div id="id-box" class="id-big" style="background:#cbd5e1; color:#fff;">?</div>
+          <div id="id-box" class="id-big" style="background:#cbd5e1; color:#fff; min-width: 80px;">?</div>
           <div class="type-text" id="type-el">--</div>
           <div class="rv-text" id="rv-el">----</div>
           <div class="progress-bar"><div id="progress-fill" class="progress-fill" style="width:0%"></div></div>
@@ -154,9 +169,31 @@ export class UIManager {
       </div>
     `;
     this.shadowRoot.appendChild(this.popup);
+    document.body.appendChild(this.host);
+
+    // Đảm bảo vị trí không vượt quá viewport
+    this._clampPosition();
     this._setupDrag();
     this._bindEvents();
     this._updateTop5();
+  }
+
+  _clampPosition() {
+    const rect = this.popup.getBoundingClientRect();
+    let left = parseInt(this.popup.style.left, 10) || 50;
+    let top = parseInt(this.popup.style.top, 10) || 50;
+    const maxLeft = window.innerWidth - rect.width;
+    const maxTop = window.innerHeight - rect.height;
+    left = Math.max(0, Math.min(left, maxLeft));
+    top = Math.max(0, Math.min(top, maxTop));
+    this.popup.style.left = left + 'px';
+    this.popup.style.top = top + 'px';
+  }
+
+  _savePosition() {
+    const left = parseInt(this.popup.style.left, 10) || 50;
+    const top = parseInt(this.popup.style.top, 10) || 50;
+    chrome.storage.local.set({ popupPosition: { left, top } });
   }
 
   _setupDrag() {
@@ -178,6 +215,7 @@ export class UIManager {
       document.removeEventListener('mousemove', onMouseMove);
       document.removeEventListener('mouseup', onMouseUp);
       if (!moved && this.minimized) this.toggleMinimize();
+      if (moved) this._savePosition();
       moved = false;
     };
     header.addEventListener('mousedown', (e) => {
@@ -227,7 +265,7 @@ export class UIManager {
         const count = s.item_count;
         const percent = Math.min(100, Math.round((count / threshold) * 100));
         const bgColor = ID_COLORS[s.id] || '#607D8B';
-        const shortType = (s.type_group || '').substring(0, 12); // rút gọn type
+        const shortType = (s.type_group || '').substring(0, 12);
         html += `<div class="badge-card" style="background:${bgColor};" title="ID ${s.id}: ${s.type_group} – ${count}/${threshold}">
           <div class="badge-id">${s.id}</div>
           <div class="badge-type" title="${s.type_group}">${shortType || '-'}</div>

@@ -56,6 +56,8 @@ export class StateManager {
             this.ui.showDetected(rv, type, id, session);
         } else if (event.type === 'arrived') {
             this.handleScan(event.rv);
+        } else if (event.type === 'error') {
+            this.ui.showWarning(event.message);
         }
     }
 

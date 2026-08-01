@@ -1,10 +1,9 @@
 import { generateQR } from './qrcode.js';
 
 export async function printLabel(toNumber, type, id, dateStr, number, email, itemCount) {
-    const qrDataUrl = await generateQR(toNumber);
-    const html = `
-    <html>
-    <head><style>
+  const qrDataUrl = await generateQR(toNumber);
+  const html = `
+    <html><head><style>
       @page { size: 100mm 50mm; margin: 0; }
       body { margin: 0; font-family: Arial, sans-serif; display: flex; }
       .left { width: 50%; padding: 4mm; box-sizing: border-box; }
@@ -28,8 +27,13 @@ export async function printLabel(toNumber, type, id, dateStr, number, email, ite
         <div class="qty">Số lượng: ${itemCount}</div>
       </div>
     </body></html>`;
-    const blob = new Blob([html], { type: 'text/html' });
-    const url = URL.createObjectURL(blob);
-    const win = window.open(url, '_blank', 'width=400,height=300');
-    win.onload = () => win.print();
+  const blob = new Blob([html], { type: 'text/html' });
+  const url = URL.createObjectURL(blob);
+  const win = window.open(url, '_blank', 'width=400,height=300');
+  if (win) win.onload = () => win.print();
+  else {
+    alert('Popup bị chặn. Vui lòng cho phép popup hoặc in thủ công.');
+    const a = document.createElement('a');
+    a.href = url; a.download = `${toNumber}.html`; a.click();
+  }
 }

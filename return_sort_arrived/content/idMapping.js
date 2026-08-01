@@ -1,8 +1,6 @@
 export const TYPE_TO_ID = {
-    '450K-NA': '1',
-    '450K-NA-COM': '1',
-    'CB': '2',
-    'WH QC': '2',
+    '450K-NA': '1', '450K-NA-COM': '1',
+    'CB': '2', 'WH QC': '2',
     'CB - GTC': '3',
     'FBS_Premium - B': '4',
     'FBS_Standard - A': '5',

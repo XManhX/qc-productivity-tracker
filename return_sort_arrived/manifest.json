@@ -1,19 +1,28 @@
 {
   "manifest_version": 3,
-  "name": "QC Arrival Manager",
-  "version": "2.0.0",
+  "name": "QC Arrival Manager Pro",
+  "version": "2.0.1",
   "permissions": ["storage", "activeTab", "scripting", "printing"],
   "host_permissions": [
     "https://wms.ssc.shopee.vn/*",
     "https://script.google.com/*",
-    "https://qc-productivity-tracker.vercel.app/*"
+    "https://arrival-manager.vercel.app/*"
   ],
-  "background": { "service_worker": "background.js" },
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
   "content_scripts": [
     {
       "matches": ["https://wms.ssc.shopee.vn/v2/returninbound/arrving*"],
-      "js": ["content.js"],
+      "js": ["content/content.js"],
       "run_at": "document_start"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["content/*"],
+      "matches": ["<all_urls>"]
     }
   ]
 }

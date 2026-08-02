@@ -135,9 +135,9 @@ export class HeatmapTable {
           </h2>
           <div class="flex items-center gap-3 mt-1.5 text-xs text-slate-600">
             <span class="text-slate-400">Chú thích:</span>
-            <span class="inline-flex items-center gap-1"><span class="legend-dot bg-red-50 border-red-200"></span> Thấp</span>
-            <span class="inline-flex items-center gap-1"><span class="legend-dot bg-yellow-50 border-yellow-200"></span> Trung bình</span>
-            <span class="inline-flex items-center gap-1"><span class="legend-dot bg-green-50 border-green-200"></span> Tốt</span>
+            <span class="inline-flex items-center gap-1"><span class="legend-dot bg-red-50 border border-red-200"></span> Thấp</span>
+            <span class="inline-flex items-center gap-1"><span class="legend-dot bg-yellow-50 border border-yellow-200"></span> Trung bình</span>
+            <span class="inline-flex items-center gap-1"><span class="legend-dot bg-green-50 border border-green-200"></span> Tốt</span>
             <span class="text-slate-400 italic ml-2">(ngưỡng dựa trên giờ có sản lượng thực tế, đã trừ 1 giờ nghỉ nếu có)</span>
           </div>
         </div>

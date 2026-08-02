@@ -100,22 +100,41 @@ const STYLES = `
 .btn-close-early:hover { background: #1976D2; }
 .btn-warning { background: #f97316; color: white; }
 .btn-warning:hover { background: #ea580c; }
-.test-print-container {
-  display: flex; justify-content: center; margin-top: 8px;
+.open-sessions, .recent-labels {
+  width: 100%; display: flex; flex-direction: column; gap: 8px;
+  max-height: 200px; overflow-y: auto;
 }
-.btn-test-print {
-  background: transparent; border: 1px dashed #94a3b8; color: #64748b;
-  padding: 8px 20px; border-radius: 12px; font-size: 14px; font-weight: 500;
-  cursor: pointer; transition: all 0.2s;
+.section-title {
+  font-size: 14px; font-weight: 700; color: #64748b; margin-bottom: -4px;
 }
-.btn-test-print:hover {
-  background: #f1f5f9; border-color: #64748b; color: #334155;
+.session-item {
+  display: flex; align-items: center; justify-content: space-between;
+  background: #f8fafc; border-radius: 12px; padding: 10px 14px;
+  cursor: pointer; transition: background 0.2s;
 }
-.print-status { display: flex; align-items: center; gap: 12px; font-size: 20px; color: #334155; }
-.spinner {
-  width: 24px; height: 24px; border: 3px solid #cbd5e1; border-top-color: #ee4d2d; border-radius: 50%; animation: spin 0.8s linear infinite;
+.session-item:hover { background: #e2e8f0; }
+.session-item-left {
+  display: flex; align-items: center; gap: 12px;
 }
-@keyframes spin { to { transform: rotate(360deg); } }
+.session-id {
+  font-size: 18px; font-weight: 800; background: #cbd5e1; color: #1e293b;
+  border-radius: 8px; padding: 4px 10px; min-width: 36px; text-align: center;
+}
+.session-type { font-size: 14px; color: #334155; }
+.session-count { font-size: 14px; font-weight: 600; color: #0f172a; }
+.session-progress {
+  width: 80px; height: 6px; background: #e2e8f0; border-radius: 3px; overflow: hidden;
+}
+.session-progress-fill { height: 100%; background: #3b82f6; border-radius: 3px; }
+.btn-close-session {
+  background: #ef4444; color: white; border: none;
+  padding: 6px 14px; border-radius: 8px; font-weight: 600; font-size: 13px;
+  cursor: pointer; transition: background 0.2s;
+}
+.btn-close-session:hover { background: #dc2626; }
+.reprint-btn { background: #3b82f6; }
+.reprint-btn:hover { background: #2563eb; }
+.no-sessions { text-align: center; color: #94a3b8; font-size: 14px; padding: 10px; }
 `;
 
 export class UIManager {
@@ -128,6 +147,7 @@ export class UIManager {
     this.minimized = false;
     this.currentId = '';
     this._currentUrl = window.location.href;
+    this._recentLabels = [];
     this._init();
     document.addEventListener('qc-url-change', (e) => this._onUrlChange(e.detail.url));
   }
@@ -148,6 +168,8 @@ export class UIManager {
     this.host.style.display = this._isArrivingPage() ? '' : 'none';
     if (this._isArrivingPage()) {
       this._updateTop5();
+      this._renderOpenSessions();
+      this._renderRecentLabels();
     }
   }
 
@@ -160,6 +182,140 @@ export class UIManager {
       const savedPos = result.popupPosition || { left: 50, top: 50 };
       this._createHost(savedPos);
     });
+  }
+
+  async _loadRecentLabels() {
+    try {
+      const { printedLabels } = await chrome.storage.local.get('printedLabels');
+      this._recentLabels = printedLabels || [];
+    } catch (e) {
+      this._recentLabels = [];
+    }
+  }
+
+  async _savePrintedLabel(labelData) {
+    this._recentLabels.unshift(labelData);
+    if (this._recentLabels.length > 10) this._recentLabels.pop();
+    await chrome.storage.local.set({ printedLabels: this._recentLabels });
+    this._renderRecentLabels();
+  }
+
+  _renderRecentLabels() {
+    if (!this.shadowRoot) return;
+    const container = this.shadowRoot.getElementById('recent-labels');
+    if (!container) return;
+    if (this._recentLabels.length === 0) {
+      container.innerHTML = '<div class="no-sessions">Chưa có tem nào</div>';
+      return;
+    }
+    container.innerHTML = this._recentLabels.map(label => `
+      <div class="session-item">
+        <div class="session-item-left">
+          <div class="session-id" style="background:#cbd5e1;">${label.id || '?'}</div>
+          <div class="session-type">${label.type || ''}</div>
+          <div class="session-count">QTY: ${label.itemCount}</div>
+        </div>
+        <button class="btn-close-session reprint-btn" 
+                data-to="${label.toNumber}" 
+                data-type="${label.type}" 
+                data-id="${label.id}" 
+                data-date="${label.dateStr}" 
+                data-number="${label.number}" 
+                data-email="${label.email}" 
+                data-qty="${label.itemCount}">In lại</button>
+      </div>
+    `).join('');
+
+    container.querySelectorAll('.reprint-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const { to, type, id, date, number, email, qty } = btn.dataset;
+        this._retryPrint(to, type, id, date, number, email, parseInt(qty));
+      });
+    });
+  }
+
+  async _retryPrint(toNumber, type, id, dateStr, number, email, itemCount) {
+    let attempts = 0;
+    const maxAttempts = 3;
+    while (attempts < maxAttempts) {
+      try {
+        await printLabel(toNumber, type, id, dateStr, number, email, itemCount);
+        console.log('Print succeeded on attempt', attempts + 1);
+        return;
+      } catch (e) {
+        console.error(`Print attempt ${attempts + 1} failed:`, e);
+        attempts++;
+        if (attempts < maxAttempts) {
+          await new Promise(r => setTimeout(r, 1000));
+        }
+      }
+    }
+    alert('In thất bại sau 3 lần thử. Vui lòng kiểm tra máy in hoặc tải file HTML.');
+    // Fallback tải file
+    const html = this._generateLabelHTML(toNumber, type, id, dateStr, number, email, itemCount);
+    const blob = new Blob([html], { type: 'text/html;charset=UTF-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${toNumber}.html`;
+    a.click();
+  }
+
+  _generateLabelHTML(toNumber, type, id, dateStr, number, email, itemCount) {
+    return `<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <style>
+    @page { size: 100mm 50mm; margin: 0; }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      width: 100mm; height: 50mm;
+      font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+      background: white;
+      display: flex; align-items: stretch;
+    }
+    .left {
+      width: 67%;
+      display: flex; flex-direction: column; justify-content: space-between;
+      padding: 3mm 3mm 3mm 5mm;
+    }
+    .right {
+      width: 33%;
+      display: flex; flex-direction: column; align-items: center; justify-content: space-between;
+      padding: 3mm 5mm 3mm 0;
+    }
+    .to-main {
+      font-size: 24px; font-weight: 800; color: #000;
+      letter-spacing: 0.5px; line-height: 1.2;
+      text-transform: uppercase;
+    }
+    .to-small { text-transform: uppercase; margin-bottom: 1mm; }
+    .number-text { font-size: 18px; font-weight: 700; color: #000; font-family: 'Courier New', Courier, monospace; letter-spacing: 0.5px; }
+    .date-text { font-size: 16px; font-weight: 700; color: #000; font-family: 'Courier New', Courier, monospace; }
+    .email-text { font-size: 12px; font-weight: 500; color: #000; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .qty-text { font-size: 16px; font-weight: 700; color: #000; font-family: 'Courier New', Courier, monospace; }
+    .qr-wrapper img { width: 30mm; height: 30mm; filter: grayscale(100%) contrast(150%); }
+  </style>
+</head>
+<body>
+  <div class="left">
+    <div class="to-main">TO-${type}-${id}</div>
+    <div class="number-text">${number}</div>
+    <div class="date-text">${dateStr}</div>
+    <div class="qty-text">QTY: ${itemCount}</div>
+    <div class="email-text" title="${email}">${email}</div>
+  </div>
+  <div class="right">
+    <div class="to-small">TO-${type}-${id}</div>
+    <div class="qr-wrapper">
+      <img src="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgZmlsbD0id2hpdGUiLz48L3N2Zz4=" alt="QR" />
+    </div>
+    <div class="qty-text">QTY: ${itemCount}</div>
+  </div>
+</body>
+</html>`;
   }
 
   _createHost({ left, top }) {
@@ -194,10 +350,12 @@ export class UIManager {
           <div class="progress-bar"><div id="progress-fill" class="progress-fill" style="width:0%"></div></div>
           <div class="count-text" id="count-el">0/30</div>
           <div id="button-container"></div>
+          <div id="error-info" style="display:none;"></div>
         </div>
-        <div class="test-print-container">
-          <button class="btn-test-print" id="btn-test-print">🖨️ In thử</button>
-        </div>
+        <div class="section-title">ID đang mở</div>
+        <div class="open-sessions" id="open-sessions"></div>
+        <div class="section-title">In lại tem gần đây</div>
+        <div class="recent-labels" id="recent-labels"></div>
       </div>
     `;
     this.shadowRoot.appendChild(this.popup);
@@ -208,22 +366,8 @@ export class UIManager {
     this._setupDrag();
     this._bindEvents();
     this._updateTop5();
-    this.shadowRoot.getElementById('btn-test-print').addEventListener('click', () => this._printTestLabel());
-  }
-
-  _printTestLabel() {
-    const testData = {
-      toNumber: 'TO-TEST-0-010825-000001',
-      type: 'TEST',
-      id: '0',
-      dateStr: new Date().toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: '2-digit' }).replace(/\//g, ' '),
-      number: '000001',
-      email: this.state.email || 'test@shopee.com',
-      itemCount: 1
-    };
-    printLabel(testData.toNumber, testData.type, testData.id, testData.dateStr, testData.number, testData.email, testData.itemCount)
-      .then(() => console.log('Test print sent.'))
-      .catch(err => console.error('Test print failed:', err));
+    this._renderOpenSessions();
+    this._loadRecentLabels().then(() => this._renderRecentLabels());
   }
 
   destroy() {
@@ -299,6 +443,8 @@ export class UIManager {
       this.popup.classList.remove('minimized');
       this.popup.querySelector('.header').removeAttribute('data-current-id');
       this._updateTop5();
+      this._renderOpenSessions();
+      this._renderRecentLabels();
     }
   }
 
@@ -328,9 +474,7 @@ export class UIManager {
         </div>`;
       } else {
         html += `<div class="badge-card placeholder">
-          <div class="badge-id">-</div>
-          <div class="badge-type">-</div>
-          <div class="badge-count">-</div>
+          <div class="badge-id">-</div><div class="badge-type">-</div><div class="badge-count">-</div>
           <div class="badge-bar"><div class="badge-fill" style="width:0%"></div></div>
         </div>`;
       }
@@ -338,57 +482,178 @@ export class UIManager {
     topRow.innerHTML = html;
   }
 
-  updateTop5(sessions) { this.state.sessions = sessions; this._updateTop5(); }
+  updateTop5(sessions) {
+    this.state.sessions = sessions;
+    if (this.shadowRoot) {
+      this._updateTop5();
+      this._renderOpenSessions();
+    }
+  }
 
-  _updateCard({ id, type, rv, count, threshold, isFull }) {
+  _renderOpenSessions() {
+    if (!this.shadowRoot) return;
+    const container = this.shadowRoot.getElementById('open-sessions');
+    if (!container) return;
+    const sessions = this.state.sessions || [];
+    const openSessions = sessions.filter(s => s.status === 'open' || s.status === 'full');
+    if (openSessions.length === 0) {
+      container.innerHTML = '<div class="no-sessions">Không có ID nào đang mở</div>';
+      return;
+    }
+    container.innerHTML = openSessions.map(s => {
+      const threshold = s.threshold || 30;
+      const count = s.item_count;
+      const percent = Math.min(100, Math.round((count / threshold) * 100));
+      const bgColor = ID_COLORS[s.id] || '#607D8B';
+      return `
+        <div class="session-item" data-id="${s.id}">
+          <div class="session-item-left">
+            <div class="session-id" style="background:${bgColor}; color:${getTextColor(bgColor)}">${s.id}</div>
+            <div class="session-type">${s.type_group || ''}</div>
+            <div class="session-count">${count}/${threshold}</div>
+            <div class="session-progress">
+              <div class="session-progress-fill" style="width:${percent}%"></div>
+            </div>
+          </div>
+          ${count > 0 ? `<button class="btn-close-session" data-close-id="${s.id}">Đóng gói</button>` : ''}
+        </div>
+      `;
+    }).join('');
+
+    container.querySelectorAll('.session-item').forEach(item => {
+      item.addEventListener('click', (e) => {
+        if (e.target.closest('.btn-close-session')) return;
+        const id = item.dataset.id;
+        const session = openSessions.find(s => s.id === id);
+        if (session) this._showSessionDetail(session);
+      });
+    });
+    container.querySelectorAll('.btn-close-session').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const id = btn.dataset.closeId;
+        const session = openSessions.find(s => s.id === id);
+        if (session) {
+          if (confirm(`Đóng gói ID ${id} (${session.type_group}) với ${session.item_count} đơn?`)) {
+            this.state.closeSession(id, session.type_group);
+          }
+        }
+      });
+    });
+  }
+
+  _showSessionDetail(session) {
+    const isFull = session.status === 'full';
+    this.currentId = session.id;
+    this._updateCard({
+      id: session.id,
+      type: session.type_group,
+      rv: `ID ${session.id}`,
+      count: session.item_count,
+      threshold: session.threshold || 30,
+      isFull
+    });
+  }
+
+  _updateCard({ id, type, rv, count, threshold, isFull, error }) {
+    if (!this.shadowRoot) return;
     const idBox = this.shadowRoot.getElementById('id-box');
     const typeEl = this.shadowRoot.getElementById('type-el');
     const rvEl = this.shadowRoot.getElementById('rv-el');
     const progressFill = this.shadowRoot.getElementById('progress-fill');
+    const progressBar = progressFill?.parentNode;
     const countEl = this.shadowRoot.getElementById('count-el');
     const btnContainer = this.shadowRoot.getElementById('button-container');
     const card = this.shadowRoot.getElementById('state-card');
+    const errorInfo = this.shadowRoot.getElementById('error-info');
 
-    if (id) {
+    if (idBox) idBox.style.display = 'none';
+    if (typeEl) typeEl.style.display = 'none';
+    if (rvEl) rvEl.style.display = 'none';
+    if (progressBar) progressBar.style.display = 'none';
+    if (countEl) countEl.style.display = 'none';
+    if (btnContainer) btnContainer.innerHTML = '';
+    if (errorInfo) errorInfo.style.display = 'none';
+
+    if (error) {
+      if (id && idBox) {
+        const bgColor = ID_COLORS[id] || '#607D8B';
+        const textColor = getTextColor(bgColor);
+        idBox.style.background = bgColor;
+        idBox.style.color = textColor;
+        idBox.textContent = id;
+        idBox.style.display = 'inline-block';
+        if (card) card.style.background = error.reason === 'Sai tuyến' ? '#fff3cd' : '#f8d7da';
+      } else {
+        if (idBox) idBox.style.display = 'none';
+        if (card) card.style.background = '#f8d7da';
+      }
+      if (type && typeEl) {
+        typeEl.textContent = type;
+        typeEl.style.display = 'block';
+      }
+      if (rv && rvEl) {
+        rvEl.textContent = rv;
+        rvEl.style.display = 'block';
+      }
+      if (errorInfo) {
+        errorInfo.style.display = 'block';
+        errorInfo.innerHTML = `
+          <div style="font-size:24px; font-weight:700; color:${error.reason === 'Sai tuyến' ? '#856404' : '#721c24'}; margin-bottom:8px;">${error.reason}</div>
+          <div style="font-size:16px; color:#555;">${error.detail || ''}</div>
+        `;
+      }
+      return;
+    }
+
+    if (idBox) idBox.style.display = 'inline-block';
+    if (typeEl) typeEl.style.display = 'block';
+    if (rvEl) rvEl.style.display = 'block';
+    if (progressBar) progressBar.style.display = 'block';
+    if (countEl) countEl.style.display = 'block';
+
+    if (id && idBox) {
       const bgColor = ID_COLORS[id] || '#607D8B';
       const textColor = getTextColor(bgColor);
       idBox.style.background = bgColor;
       idBox.style.color = textColor;
       idBox.textContent = id;
-      card.style.background = isFull ? '#f0fdf4' : '#f8fafc';
+      if (card) card.style.background = isFull ? '#f0fdf4' : '#f8fafc';
     } else {
-      idBox.style.background = '#cbd5e1';
-      idBox.style.color = '#fff';
-      idBox.textContent = '?';
-      card.style.background = '#f8fafc';
+      if (idBox) {
+        idBox.style.background = '#cbd5e1';
+        idBox.style.color = '#fff';
+        idBox.textContent = '?';
+      }
+      if (card) card.style.background = '#f8fafc';
     }
 
-    typeEl.textContent = type || '--';
-    rvEl.textContent = rv || '----';
+    if (typeEl) typeEl.textContent = type || '--';
+    if (rvEl) rvEl.textContent = rv || '----';
 
     const percent = (count !== undefined && threshold) ? Math.min(100, Math.round((count / threshold) * 100)) : 0;
-    progressFill.style.width = percent + '%';
-    progressFill.style.background = id && ID_COLORS[id] ? ID_COLORS[id] : '#cbd5e1';
-
-    if (count !== undefined) {
-      countEl.textContent = `${count}/${threshold || 30}`;
-    } else {
-      countEl.textContent = `0/30`;
+    if (progressFill) {
+      progressFill.style.width = percent + '%';
+      progressFill.style.background = id && ID_COLORS[id] ? ID_COLORS[id] : '#cbd5e1';
     }
 
-    if (count > 0 && id) {
+    if (countEl) {
+      countEl.textContent = count !== undefined ? `${count}/${threshold || 30}` : `0/30`;
+    }
+
+    if (count > 0 && id && !error && btnContainer) {
       if (isFull) {
         btnContainer.innerHTML = '<button class="btn btn-close" id="btn-close">Xác nhận đóng gói (đầy)</button>';
-        btnContainer.querySelector('#btn-close').addEventListener('click', () => this.state.closeSession(id, type));
+        btnContainer.querySelector('#btn-close')?.addEventListener('click', () => this.state.closeSession(id, type));
       } else {
         btnContainer.innerHTML = `<button class="btn btn-close-early" id="btn-close-early">Đóng gói ngay (${count}/${threshold || 30})</button>`;
-        btnContainer.querySelector('#btn-close-early').addEventListener('click', () => {
+        btnContainer.querySelector('#btn-close-early')?.addEventListener('click', () => {
           if (confirm('Bạn có chắc muốn đóng gói khi chưa đủ số lượng?\nThao tác này sẽ in tem TO và kết thúc lô hàng hiện tại.')) {
             this.state.closeSession(id, type);
           }
         });
       }
-    } else {
+    } else if (btnContainer) {
       btnContainer.innerHTML = '';
     }
   }
@@ -414,34 +679,45 @@ export class UIManager {
   }
 
   showFullAlert(id, type) {
+    if (!this.shadowRoot) return;
     const btnContainer = this.shadowRoot.getElementById('button-container');
-    if (!btnContainer.querySelector('#btn-close')) {
+    if (btnContainer && !btnContainer.querySelector('#btn-close')) {
       btnContainer.innerHTML = '<button class="btn btn-close" id="btn-close">Xác nhận đóng gói (đầy)</button>';
-      btnContainer.querySelector('#btn-close').addEventListener('click', () => this.state.closeSession(id, type));
+      btnContainer.querySelector('#btn-close')?.addEventListener('click', () => this.state.closeSession(id, type));
     }
   }
 
   showWarning(msg) {
-    this._updateCard({});
-    this.shadowRoot.getElementById('rv-el').textContent = msg;
+    this._updateCard({ rv: msg, error: { reason: 'Cảnh báo', detail: '' } });
   }
 
   showError(msg) {
-    this._updateCard({});
-    this.shadowRoot.getElementById('rv-el').textContent = msg;
+    this._updateCard({ rv: msg, error: { reason: 'Lỗi', detail: '' } });
+  }
+
+  showScanError({ rv, type, id, reason, detail }) {
+    this.currentId = id || '';
+    this._updateCard({
+      id: id || null,
+      type: type || null,
+      rv: rv,
+      error: { reason, detail }
+    });
   }
 
   printAndClose(id, type, toNumber, itemCount) {
-    this.shadowRoot.getElementById('button-container').innerHTML = '';
     this._updateCard({
       id, type, rv: 'Đang in...',
       count: itemCount, threshold: 0, isFull: false
     });
+
     const date = new Date();
     const dateStr = `${date.getDate().toString().padStart(2, '0')} ${date.getMonth() + 1} ${date.getFullYear().toString().slice(-2)}`;
     const numberPart = toNumber.split('-').pop();
-    printLabel(toNumber, type, id, dateStr, numberPart, this.state.email, itemCount)
+
+    this._retryPrint(toNumber, type, id, dateStr, numberPart, this.state.email, itemCount)
       .then(() => {
+        this._savePrintedLabel({ toNumber, type, id, dateStr, number: numberPart, email: this.state.email, itemCount });
         this._updateCard({
           id, type, rv: '✅ In tem thành công',
           count: itemCount, threshold: 0, isFull: false
@@ -453,9 +729,13 @@ export class UIManager {
           id, type, rv: '❌ In thất bại',
           count: itemCount, threshold: 0, isFull: false
         });
-        const btnContainer = this.shadowRoot.getElementById('button-container');
-        btnContainer.innerHTML = '<button class="btn btn-warning" id="btn-retry-print">In lại</button>';
-        btnContainer.querySelector('#btn-retry-print').addEventListener('click', () => this.printAndClose(id, type, toNumber, itemCount));
+        if (this.shadowRoot) {
+          const btnContainer = this.shadowRoot.getElementById('button-container');
+          if (btnContainer) {
+            btnContainer.innerHTML = '<button class="btn btn-warning" id="btn-retry-print">In lại</button>';
+            btnContainer.querySelector('#btn-retry-print')?.addEventListener('click', () => this.printAndClose(id, type, toNumber, itemCount));
+          }
+        }
       });
   }
 }

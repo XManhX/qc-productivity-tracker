@@ -1,9 +1,44 @@
-// content/printer.js – Tem TO tối giản 100mm x 50mm (in nhiệt)
+// content/printer.js – In tem TO qua iframe ẩn (Promise-based, tuân thủ CSP)
 import { generateQR } from './qrcode.js';
 
-export async function printLabel(toNumber, type, id, dateStr, number, email, itemCount) {
-  const qrDataUrl = await generateQR(toNumber);
+// Hàm helper: tạo Promise từ sự kiện
+function waitForEvent(target, event, timeoutMs = 0) {
+  return new Promise((resolve, reject) => {
+    const timer = timeoutMs > 0 ? setTimeout(() => {
+      target.removeEventListener(event, handler);
+      reject(new Error(`Timeout waiting for ${event}`));
+    }, timeoutMs) : null;
 
+    function handler() {
+      if (timer) clearTimeout(timer);
+      target.removeEventListener(event, handler);
+      resolve();
+    }
+    target.addEventListener(event, handler, { once: true });
+  });
+}
+
+// Hàm helper: chờ ảnh load hoặc error
+function waitForImage(img, timeoutMs = 5000) {
+  if (img.complete && img.naturalWidth > 0) return Promise.resolve();
+  return Promise.race([
+    waitForEvent(img, 'load'),
+    waitForEvent(img, 'error'),
+    new Promise((_, reject) => setTimeout(() => reject(new Error('Image load timeout')), timeoutMs))
+  ]);
+}
+
+export async function printLabel(toNumber, type, id, dateStr, number, email, itemCount) {
+  // Tạo QR code
+  let qrDataUrl;
+  try {
+    qrDataUrl = await generateQR(toNumber);
+  } catch (e) {
+    console.error('[Printer] QR generation failed:', e);
+    qrDataUrl = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgZmlsbD0id2hpdGUiLz48L3N2Zz4=';
+  }
+
+  // Nội dung HTML của tem (KHÔNG có thẻ <script>)
   const html = `<!DOCTYPE html>
 <html lang="vi">
 <head>
@@ -32,9 +67,7 @@ export async function printLabel(toNumber, type, id, dateStr, number, email, ite
       letter-spacing: 0.5px; line-height: 1.2;
       text-transform: uppercase;
     }
-    .to-small {
-      text-transform: uppercase; margin-bottom: 1mm;
-    }
+    .to-small { text-transform: uppercase; margin-bottom: 1mm; }
     .number-text {
       font-size: 18px; font-weight: 700; color: #000;
       font-family: 'Courier New', Courier, monospace;
@@ -73,25 +106,54 @@ export async function printLabel(toNumber, type, id, dateStr, number, email, ite
   <div class="right">
     <div class="to-small">TO-${type}-${id}</div>
     <div class="qr-wrapper">
-      <img src="${qrDataUrl}" alt="QR" />
+      <img src="${qrDataUrl}" alt="QR" id="qr-img" />
     </div>
     <div class="qty-small">QTY: ${itemCount}</div>
   </div>
 </body>
 </html>`;
 
-  const blob = new Blob([html], { type: 'text/html;charset=UTF-8' });
-  const url = URL.createObjectURL(blob);
-  const win = window.open(url, '_blank', 'width=400,height=300');
-  if (win) {
-    win.onload = () => {
-      setTimeout(() => win.print(), 600);
-    };
-  } else {
-    alert('Popup bị chặn. Vui lòng cho phép popup hoặc in thủ công.');
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${toNumber}.html`;
-    a.click();
+  // Tạo iframe ẩn
+  const iframe = document.createElement('iframe');
+  iframe.style.position = 'fixed';
+  iframe.style.top = '-9999px';
+  iframe.style.left = '-9999px';
+  iframe.style.width = '100mm';
+  iframe.style.height = '50mm';
+  document.body.appendChild(iframe);
+
+  try {
+    // Chờ iframe load
+    await new Promise((resolve, reject) => {
+      iframe.onload = resolve;
+      iframe.onerror = () => reject(new Error('Iframe load failed'));
+      iframe.contentDocument.open();
+      iframe.contentDocument.write(html);
+      iframe.contentDocument.close();
+    });
+
+    const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
+    const qrImg = iframeDoc.getElementById('qr-img');
+
+    // Chờ ảnh QR tải xong (nếu có)
+    if (qrImg) {
+      await waitForImage(qrImg, 5000);
+    }
+
+    // Focus và in
+    iframe.contentWindow.focus();
+    iframe.contentWindow.print();
+
+    // Chờ sự kiện afterprint hoặc timeout 10s
+    await Promise.race([
+      waitForEvent(iframe.contentWindow, 'afterprint'),
+      new Promise(resolve => setTimeout(resolve, 10000))
+    ]);
+
+    // Dọn dẹp iframe
+    if (iframe.parentNode) iframe.remove();
+  } catch (error) {
+    if (iframe.parentNode) iframe.remove();
+    throw error;
   }
 }

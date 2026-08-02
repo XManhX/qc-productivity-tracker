@@ -9,7 +9,6 @@ export class StateManager {
         this.typeToId = {};
         this._pendingEvents = [];
 
-        // Lấy type mapping từ background (qua message)
         this._loadTypeMapping();
 
         chrome.runtime.onMessage.addListener((msg) => {
@@ -62,7 +61,7 @@ export class StateManager {
 
     setUI(ui) {
         this.ui = ui;
-        if (this.sessions.length) this.ui.updateTop5(this.sessions.slice(0, 5));
+        // if (this.sessions.length) this.ui.updateTop5(this.sessions.slice(0, 5));
         this._pendingEvents.forEach(event => this._processEvent(event));
         this._pendingEvents = [];
     }
@@ -75,6 +74,8 @@ export class StateManager {
             this.handleScan(event.rv);
         } else if (event.type === 'error') {
             this.ui.showWarning(event.message);
+        } else if (event.type === 'scan_error') {
+            this.handleScanError(event.data.rv, event.data.retcode, event.data.message);
         }
     }
 
@@ -107,6 +108,49 @@ export class StateManager {
 
     handleArrived(rv) {
         this._queueEvent({ type: 'arrived', rv });
+    }
+
+    async handleScanError(rv, retcode, message) {
+        if (!this.ui) {
+            this._queueEvent({ type: 'scan_error', data: { rv, retcode, message } });
+            return;
+        }
+
+        const type = this.getType(rv);
+        const id = type ? this.getId(type) : null;
+
+        // Xác định reason dựa trên API response
+        let reason = 'Lỗi';
+        let detail = message || '';
+
+        if (retcode === 3031004 && message && message.includes('Cannot find any inbound orders with')) {
+            reason = 'Sai tuyến';
+        } else if (retcode === 3031004 && message && message.includes('Inbound order is not in pending/In transit status!')) {
+            // Gọi API search_asn để xác nhận Cancelled
+            try {
+                const url = `https://wms.ssc.shopee.vn/api/apps/process/returninbound/riasn/search_asn?return_tn=${encodeURIComponent(rv)}&sort_field=&sort_type=1&pageno=1&count=20`;
+                const response = await fetch(url, { credentials: 'include' });
+                const data = await response.json();
+                if (data.retcode === 0 && data.data?.list?.length && data.data.list[0].task_status === 5) {
+                    reason = 'Cancelled';
+                } else {
+                    reason = 'Lỗi';
+                    detail = 'Không xác định được';
+                }
+            } catch (e) {
+                console.error('Error calling search_asn:', e);
+                reason = 'Lỗi';
+                detail = 'Không thể kiểm tra';
+            }
+        }
+
+        this.ui.showScanError({
+            rv,
+            type: type || null,
+            id: id || null,
+            reason,
+            detail
+        });
     }
 
     async handleScan(rv) {

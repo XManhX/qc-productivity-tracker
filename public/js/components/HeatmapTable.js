@@ -160,7 +160,7 @@ export class HeatmapTable {
           </div>
         </div>  
       </div>
-      <div class="overflow-x-auto border border-slate-200 shadow-sm" id="table-wrapper">
+      <div class="overflow-x-auto shadow-sm" id="table-wrapper">
         <div class="max-h-[calc(100vh-12rem)] overflow-y-auto" id="table-scroll-container">
           <table class="w-full text-center border-collapse" id="data-table">
             <thead id="table-header" class="text-xs uppercase tracking-wider font-semibold"></thead>

@@ -188,7 +188,7 @@ export class UIManager {
       </div>
       <div class="body" id="body">
         <div class="state-card" id="state-card">
-          <div id="id-box" class="id-big" style="background:#cbd5e1; color:#fff;">?</div>
+          <div id="id-box" class="id-big" style="background:#cbd5e1; color:#fff; min-width: 80px;">?</div>
           <div class="type-text" id="type-el">--</div>
           <div class="rv-text" id="rv-el">----</div>
           <div class="progress-bar"><div id="progress-fill" class="progress-fill" style="width:0%"></div></div>
@@ -216,13 +216,13 @@ export class UIManager {
 
   _printTestLabel() {
     const testData = {
-      toNumber: 'TO-TEST-0-010825-000001',
+      toNumber: 'TO-TEST-0-010826-000001',
       type: 'TEST',
-      id: '0',
+      id: '1',
       dateStr: new Date().toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: '2-digit' }).replace(/\//g, ' '),
       number: '000001',
       email: this.state.email || 'test@shopee.com',
-      itemCount: 0
+      itemCount: 1
     };
     // Gọi printer với dữ liệu mẫu
     printLabel(testData.toNumber, testData.type, testData.id, testData.dateStr, testData.number, testData.email, testData.itemCount)

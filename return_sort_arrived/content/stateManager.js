@@ -1,14 +1,15 @@
-import { TYPE_TO_ID } from './idMapping.js';
-
+// content/stateManager.js
 export class StateManager {
     constructor(masterData, email) {
         this.masterData = masterData;
         this.email = email;
-        this.apiBase = 'https://arrival-manager.vercel.app/api/scan';
+        this.apiBase = 'https://return-sort-arrived.vercel.app/api/scan';
         this.ui = null;
         this.sessions = [];
         this.typeToId = {};
-        this._pendingEvents = []; // queue cho các sự kiện đến trước khi UI sẵn sàng
+        this._pendingEvents = [];
+
+        // Lấy type mapping từ background (qua message)
         this._loadTypeMapping();
 
         chrome.runtime.onMessage.addListener((msg) => {
@@ -28,18 +29,21 @@ export class StateManager {
                 this.typeToId = response.mapping;
                 console.log('[StateManager] Type mapping loaded:', Object.keys(this.typeToId).length);
             } else {
-                console.warn('[StateManager] No type mapping received, using empty object');
+                console.warn('[StateManager] No type mapping received');
             }
         });
     }
 
     async _callApi(endpoint, body) {
         return new Promise((resolve, reject) => {
-            chrome.runtime.sendMessage({ action: 'API_CALL', endpoint, body }, (res) => {
-                if (chrome.runtime.lastError) reject(new Error(chrome.runtime.lastError.message));
-                else if (!res.success) reject(new Error(res.error));
-                else resolve(res.data);
-            });
+            chrome.runtime.sendMessage(
+                { action: 'API_CALL', endpoint, body },
+                (res) => {
+                    if (chrome.runtime.lastError) reject(new Error(chrome.runtime.lastError.message));
+                    else if (!res.success) reject(new Error(res.error));
+                    else resolve(res.data);
+                }
+            );
         });
     }
 
@@ -59,7 +63,6 @@ export class StateManager {
     setUI(ui) {
         this.ui = ui;
         if (this.sessions.length) this.ui.updateTop5(this.sessions.slice(0, 5));
-        // Xử lý tất cả event đang chờ
         this._pendingEvents.forEach(event => this._processEvent(event));
         this._pendingEvents = [];
     }
@@ -108,7 +111,6 @@ export class StateManager {
 
     async handleScan(rv) {
         if (!this.ui) {
-            // Nếu UI chưa sẵn sàng, queue lại
             this._queueEvent({ type: 'arrived', rv });
             return;
         }
@@ -145,5 +147,7 @@ export class StateManager {
         }
     }
 
-    updateMasterData(newData) { this.masterData = newData; }
+    updateMasterData(newData) {
+        this.masterData = newData;
+    }
 }

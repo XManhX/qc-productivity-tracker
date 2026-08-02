@@ -33,7 +33,6 @@ export async function printLabel(toNumber, type, id, dateStr, number, email, ite
       text-transform: uppercase;
     }
     .to-small {
-      font-size: 12px; font-weight: 700; color: #000;
       text-transform: uppercase; margin-bottom: 1mm;
     }
     .number-text {
@@ -47,13 +46,13 @@ export async function printLabel(toNumber, type, id, dateStr, number, email, ite
     }
     .email-text {
       font-size: 12px; font-weight: 500; color: #000;
-      word-break: break-all;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     }
     .qty-text {
       font-size: 16px; font-weight: 700; color: #000;
       font-family: 'Courier New', Courier, monospace;
     }
-    .qty-small {
+    .to-small, .qty-small {
       font-size: 12px; font-weight: 700; color: #000;
       font-family: 'Courier New', Courier, monospace;
     }
@@ -69,7 +68,7 @@ export async function printLabel(toNumber, type, id, dateStr, number, email, ite
     <div class="number-text">${number}</div>
     <div class="date-text">${dateStr}</div>
     <div class="qty-text">QTY: ${itemCount}</div>
-    <div class="email-text">${email}</div>
+    <div class="email-text" title="${email}">${email}</div>
   </div>
   <div class="right">
     <div class="to-small">TO-${type}-${id}</div>

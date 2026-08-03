@@ -497,7 +497,7 @@ export class DashboardUI {
         e.stopPropagation();
         const id = btn.dataset.id;
         const type = btn.dataset.type;
-        if (confirm(`Đóng gói ID ${id}?`)) this.state.closeSession(id, type);
+        if (confirm(`Đóng kiện ID ${id}?`)) this.state.closeSession(id, type);
       });
     });
 

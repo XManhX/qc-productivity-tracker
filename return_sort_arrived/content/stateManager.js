@@ -1,4 +1,4 @@
-// content/stateManager.js – xử lý tập trung, hiển thị ngay ID/type
+// content/stateManager.js – hỗ trợ display_name
 export class StateManager {
     constructor(masterData, email) {
         this.masterData = masterData;
@@ -7,6 +7,7 @@ export class StateManager {
         this.ui = null;
         this.sessions = [];
         this.typeToId = {};
+        this.typeToDisplay = {};
         this._listeners = [];
         this._typeMappingReady = false;
         this._typeMappingPromise = null;
@@ -34,7 +35,12 @@ export class StateManager {
         this._typeMappingPromise = new Promise((resolve) => {
             chrome.runtime.sendMessage({ action: 'GET_TYPE_MAPPING' }, (response) => {
                 if (response?.mapping) {
-                    this.typeToId = response.mapping;
+                    this.typeToId = {};
+                    this.typeToDisplay = {};
+                    for (const [typeName, info] of Object.entries(response.mapping)) {
+                        this.typeToId[typeName] = info.station_id;
+                        this.typeToDisplay[typeName] = info.display_name || typeName;
+                    }
                     console.log('[StateManager] Type mapping loaded:', Object.keys(this.typeToId).length);
                     this._typeMappingReady = true;
                     resolve();
@@ -43,7 +49,12 @@ export class StateManager {
                     setTimeout(() => {
                         chrome.runtime.sendMessage({ action: 'GET_TYPE_MAPPING' }, (res) => {
                             if (res?.mapping) {
-                                this.typeToId = res.mapping;
+                                this.typeToId = {};
+                                this.typeToDisplay = {};
+                                for (const [typeName, info] of Object.entries(res.mapping)) {
+                                    this.typeToId[typeName] = info.station_id;
+                                    this.typeToDisplay[typeName] = info.display_name || typeName;
+                                }
                                 console.log('[StateManager] Type mapping loaded (retry):', Object.keys(this.typeToId).length);
                             }
                             this._typeMappingReady = true;
@@ -61,6 +72,7 @@ export class StateManager {
     }
 
     getId(type) { return this.typeToId[type] || null; }
+    getDisplayName(type) { return this.typeToDisplay[type] || type; }
     getType(rv) { return this.masterData[rv.toUpperCase().replace(/\s+/g, '')] || null; }
 
     async _callApi(endpoint, body) {
@@ -87,10 +99,7 @@ export class StateManager {
 
     setUI(ui) { this.ui = ui; }
 
-    // Điểm vào duy nhất cho mọi RV (thành công hoặc lỗi)
-    handleArrived(rv) {
-        this._handleScan(rv);
-    }
+    handleArrived(rv) { this._handleScan(rv); }
 
     async _handleScan(rv) {
         await this._waitForTypeMapping();
@@ -98,12 +107,11 @@ export class StateManager {
 
         const type = this.getType(rv);
         const id = type ? this.getId(type) : null;
+        const displayType = type ? this.getDisplayName(type) : null;
 
-        // Hiển thị ngay thông tin cơ bản
         if (type) {
             const session = id ? this.sessions.find(s => s.id === id) : null;
-            this.ui.showDetected(rv, type, id, session);
-            // Phát âm thanh
+            this.ui.showDetected(rv, displayType, id, session);
             const utterance = new SpeechSynthesisUtterance(id || 'không xác định');
             utterance.lang = 'vi-VN';
             window.speechSynthesis.speak(utterance);
@@ -112,51 +120,40 @@ export class StateManager {
             return;
         }
 
-        // Nếu không có ID thì không thể increment
         if (!id) {
             this.ui.showScanError({
-                rv, type, id: null,
+                rv, type: displayType, id: null,
                 reason: 'Lỗi ánh xạ',
-                detail: `Type "${type}" chưa được gán ID`
+                detail: `Type "${displayType}" chưa được gán ID`
             });
             return;
         }
 
-        // Gọi increment
         try {
             const data = await this._callApi('increment', { id, rv, type, email: this.email });
             console.log('[StateManager] increment response:', data);
 
             if (!data.success) {
-                // Phân loại lỗi
                 let reason = 'Lỗi';
                 let detail = data.error || 'Lỗi không xác định từ server';
-
-                if (data.error && data.error.includes('RV đã được quét')) {
-                    reason = 'Trùng lặp';
-                } else if (data.error && data.error.includes('ID đã đầy')) {
-                    reason = 'Đầy';
-                }
-
-                // Với lỗi từ WMS (3031004) ta vẫn có thể phân loại thêm nếu cần,
-                // nhưng vì interceptor đã gửi tất cả RV nên ta có thể dựa vào dữ liệu increment trả về.
-                this.ui.showScanError({ rv, type, id, reason, detail });
+                if (data.error && data.error.includes('RV đã được quét')) reason = 'Trùng lặp';
+                else if (data.error && data.error.includes('ID đã đầy')) reason = 'Đầy';
+                this.ui.showScanError({ rv, type: displayType, id, reason, detail });
                 return;
             }
 
-            // Thành công
             const freshSessions = await this._fetchSessions();
             this._onSessionsUpdate(freshSessions);
-            this.ui.showSuccess(rv, type, id, data);
+            this.ui.showSuccess(rv, displayType, id, data);
 
             if (data.status === 'full') {
-                this.ui.showFullAlert(id, type);
+                this.ui.showFullAlert(id, displayType);
                 try { speechSynthesis.speak(new SpeechSynthesisUtterance(`ID ${id} đã đầy`)); } catch (e) { }
             }
         } catch (e) {
             console.error('[StateManager] increment failed:', e);
             this.ui.showScanError({
-                rv, type, id,
+                rv, type: displayType, id,
                 reason: 'Lỗi',
                 detail: 'Lỗi kết nối đến server'
             });
@@ -172,7 +169,6 @@ export class StateManager {
             }
             const freshSessions = await this._fetchSessions();
             this._onSessionsUpdate(freshSessions);
-            // Hiển thị lại thông tin sau khi hủy
             this.ui.showSuccess(rv, type, id, { item_count: data.item_count, status: data.status });
         } catch (e) {
             this.ui.showError('Lỗi kết nối');
@@ -196,6 +192,35 @@ export class StateManager {
         } catch (e) {
             console.error('[StateManager] Failed to mark printed:', e);
         }
+    }
+
+    // Refresh methods cho nút cập nhật
+    async refreshMasterData() {
+        return new Promise((resolve, reject) => {
+            chrome.runtime.sendMessage({ action: 'FETCH_MASTER_DATA' }, (response) => {
+                if (response?.success) {
+                    this.masterData = response.masterData;
+                    resolve();
+                } else reject(new Error(response?.error || 'Không thể cập nhật master data'));
+            });
+        });
+    }
+
+    async refreshTypeMapping() {
+        return new Promise((resolve, reject) => {
+            chrome.runtime.sendMessage({ action: 'FETCH_TYPE_MAPPINGS' }, (response) => {
+                if (response?.success) {
+                    this.typeToId = {};
+                    this.typeToDisplay = {};
+                    for (const [typeName, info] of Object.entries(response.mapping)) {
+                        this.typeToId[typeName] = info.station_id;
+                        this.typeToDisplay[typeName] = info.display_name || typeName;
+                    }
+                    this._typeMappingReady = true;
+                    resolve();
+                } else reject(new Error(response?.error || 'Không thể cập nhật type mapping'));
+            });
+        });
     }
 
     updateMasterData(newData) { this.masterData = newData; }

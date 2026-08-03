@@ -1,4 +1,4 @@
-// content/printer.js – In tem TO qua popup chuyên nghiệp, có phản hồi kết quả
+// content/printer.js – In tem TO (sử dụng displayType)
 import { generateQR } from './qrcode.js';
 
 function waitForEvent(target, event, timeoutMs = 0) {
@@ -105,19 +105,16 @@ export async function printLabel(toNumber, type, id, dateStr, number, email, ite
   const win = window.open(url, '_blank', 'width=400,height=300');
 
   if (!win) {
-    // Popup bị chặn → fallback tải file
     alert('Popup bị chặn. Vui lòng cho phép popup hoặc tải file để in.');
     const a = document.createElement('a');
     a.href = url;
     a.download = `${toNumber}.html`;
     a.click();
-    // Không reject, coi như đã xử lý
     return;
   }
 
   try {
-    // Đợi afterprint trên cửa sổ popup
-    await waitForEvent(win, 'afterprint', 30000); // 30 giây timeout
+    await waitForEvent(win, 'afterprint', 30000);
   } catch (e) {
     console.warn('[Printer] afterprint timeout:', e);
   } finally {

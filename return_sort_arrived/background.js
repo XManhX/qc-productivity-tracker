@@ -125,6 +125,20 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     })();
     return true;
   }
+
+  if (msg.action === 'FETCH_MASTER_DATA') {
+    fetchMasterData()
+      .then(() => sendResponse({ success: true, masterData: masterDataMap }))
+      .catch(e => sendResponse({ success: false, error: e.message }));
+    return true;
+  }
+
+  if (msg.action === 'FETCH_TYPE_MAPPINGS') {
+    fetchTypeMappings()
+      .then(() => sendResponse({ success: true, mapping: typeToIdMap }))
+      .catch(e => sendResponse({ success: false, error: e.message }));
+    return true;
+  }
 });
 
 // Giữ service worker sống

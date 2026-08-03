@@ -1,6 +1,22 @@
 // content/content.js – chỉ lắng nghe as-rv-arrived
 chrome.runtime.connect({ name: 'as-keepalive' });
 
+let keepAlivePort;
+
+function connectKeepAlive() {
+    // Mở port đến service worker
+    keepAlivePort = chrome.runtime.connect({ name: 'as-keepalive' });
+
+    // Khi port bị ngắt (disconnect), tự động kết nối lại sau 1 giây
+    keepAlivePort.onDisconnect.addListener(() => {
+        console.log('Port bị ngắt, sẽ kết nối lại sau 1 giây...');
+        setTimeout(connectKeepAlive, 1000);
+    });
+}
+
+// Bắt đầu kết nối
+connectKeepAlive();
+
 (async () => {
     const interceptorScript = document.createElement('script');
     interceptorScript.src = chrome.runtime.getURL('content/interceptor.js');

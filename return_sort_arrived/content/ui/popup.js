@@ -1,4 +1,4 @@
-// content/ui/popup.js – Popup chính (Arrival) - hiển thị ngay, có animation
+// content/ui/popup.js – Popup chính (Arrival) - sử dụng display_name
 import { printLabel } from '../printer.js';
 
 const ID_COLORS = {
@@ -81,6 +81,10 @@ const STYLES = `
 .state-card {
   border-radius: 20px; padding: 24px; text-align: center; transition: background 0.3s;
   width: 100%; box-sizing: border-box; display: flex; flex-direction: column; align-items: center; gap: 12px;
+  /* Không đặt animation mặc định ở đây */
+}
+/* Thêm class animate */
+.state-card.animate {
   animation: cardUpdate 0.25s ease;
 }
 @keyframes cardUpdate {
@@ -116,6 +120,24 @@ const STYLES = `
   background: #e2e8f0; color: #475569; font-size: 16px; padding: 8px 16px;
 }
 .btn-undo:hover { background: #cbd5e1; }
+.refresh-buttons {
+  display: flex; justify-content: flex-end; gap: 6px; margin-top: 8px;
+}
+.btn-refresh {
+  background: transparent; border: 1px dashed #94a3b8; color: #64748b;
+  padding: 4px 10px; border-radius: 8px; font-size: 12px; font-weight: 500;
+  cursor: pointer; transition: all 0.2s;
+}
+.btn-refresh:hover { background: #f1f5f9; border-color: #64748b; color: #334155; }
+.toast-msg {
+  position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+  background: #1e293b; color: white; padding: 8px 20px; border-radius: 10px;
+  font-size: 14px; font-weight: 500; z-index: 9999999; animation: slideUp 0.3s ease;
+}
+@keyframes slideUp {
+  from { opacity: 0; transform: translateX(-50%) translateY(10px); }
+  to { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
 `;
 
 export class UIManager {
@@ -193,6 +215,10 @@ export class UIManager {
           <div class="count-text" id="count-el">0/30</div>
           <div id="button-container"></div>
           <div id="error-info" style="display:none;"></div>
+        </div>
+        <div class="refresh-buttons">
+          <button class="btn-refresh" id="btn-refresh-master" title="Cập nhật Master Data">🔄 MD</button>
+          <button class="btn-refresh" id="btn-refresh-mapping" title="Cập nhật Type Mapping">🔄 Type</button>
         </div>
       </div>
     `;
@@ -273,6 +299,25 @@ export class UIManager {
       e.stopPropagation();
       this.toggleMinimize();
     });
+
+    // Nút refresh
+    this.shadowRoot.getElementById('btn-refresh-master').addEventListener('click', async () => {
+      try {
+        await this.state.refreshMasterData();
+        this._showToast('✅ Master Data đã được cập nhật');
+      } catch (e) {
+        this._showToast('❌ Lỗi cập nhật Master Data');
+      }
+    });
+
+    this.shadowRoot.getElementById('btn-refresh-mapping').addEventListener('click', async () => {
+      try {
+        await this.state.refreshTypeMapping();
+        this._showToast('✅ Type Mapping đã được cập nhật');
+      } catch (e) {
+        this._showToast('❌ Lỗi cập nhật Type Mapping');
+      }
+    });
   }
 
   toggleMinimize() {
@@ -325,10 +370,11 @@ export class UIManager {
         const count = s.item_count;
         const percent = Math.min(100, Math.round((count / threshold) * 100));
         const bgColor = ID_COLORS[s.id] || '#607D8B';
-        const shortType = (s.type_group || '').substring(0, 12);
+        // Sử dụng display_name thay vì type_group thô
+        const displayType = this.state.getDisplayName(s.type_group) || (s.type_group || '').substring(0, 12);
         html += `<div class="badge-card" style="background:${bgColor};" title="ID ${s.id}: ${s.type_group} – ${count}/${threshold}">
           <div class="badge-id">${s.id}</div>
-          <div class="badge-type" title="${s.type_group}">${shortType || '-'}</div>
+          <div class="badge-type" title="${s.type_group}">${displayType || '-'}</div>
           <div class="badge-count">${count}/${threshold}</div>
           <div class="badge-bar"><div class="badge-fill" style="width:${percent}%"></div></div>
         </div>`;
@@ -347,7 +393,7 @@ export class UIManager {
     if (this.shadowRoot) this._updateTop5();
   }
 
-  _updateCard({ id, type, rv, count, threshold, isFull, error, unknownId }) {
+  _updateCard({ id, type, rv, count, threshold, isFull, error, unknownId, closed, animate }) {
     if (!this.shadowRoot) return;
     const idBox = this.shadowRoot.getElementById('id-box');
     const typeEl = this.shadowRoot.getElementById('type-el');
@@ -368,6 +414,7 @@ export class UIManager {
     if (errorInfo) errorInfo.style.display = 'none';
 
     const isUnknown = unknownId || (error && !id);
+    const canOperate = !closed && !error && count > 0 && id && !isUnknown;
 
     if (error) {
       if (idBox) {
@@ -402,14 +449,9 @@ export class UIManager {
           <div style="font-size:16px; color:#555;">${error.detail || ''}</div>
         `;
       }
-      if (card) {
-        card.style.animation = 'none';
-        card.offsetHeight;
-        card.style.animation = 'cardUpdate 0.25s ease';
-      }
-      if (id && count > 0 && btnContainer) {
-        btnContainer.style.display = 'block'; // đảm bảo visible
-        btnContainer.innerHTML = `<button class="btn btn-undo" id="btn-undo">↩️ Hủy RV này</button>`;
+      if (canOperate && btnContainer) {
+        btnContainer.style.display = 'block';
+        btnContainer.innerHTML = `<button class="btn btn-undo" id="btn-undo">↩️ Hủy đơn này</button>`;
         btnContainer.querySelector('#btn-undo')?.addEventListener('click', () => {
           if (confirm(`Hủy RV ${rv} khỏi ID ${id}?`)) {
             this.state.removeScan(rv, id, type);
@@ -453,27 +495,25 @@ export class UIManager {
       countEl.textContent = count !== undefined ? `${count}/${threshold || 30}` : `0/30`;
     }
 
-    if (count > 0 && id && !isUnknown && btnContainer) {
-      const undoButton = `<button class="btn btn-undo" id="btn-undo">↩️ Hủy RV này</button>`;
+    if (canOperate && btnContainer) {
+      const undoButton = `<button class="btn btn-undo" id="btn-undo">↩️ Hủy đơn này</button>`;
       if (isFull) {
         btnContainer.innerHTML = `
-      <button class="btn btn-close" id="btn-close">Xác nhận đóng gói (đầy)</button>
-      ${undoButton}
-    `;
+          <button class="btn btn-close" id="btn-close">Xác nhận đóng kiện (đầy)</button>
+          ${undoButton}
+        `;
+        btnContainer.querySelector('#btn-close')?.addEventListener('click', () => this.state.closeSession(id, type));
       } else {
         btnContainer.innerHTML = `
-      <button class="btn btn-close-early" id="btn-close-early">Đóng gói ngay (${count}/${threshold || 30})</button>
-      ${undoButton}
-    `;
+          <button class="btn btn-close-early" id="btn-close-early">Đóng kiện ngay (${count}/${threshold || 30})</button>
+          ${undoButton}
+        `;
+        btnContainer.querySelector('#btn-close-early')?.addEventListener('click', () => {
+          if (confirm('Bạn có chắc muốn đóng kiện khi chưa đủ số lượng?\nThao tác này sẽ in tem TO và kết thúc lô hàng hiện tại.')) {
+            this.state.closeSession(id, type);
+          }
+        });
       }
-      // Gán sự kiện cho nút đóng gói
-      btnContainer.querySelector('#btn-close')?.addEventListener('click', () => this.state.closeSession(id, type));
-      btnContainer.querySelector('#btn-close-early')?.addEventListener('click', () => {
-        if (confirm('Bạn có chắc muốn đóng gói khi chưa đủ số lượng?\nThao tác này sẽ in tem TO và kết thúc lô hàng hiện tại.')) {
-          this.state.closeSession(id, type);
-        }
-      });
-      // Gán sự kiện cho nút hủy
       btnContainer.querySelector('#btn-undo')?.addEventListener('click', () => {
         if (confirm(`Hủy RV ${rv} khỏi ID ${id}?`)) {
           this.state.removeScan(rv, id, type);
@@ -483,10 +523,15 @@ export class UIManager {
       btnContainer.innerHTML = '';
     }
 
+    // Không animation để tránh gây nhiễu
     if (card) {
-      card.style.animation = 'none';
-      card.offsetHeight;
-      card.style.animation = 'cardUpdate 0.25s ease';
+      if (animate) {
+        card.classList.add('animate');
+        // Tự xóa class sau khi animation kết thúc để lần sau có thể chạy lại
+        card.addEventListener('animationend', () => {
+          card.classList.remove('animate');
+        }, { once: true });
+      }
     }
   }
 
@@ -499,7 +544,9 @@ export class UIManager {
       count: session?.item_count || 0,
       threshold: session?.threshold || 30,
       isFull: session?.status === 'full',
-      unknownId: !id
+      closed: session?.status === 'closed',
+      unknownId: !id,
+      animate: true
     });
   }
 
@@ -510,6 +557,7 @@ export class UIManager {
       count: serverData.item_count,
       threshold: serverData.threshold || 30,
       isFull: serverData.status === 'full',
+      closed: serverData.status === 'closed',
       unknownId: !id
     });
   }
@@ -518,7 +566,7 @@ export class UIManager {
     if (!this.shadowRoot) return;
     const btnContainer = this.shadowRoot.getElementById('button-container');
     if (btnContainer && !btnContainer.querySelector('#btn-close')) {
-      btnContainer.innerHTML = '<button class="btn btn-close" id="btn-close">Xác nhận đóng gói (đầy)</button>';
+      btnContainer.innerHTML = '<button class="btn btn-close" id="btn-close">Xác nhận đóng kiện (đầy)</button>';
       btnContainer.querySelector('#btn-close')?.addEventListener('click', () => this.state.closeSession(id, type));
     }
   }
@@ -642,8 +690,9 @@ export class UIManager {
         this._savePrintedLabel({ toNumber, type, id, dateStr, number: numberPart, email: this.state.email, itemCount });
         this.state.markPrinted(id);
         this._updateCard({
-          id, type, rv: '✅ Đã đóng gói',
-          count: itemCount, threshold: 0, isFull: false
+          id, type, rv: '✅ Đã đóng kiện',
+          count: itemCount, threshold: 0, isFull: false,
+          closed: true
         });
       })
       .catch(() => {
@@ -659,5 +708,13 @@ export class UIManager {
           }
         }
       });
+  }
+
+  _showToast(message) {
+    const toast = document.createElement('div');
+    toast.className = 'toast-msg';
+    toast.textContent = message;
+    this.shadowRoot.appendChild(toast);
+    setTimeout(() => toast.remove(), 2500);
   }
 }

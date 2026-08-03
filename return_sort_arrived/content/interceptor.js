@@ -1,3 +1,4 @@
+// content/interceptor.js
 (function () {
     if (window.__qcInterceptorInjected) return;
     window.__qcInterceptorInjected = true;
@@ -59,7 +60,7 @@
 
     // ---- URL change detection (React Router) ----
     function notifyUrlChange(url) {
-        document.dispatchEvent(new CustomEvent('qc-url-change', { detail: { url } }));
+        document.dispatchEvent(new CustomEvent('url-change', { detail: { url } }));
     }
 
     const origPushState = history.pushState;

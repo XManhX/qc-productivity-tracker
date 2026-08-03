@@ -6,7 +6,7 @@
   "host_permissions": [
     "https://wms.ssc.shopee.vn/*",
     "https://script.google.com/*",
-    "https://arrival-manager.vercel.app/*"
+    "https://return-sort-arrived.vercel.app/*"
   ],
   "background": {
     "service_worker": "background.js"

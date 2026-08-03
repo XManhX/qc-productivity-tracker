@@ -1,3 +1,4 @@
+// content/ui/popup.js – Popup chính (Arrival)
 import { printLabel } from '../printer.js';
 
 const ID_COLORS = {
@@ -16,13 +17,13 @@ const STYLES = `
   position: fixed; width: 622px; background: #fff;
   border-radius: 20px; box-shadow: 0 20px 60px rgba(0,0,0,0.2), 0 0 0 2px rgba(0,0,0,0.05);
   z-index: 999999; overflow: hidden;
-  transition: width 0.3s ease, height 0.3s ease, border-radius 0.3s ease;
   display: flex; flex-direction: column;
   top: 50px; left: 50px;
 }
 .popup.minimized {
   width: 56px; height: 56px; border-radius: 50%; cursor: pointer;
   box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+  right: 20px; bottom: 20px; left: auto; top: auto;
 }
 .header {
   display: flex; align-items: center; justify-content: space-between;
@@ -33,6 +34,7 @@ const STYLES = `
   padding: 0; justify-content: center; width: 56px; height: 56px; border-radius: 50%;
   cursor: pointer; background: #1E293B; position: relative; overflow: hidden;
 }
+.minimized .header > * { display: none !important; }
 .minimized .header::after {
   content: attr(data-current-id);
   position: absolute; top: 50%; left: 50%;
@@ -100,41 +102,6 @@ const STYLES = `
 .btn-close-early:hover { background: #1976D2; }
 .btn-warning { background: #f97316; color: white; }
 .btn-warning:hover { background: #ea580c; }
-.open-sessions, .recent-labels {
-  width: 100%; display: flex; flex-direction: column; gap: 8px;
-  max-height: 200px; overflow-y: auto;
-}
-.section-title {
-  font-size: 14px; font-weight: 700; color: #64748b; margin-bottom: -4px;
-}
-.session-item {
-  display: flex; align-items: center; justify-content: space-between;
-  background: #f8fafc; border-radius: 12px; padding: 10px 14px;
-  cursor: pointer; transition: background 0.2s;
-}
-.session-item:hover { background: #e2e8f0; }
-.session-item-left {
-  display: flex; align-items: center; gap: 12px;
-}
-.session-id {
-  font-size: 18px; font-weight: 800; background: #cbd5e1; color: #1e293b;
-  border-radius: 8px; padding: 4px 10px; min-width: 36px; text-align: center;
-}
-.session-type { font-size: 14px; color: #334155; }
-.session-count { font-size: 14px; font-weight: 600; color: #0f172a; }
-.session-progress {
-  width: 80px; height: 6px; background: #e2e8f0; border-radius: 3px; overflow: hidden;
-}
-.session-progress-fill { height: 100%; background: #3b82f6; border-radius: 3px; }
-.btn-close-session {
-  background: #ef4444; color: white; border: none;
-  padding: 6px 14px; border-radius: 8px; font-weight: 600; font-size: 13px;
-  cursor: pointer; transition: background 0.2s;
-}
-.btn-close-session:hover { background: #dc2626; }
-.reprint-btn { background: #3b82f6; }
-.reprint-btn:hover { background: #2563eb; }
-.no-sessions { text-align: center; color: #94a3b8; font-size: 14px; padding: 10px; }
 `;
 
 export class UIManager {
@@ -147,9 +114,8 @@ export class UIManager {
     this.minimized = false;
     this.currentId = '';
     this._currentUrl = window.location.href;
-    this._recentLabels = [];
     this._init();
-    document.addEventListener('qc-url-change', (e) => this._onUrlChange(e.detail.url));
+    document.addEventListener('url-change', (e) => this._onUrlChange(e.detail.url));
   }
 
   _onUrlChange(newUrl) {
@@ -166,11 +132,7 @@ export class UIManager {
   _updateVisibility() {
     if (!this.host) return;
     this.host.style.display = this._isArrivingPage() ? '' : 'none';
-    if (this._isArrivingPage()) {
-      this._updateTop5();
-      this._renderOpenSessions();
-      this._renderRecentLabels();
-    }
+    if (this._isArrivingPage()) this._updateTop5();
   }
 
   _init() {
@@ -182,140 +144,6 @@ export class UIManager {
       const savedPos = result.popupPosition || { left: 50, top: 50 };
       this._createHost(savedPos);
     });
-  }
-
-  async _loadRecentLabels() {
-    try {
-      const { printedLabels } = await chrome.storage.local.get('printedLabels');
-      this._recentLabels = printedLabels || [];
-    } catch (e) {
-      this._recentLabels = [];
-    }
-  }
-
-  async _savePrintedLabel(labelData) {
-    this._recentLabels.unshift(labelData);
-    if (this._recentLabels.length > 10) this._recentLabels.pop();
-    await chrome.storage.local.set({ printedLabels: this._recentLabels });
-    this._renderRecentLabels();
-  }
-
-  _renderRecentLabels() {
-    if (!this.shadowRoot) return;
-    const container = this.shadowRoot.getElementById('recent-labels');
-    if (!container) return;
-    if (this._recentLabels.length === 0) {
-      container.innerHTML = '<div class="no-sessions">Chưa có tem nào</div>';
-      return;
-    }
-    container.innerHTML = this._recentLabels.map(label => `
-      <div class="session-item">
-        <div class="session-item-left">
-          <div class="session-id" style="background:#cbd5e1;">${label.id || '?'}</div>
-          <div class="session-type">${label.type || ''}</div>
-          <div class="session-count">QTY: ${label.itemCount}</div>
-        </div>
-        <button class="btn-close-session reprint-btn" 
-                data-to="${label.toNumber}" 
-                data-type="${label.type}" 
-                data-id="${label.id}" 
-                data-date="${label.dateStr}" 
-                data-number="${label.number}" 
-                data-email="${label.email}" 
-                data-qty="${label.itemCount}">In lại</button>
-      </div>
-    `).join('');
-
-    container.querySelectorAll('.reprint-btn').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        const { to, type, id, date, number, email, qty } = btn.dataset;
-        this._retryPrint(to, type, id, date, number, email, parseInt(qty));
-      });
-    });
-  }
-
-  async _retryPrint(toNumber, type, id, dateStr, number, email, itemCount) {
-    let attempts = 0;
-    const maxAttempts = 3;
-    while (attempts < maxAttempts) {
-      try {
-        await printLabel(toNumber, type, id, dateStr, number, email, itemCount);
-        console.log('Print succeeded on attempt', attempts + 1);
-        return;
-      } catch (e) {
-        console.error(`Print attempt ${attempts + 1} failed:`, e);
-        attempts++;
-        if (attempts < maxAttempts) {
-          await new Promise(r => setTimeout(r, 1000));
-        }
-      }
-    }
-    alert('In thất bại sau 3 lần thử. Vui lòng kiểm tra máy in hoặc tải file HTML.');
-    // Fallback tải file
-    const html = this._generateLabelHTML(toNumber, type, id, dateStr, number, email, itemCount);
-    const blob = new Blob([html], { type: 'text/html;charset=UTF-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${toNumber}.html`;
-    a.click();
-  }
-
-  _generateLabelHTML(toNumber, type, id, dateStr, number, email, itemCount) {
-    return `<!DOCTYPE html>
-<html lang="vi">
-<head>
-  <meta charset="UTF-8">
-  <style>
-    @page { size: 100mm 50mm; margin: 0; }
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body {
-      width: 100mm; height: 50mm;
-      font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
-      background: white;
-      display: flex; align-items: stretch;
-    }
-    .left {
-      width: 67%;
-      display: flex; flex-direction: column; justify-content: space-between;
-      padding: 3mm 3mm 3mm 5mm;
-    }
-    .right {
-      width: 33%;
-      display: flex; flex-direction: column; align-items: center; justify-content: space-between;
-      padding: 3mm 5mm 3mm 0;
-    }
-    .to-main {
-      font-size: 24px; font-weight: 800; color: #000;
-      letter-spacing: 0.5px; line-height: 1.2;
-      text-transform: uppercase;
-    }
-    .to-small { text-transform: uppercase; margin-bottom: 1mm; }
-    .number-text { font-size: 18px; font-weight: 700; color: #000; font-family: 'Courier New', Courier, monospace; letter-spacing: 0.5px; }
-    .date-text { font-size: 16px; font-weight: 700; color: #000; font-family: 'Courier New', Courier, monospace; }
-    .email-text { font-size: 12px; font-weight: 500; color: #000; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .qty-text { font-size: 16px; font-weight: 700; color: #000; font-family: 'Courier New', Courier, monospace; }
-    .qr-wrapper img { width: 30mm; height: 30mm; filter: grayscale(100%) contrast(150%); }
-  </style>
-</head>
-<body>
-  <div class="left">
-    <div class="to-main">TO-${type}-${id}</div>
-    <div class="number-text">${number}</div>
-    <div class="date-text">${dateStr}</div>
-    <div class="qty-text">QTY: ${itemCount}</div>
-    <div class="email-text" title="${email}">${email}</div>
-  </div>
-  <div class="right">
-    <div class="to-small">TO-${type}-${id}</div>
-    <div class="qr-wrapper">
-      <img src="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgZmlsbD0id2hpdGUiLz48L3N2Zz4=" alt="QR" />
-    </div>
-    <div class="qty-text">QTY: ${itemCount}</div>
-  </div>
-</body>
-</html>`;
   }
 
   _createHost({ left, top }) {
@@ -352,10 +180,6 @@ export class UIManager {
           <div id="button-container"></div>
           <div id="error-info" style="display:none;"></div>
         </div>
-        <div class="section-title">ID đang mở</div>
-        <div class="open-sessions" id="open-sessions"></div>
-        <div class="section-title">In lại tem gần đây</div>
-        <div class="recent-labels" id="recent-labels"></div>
       </div>
     `;
     this.shadowRoot.appendChild(this.popup);
@@ -366,14 +190,6 @@ export class UIManager {
     this._setupDrag();
     this._bindEvents();
     this._updateTop5();
-    this._renderOpenSessions();
-    this._loadRecentLabels().then(() => this._renderRecentLabels());
-  }
-
-  destroy() {
-    if (this.host && this.host.parentNode) {
-      this.host.parentNode.removeChild(this.host);
-    }
   }
 
   _clampPosition() {
@@ -404,11 +220,14 @@ export class UIManager {
       const dx = e.clientX - startX, dy = e.clientY - startY;
       let newLeft = initialLeft + dx, newTop = initialTop + dy;
       const rect = this.popup.getBoundingClientRect();
-      newLeft = Math.max(0, Math.min(newLeft, window.innerWidth - rect.width));
-      newTop = Math.max(0, Math.min(newTop, window.innerHeight - rect.height));
+      const maxLeft = window.innerWidth - rect.width;
+      const maxTop = window.innerHeight - rect.height;
+      newLeft = Math.max(0, Math.min(newLeft, maxLeft));
+      newTop = Math.max(0, Math.min(newTop, maxTop));
       this.popup.style.left = newLeft + 'px';
       this.popup.style.top = newTop + 'px';
     };
+
     const onMouseUp = () => {
       document.removeEventListener('mousemove', onMouseMove);
       document.removeEventListener('mouseup', onMouseUp);
@@ -416,7 +235,8 @@ export class UIManager {
       if (moved) this._savePosition();
       moved = false;
     };
-    header.addEventListener('mousedown', (e) => {
+
+    const startDrag = (e) => {
       if (e.target.closest('#btn-minimize')) return;
       startX = e.clientX; startY = e.clientY;
       const rect = this.popup.getBoundingClientRect();
@@ -424,7 +244,14 @@ export class UIManager {
       moved = false;
       document.addEventListener('mousemove', onMouseMove);
       document.addEventListener('mouseup', onMouseUp);
-    });
+    };
+
+    if (this.minimized) {
+      this.popup.addEventListener('mousedown', startDrag);
+    } else {
+      header.addEventListener('mousedown', startDrag);
+    }
+    this._dragStartHandler = startDrag;
   }
 
   _bindEvents() {
@@ -436,15 +263,34 @@ export class UIManager {
 
   toggleMinimize() {
     this.minimized = !this.minimized;
+    const header = this.shadowRoot.getElementById('header');
+
     if (this.minimized) {
+      const rect = this.popup.getBoundingClientRect();
+      this.popup.dataset.savedLeft = rect.left;
+      this.popup.dataset.savedTop = rect.top;
       this.popup.classList.add('minimized');
-      this.popup.querySelector('.header').setAttribute('data-current-id', this.currentId || '?');
+      this.popup.style.left = '';
+      this.popup.style.top = '';
+      header.setAttribute('data-current-id', this.currentId || '?');
     } else {
+      const savedLeft = parseFloat(this.popup.dataset.savedLeft);
+      const savedTop = parseFloat(this.popup.dataset.savedTop);
+      if (!isNaN(savedLeft)) this.popup.style.left = savedLeft + 'px';
+      if (!isNaN(savedTop)) this.popup.style.top = savedTop + 'px';
       this.popup.classList.remove('minimized');
-      this.popup.querySelector('.header').removeAttribute('data-current-id');
+      header.removeAttribute('data-current-id');
       this._updateTop5();
-      this._renderOpenSessions();
-      this._renderRecentLabels();
+    }
+
+    if (this._dragStartHandler) {
+      if (this.minimized) {
+        header.removeEventListener('mousedown', this._dragStartHandler);
+        this.popup.addEventListener('mousedown', this._dragStartHandler);
+      } else {
+        this.popup.removeEventListener('mousedown', this._dragStartHandler);
+        header.addEventListener('mousedown', this._dragStartHandler);
+      }
     }
   }
 
@@ -484,75 +330,7 @@ export class UIManager {
 
   updateTop5(sessions) {
     this.state.sessions = sessions;
-    if (this.shadowRoot) {
-      this._updateTop5();
-      this._renderOpenSessions();
-    }
-  }
-
-  _renderOpenSessions() {
-    if (!this.shadowRoot) return;
-    const container = this.shadowRoot.getElementById('open-sessions');
-    if (!container) return;
-    const sessions = this.state.sessions || [];
-    const openSessions = sessions.filter(s => s.status === 'open' || s.status === 'full');
-    if (openSessions.length === 0) {
-      container.innerHTML = '<div class="no-sessions">Không có ID nào đang mở</div>';
-      return;
-    }
-    container.innerHTML = openSessions.map(s => {
-      const threshold = s.threshold || 30;
-      const count = s.item_count;
-      const percent = Math.min(100, Math.round((count / threshold) * 100));
-      const bgColor = ID_COLORS[s.id] || '#607D8B';
-      return `
-        <div class="session-item" data-id="${s.id}">
-          <div class="session-item-left">
-            <div class="session-id" style="background:${bgColor}; color:${getTextColor(bgColor)}">${s.id}</div>
-            <div class="session-type">${s.type_group || ''}</div>
-            <div class="session-count">${count}/${threshold}</div>
-            <div class="session-progress">
-              <div class="session-progress-fill" style="width:${percent}%"></div>
-            </div>
-          </div>
-          ${count > 0 ? `<button class="btn-close-session" data-close-id="${s.id}">Đóng gói</button>` : ''}
-        </div>
-      `;
-    }).join('');
-
-    container.querySelectorAll('.session-item').forEach(item => {
-      item.addEventListener('click', (e) => {
-        if (e.target.closest('.btn-close-session')) return;
-        const id = item.dataset.id;
-        const session = openSessions.find(s => s.id === id);
-        if (session) this._showSessionDetail(session);
-      });
-    });
-    container.querySelectorAll('.btn-close-session').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        const id = btn.dataset.closeId;
-        const session = openSessions.find(s => s.id === id);
-        if (session) {
-          if (confirm(`Đóng gói ID ${id} (${session.type_group}) với ${session.item_count} đơn?`)) {
-            this.state.closeSession(id, session.type_group);
-          }
-        }
-      });
-    });
-  }
-
-  _showSessionDetail(session) {
-    const isFull = session.status === 'full';
-    this.currentId = session.id;
-    this._updateCard({
-      id: session.id,
-      type: session.type_group,
-      rv: `ID ${session.id}`,
-      count: session.item_count,
-      threshold: session.threshold || 30,
-      isFull
-    });
+    if (this.shadowRoot) this._updateTop5();
   }
 
   _updateCard({ id, type, rv, count, threshold, isFull, error }) {
@@ -705,24 +483,108 @@ export class UIManager {
     });
   }
 
+  async _retryPrint(toNumber, type, id, dateStr, number, email, itemCount) {
+    let attempts = 0;
+    const maxAttempts = 3;
+    while (attempts < maxAttempts) {
+      try {
+        await printLabel(toNumber, type, id, dateStr, number, email, itemCount);
+        return;
+      } catch (e) {
+        console.error(`Print attempt ${attempts + 1} failed:`, e);
+        attempts++;
+        if (attempts < maxAttempts) await new Promise(r => setTimeout(r, 1000));
+      }
+    }
+    alert('In thất bại sau 3 lần thử. Vui lòng kiểm tra máy in hoặc tải file HTML.');
+    const html = this._generateLabelHTML(toNumber, type, id, dateStr, number, email, itemCount);
+    const blob = new Blob([html], { type: 'text/html;charset=UTF-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${toNumber}.html`;
+    a.click();
+  }
+
+  _generateLabelHTML(toNumber, type, id, dateStr, number, email, itemCount) {
+    return `<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <style>
+    @page { size: 100mm 50mm; margin: 0; }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      width: 100mm; height: 50mm;
+      font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+      background: white;
+      display: flex; align-items: stretch;
+    }
+    .left {
+      width: 67%;
+      display: flex; flex-direction: column; justify-content: space-between;
+      padding: 3mm 3mm 3mm 5mm;
+    }
+    .right {
+      width: 33%;
+      display: flex; flex-direction: column; align-items: center; justify-content: space-between;
+      padding: 3mm 5mm 3mm 0;
+    }
+    .to-main {
+      font-size: 24px; font-weight: 800; color: #000;
+      letter-spacing: 0.5px; line-height: 1.2;
+      text-transform: uppercase;
+    }
+    .to-small { text-transform: uppercase; margin-bottom: 1mm; }
+    .number-text { font-size: 18px; font-weight: 700; color: #000; font-family: 'Courier New', Courier, monospace; letter-spacing: 0.5px; }
+    .date-text { font-size: 16px; font-weight: 700; color: #000; font-family: 'Courier New', Courier, monospace; }
+    .email-text { font-size: 12px; font-weight: 500; color: #000; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .qty-text { font-size: 16px; font-weight: 700; color: #000; font-family: 'Courier New', Courier, monospace; }
+    .qr-wrapper img { width: 30mm; height: 30mm; filter: grayscale(100%) contrast(150%); }
+  </style>
+</head>
+<body>
+  <div class="left">
+    <div class="to-main">TO-${type}-${id}</div>
+    <div class="number-text">${number}</div>
+    <div class="date-text">${dateStr}</div>
+    <div class="qty-text">QTY: ${itemCount}</div>
+    <div class="email-text" title="${email}">${email}</div>
+  </div>
+  <div class="right">
+    <div class="to-small">TO-${type}-${id}</div>
+    <div class="qr-wrapper">
+      <img src="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgZmlsbD0id2hpdGUiLz48L3N2Zz4=" alt="QR" />
+    </div>
+    <div class="qty-text">QTY: ${itemCount}</div>
+  </div>
+</body>
+</html>`;
+  }
+
+  async _savePrintedLabel(labelData) {
+    const { printedLabels } = await chrome.storage.local.get('printedLabels');
+    const labels = printedLabels || [];
+    labels.unshift(labelData);
+    if (labels.length > 10) labels.pop();
+    await chrome.storage.local.set({ printedLabels: labels });
+  }
+
   printAndClose(id, type, toNumber, itemCount) {
     this._updateCard({
       id, type, rv: 'Đang in...',
       count: itemCount, threshold: 0, isFull: false
     });
-
     const date = new Date();
     const dateStr = `${date.getDate().toString().padStart(2, '0')} ${date.getMonth() + 1} ${date.getFullYear().toString().slice(-2)}`;
     const numberPart = toNumber.split('-').pop();
-
     this._retryPrint(toNumber, type, id, dateStr, numberPart, this.state.email, itemCount)
       .then(() => {
         this._savePrintedLabel({ toNumber, type, id, dateStr, number: numberPart, email: this.state.email, itemCount });
         this._updateCard({
-          id, type, rv: '✅ In tem thành công',
+          id, type, rv: '✅ Đã đóng gói',
           count: itemCount, threshold: 0, isFull: false
         });
-        setTimeout(() => this._updateCard({}), 3000);
       })
       .catch(() => {
         this._updateCard({

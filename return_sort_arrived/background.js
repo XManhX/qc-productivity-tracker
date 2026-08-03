@@ -1,3 +1,4 @@
+// background.js
 importScripts('./lib/supabase.min.js');
 
 const { createClient } = supabase;
@@ -6,7 +7,7 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 const APPS_SCRIPT_URL = 'https://script.google.com/a/macros/shopee.com/s/AKfycbxvt58g6NXM8gAC4mCMq2j6ZTWKkiF85qWxWYMW2KNLw00gweL4fMjvIE4J3sYeq-75/exec';
 
 const supabaseClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-const API_BASE = 'https://arrival-manager.vercel.app/api/config';
+const API_BASE = 'https://return-sort-arrived.vercel.app/api/config';
 let masterDataMap = {};
 let typeToIdMap = {};
 
@@ -48,14 +49,20 @@ async function fetchTypeMappings() {
 supabaseClient
   .channel('id_sessions_changes')
   .on('postgres_changes', { event: '*', schema: 'public', table: 'id_sessions' }, (payload) => {
+    console.log('[BG] Realtime change:', payload);
     broadcastSessions();
   })
-  .subscribe();
+  .subscribe((status) => {
+    console.log('[BG] Subscription status:', status);
+  });
 
 async function broadcastSessions() {
   const { data, error } = await supabaseClient.rpc('get_active_sessions');
+  console.log('[BG] broadcastSessions – data:', data, 'error:', error);
   if (!error && data) {
-    chrome.runtime.sendMessage({ action: 'UPDATE_SESSIONS', sessions: data }).catch(() => { });
+    chrome.runtime.sendMessage({ action: 'UPDATE_SESSIONS', sessions: data })
+      .then(() => console.log('[BG] UPDATE_SESSIONS sent'))
+      .catch(e => console.error('[BG] sendMessage failed:', e));
   }
 }
 
@@ -68,9 +75,30 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return true;
   }
 
+  if (msg.action === 'GET_CLOSED_SESSIONS') {
+    (async () => {
+      const page = msg.page || 1;
+      const limit = msg.limit || 20;
+      const { data, error } = await supabaseClient.rpc('get_closed_sessions', {
+        p_page: page,
+        p_limit: limit
+      });
+      sendResponse({ sessions: data || [] });
+    })();
+    return true;
+  }
+
+  if (msg.action === 'GET_CLOSED_COUNT') {
+    (async () => {
+      const { data, error } = await supabaseClient.rpc('count_closed_sessions');
+      sendResponse({ count: error ? 0 : data });
+    })();
+    return true;
+  }
+
   if (msg.action === 'API_CALL') {
     const { endpoint, body } = msg;
-    const url = `https://arrival-manager.vercel.app/api/scan/${endpoint}`;
+    const url = `https://return-sort-arrived.vercel.app/api/scan/${endpoint}`;
     (async () => {
       try {
         const res = await fetch(url, {

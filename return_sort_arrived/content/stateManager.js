@@ -101,6 +101,15 @@ export class StateManager {
 
     handleArrived(rv) { this._handleScan(rv); }
 
+    showSessionDetail(id) {
+        if (!this.ui) return;
+        const session = this.sessions.find(s => s.id === id);
+        if (session) {
+            const displayType = this.getDisplayName(session.type_group);
+            this.ui.showDetected(`ID ${id}`, displayType, id, session);
+        }
+    }
+
     async _handleScan(rv) {
         await this._waitForTypeMapping();
         if (!this.ui) return;
@@ -113,7 +122,7 @@ export class StateManager {
             const session = id ? this.sessions.find(s => s.id === id) : null;
             this.ui.showDetected(rv, displayType, id, session);
             const utterance = new SpeechSynthesisUtterance(id || 'không xác định');
-            utterance.lang = 'vi-VN';
+            utterance.lang = 'vi';
             window.speechSynthesis.speak(utterance);
         } else {
             this.ui.showWarning('Không có trong master data');
@@ -164,7 +173,7 @@ export class StateManager {
         try {
             const data = await this._callApi('decrement', { id, rv });
             if (!data.success) {
-                this.ui.showError(data.error || 'Không thể hủy RV này');
+                this.ui.showError(data.error || 'Không thể hủy đơn này');
                 return;
             }
             const freshSessions = await this._fetchSessions();

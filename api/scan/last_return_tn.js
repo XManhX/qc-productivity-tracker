@@ -7,10 +7,10 @@ const supabase = createClient(
 
 export default async function handler(req, res) {
     if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
-    const { id, return_tn } = req.body;
-    if (!id || !return_tn) return res.status(400).json({ error: 'Missing id or return_tn' });
+    const { id } = req.body;
+    if (!id) return res.status(400).json({ error: 'Missing id' });
 
-    const { data, error } = await supabase.rpc('decrement_item_count', { p_id: id, p_return_tn: return_tn });
+    const { data, error } = await supabase.rpc('get_last_return_tn', { p_station_id: id });
     if (error) return res.status(500).json({ error: error.message });
-    return res.status(200).json(data);
+    return res.status(200).json({ last_return_tn: data });
 }

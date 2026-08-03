@@ -1,4 +1,4 @@
-// content/ui/popup.js – Popup chính (Arrival) - sử dụng display_name
+// content/ui/popup.js – Popup chính (Arrival) - thêm click top 5 để xem chi tiết
 import { printLabel } from '../printer.js';
 
 const ID_COLORS = {
@@ -51,9 +51,11 @@ const STYLES = `
   border-radius: 14px; padding: 6px 8px; width: 88px;
   display: flex; flex-direction: column; align-items: center; gap: 1px;
   flex-shrink: 0; transition: filter 0.2s, box-shadow 0.2s; color: white; font-weight: 700;
+  cursor: pointer; /* thêm con trỏ chỉ tay */
 }
 .badge-card.placeholder {
   background: rgba(255,255,255,0.1); color: rgba(255,255,255,0.4);
+  cursor: default;
 }
 .badge-card:hover:not(.placeholder) {
   filter: brightness(1.2);
@@ -74,16 +76,18 @@ const STYLES = `
   cursor: pointer; transition: background 0.2s; font-size: 16px;
 }
 .btn-icon:hover { background: rgba(255,255,255,0.35); }
-.body { padding: 24px; display: flex; flex-direction: column; gap: 16px; overflow: hidden; align-items: center; }
+.body {
+  padding: 24px; display: flex; flex-direction: column; gap: 16px;
+  overflow: visible; align-items: center; position: relative;
+}
 .minimized .body { display: none; }
 .minimized .header-left { display: none; }
 .minimized .actions { display: none; }
 .state-card {
   border-radius: 20px; padding: 24px; text-align: center; transition: background 0.3s;
-  width: 100%; box-sizing: border-box; display: flex; flex-direction: column; align-items: center; gap: 12px;
-  /* Không đặt animation mặc định ở đây */
+  width: 100%; box-sizing: border-box; display: flex; flex-direction: column;
+  align-items: center; gap: 12px; position: relative;
 }
-/* Thêm class animate */
 .state-card.animate {
   animation: cardUpdate 0.25s ease;
 }
@@ -91,14 +95,37 @@ const STYLES = `
   0% { opacity: 0.7; transform: scale(0.98); }
   100% { opacity: 1; transform: scale(1); }
 }
+.top-left-actions {
+  position: absolute; top: 8px; left: 8px; display: flex; gap: 6px; z-index: 10;
+}
+.top-right-actions {
+  position: absolute; top: 8px; right: 8px; z-index: 10;
+}
+.btn-icon-action {
+  background: rgba(0,0,0,0.05); border: none; border-radius: 50%;
+  width: 36px; height: 36px; display: flex; align-items: center; justify-content: center;
+  cursor: pointer; transition: background 0.2s; position: relative;
+}
+.btn-icon-action:hover { background: rgba(0,0,0,0.1); }
+.btn-icon-action:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn-icon-action .spinner {
+  width: 16px; height: 16px; border: 2px solid #ccc; border-top-color: #333;
+  border-radius: 50%; animation: spin 0.6s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+[data-tooltip] { position: relative; }
+[data-tooltip]:hover::after {
+  content: attr(data-tooltip); position: absolute; bottom: calc(100% + 6px); left: 50%;
+  transform: translateX(-50%); background: #333; color: #fff; padding: 4px 10px;
+  border-radius: 6px; font-size: 12px; white-space: nowrap; pointer-events: none; z-index: 100;
+}
 .id-big {
   font-size: 64px; font-weight: 800; line-height: 1.2; padding: 20px; border-radius: 20px;
   display: inline-block; transition: background 0.3s, color 0.3s;
 }
 .id-big.unknown {
   background: repeating-linear-gradient(45deg, #f0f0f0, #f0f0f0 10px, #e0e0e0 10px, #e0e0e0 20px);
-  color: #999;
-  border: 2px dashed #ccc;
+  color: #999; border: 2px dashed #ccc;
 }
 .rv-text { font-size: 28px; font-weight: 700; color: #0f172a; word-break: break-all; min-height: 40px; }
 .type-text { font-size: 22px; font-weight: 700; color: #334155; min-height: 30px; }
@@ -116,19 +143,6 @@ const STYLES = `
 .btn-close-early:hover { background: #1976D2; }
 .btn-warning { background: #f97316; color: white; }
 .btn-warning:hover { background: #ea580c; }
-.btn-undo {
-  background: #e2e8f0; color: #475569; font-size: 16px; padding: 8px 16px;
-}
-.btn-undo:hover { background: #cbd5e1; }
-.refresh-buttons {
-  display: flex; justify-content: flex-end; gap: 6px; margin-top: 8px;
-}
-.btn-refresh {
-  background: transparent; border: 1px dashed #94a3b8; color: #64748b;
-  padding: 4px 10px; border-radius: 8px; font-size: 12px; font-weight: 500;
-  cursor: pointer; transition: all 0.2s;
-}
-.btn-refresh:hover { background: #f1f5f9; border-color: #64748b; color: #334155; }
 .toast-msg {
   position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
   background: #1e293b; color: white; padding: 8px 20px; border-radius: 10px;
@@ -207,7 +221,15 @@ export class UIManager {
         </div>
       </div>
       <div class="body" id="body">
+
         <div class="state-card" id="state-card">
+          <div class="top-left-actions">
+            <button class="btn-icon-action" id="btn-refresh-master" data-tooltip="Cập nhật Master Data">🔄</button>
+            <button class="btn-icon-action" id="btn-refresh-mapping" data-tooltip="Cập nhật Type Mapping">🗂️</button>
+          </div>
+          <div class="top-right-actions">
+            <button class="btn-icon-action" id="btn-undo" style="display:none;" data-tooltip="Hủy RV này">🗑️</button>
+          </div>
           <div id="id-box" class="id-big" style="background:#cbd5e1; color:#fff; min-width: 80px;">?</div>
           <div class="type-text" id="type-el">--</div>
           <div class="rv-text" id="rv-el">----</div>
@@ -215,10 +237,6 @@ export class UIManager {
           <div class="count-text" id="count-el">0/30</div>
           <div id="button-container"></div>
           <div id="error-info" style="display:none;"></div>
-        </div>
-        <div class="refresh-buttons">
-          <button class="btn-refresh" id="btn-refresh-master" title="Cập nhật Master Data">🔄 MD</button>
-          <button class="btn-refresh" id="btn-refresh-mapping" title="Cập nhật Type Mapping">🔄 Type</button>
         </div>
       </div>
     `;
@@ -300,22 +318,33 @@ export class UIManager {
       this.toggleMinimize();
     });
 
-    // Nút refresh
-    this.shadowRoot.getElementById('btn-refresh-master').addEventListener('click', async () => {
+    const refreshMaster = this.shadowRoot.getElementById('btn-refresh-master');
+    refreshMaster.addEventListener('click', async () => {
+      refreshMaster.disabled = true;
+      refreshMaster.innerHTML = '<span class="spinner"></span>';
       try {
         await this.state.refreshMasterData();
         this._showToast('✅ Master Data đã được cập nhật');
       } catch (e) {
         this._showToast('❌ Lỗi cập nhật Master Data');
+      } finally {
+        refreshMaster.disabled = false;
+        refreshMaster.innerHTML = '🔄';
       }
     });
 
-    this.shadowRoot.getElementById('btn-refresh-mapping').addEventListener('click', async () => {
+    const refreshMapping = this.shadowRoot.getElementById('btn-refresh-mapping');
+    refreshMapping.addEventListener('click', async () => {
+      refreshMapping.disabled = true;
+      refreshMapping.innerHTML = '<span class="spinner"></span>';
       try {
         await this.state.refreshTypeMapping();
         this._showToast('✅ Type Mapping đã được cập nhật');
       } catch (e) {
         this._showToast('❌ Lỗi cập nhật Type Mapping');
+      } finally {
+        refreshMapping.disabled = false;
+        refreshMapping.innerHTML = '🗂️';
       }
     });
   }
@@ -370,9 +399,8 @@ export class UIManager {
         const count = s.item_count;
         const percent = Math.min(100, Math.round((count / threshold) * 100));
         const bgColor = ID_COLORS[s.id] || '#607D8B';
-        // Sử dụng display_name thay vì type_group thô
         const displayType = this.state.getDisplayName(s.type_group) || (s.type_group || '').substring(0, 12);
-        html += `<div class="badge-card" style="background:${bgColor};" title="ID ${s.id}: ${s.type_group} – ${count}/${threshold}">
+        html += `<div class="badge-card" style="background:${bgColor};" title="ID ${s.id}: ${s.type_group} – ${count}/${threshold}" data-id="${s.id}">
           <div class="badge-id">${s.id}</div>
           <div class="badge-type" title="${s.type_group}">${displayType || '-'}</div>
           <div class="badge-count">${count}/${threshold}</div>
@@ -386,6 +414,14 @@ export class UIManager {
       }
     }
     topRow.innerHTML = html;
+
+    // Gắn sự kiện click cho các badge thực (không phải placeholder)
+    topRow.querySelectorAll('.badge-card:not(.placeholder)').forEach(badge => {
+      badge.addEventListener('click', (e) => {
+        const id = badge.dataset.id;
+        if (id) this.state.showSessionDetail(id);
+      });
+    });
   }
 
   updateTop5(sessions) {
@@ -404,6 +440,7 @@ export class UIManager {
     const btnContainer = this.shadowRoot.getElementById('button-container');
     const card = this.shadowRoot.getElementById('state-card');
     const errorInfo = this.shadowRoot.getElementById('error-info');
+    const undoBtn = this.shadowRoot.getElementById('btn-undo');
 
     if (idBox) { idBox.style.display = 'none'; idBox.classList.remove('unknown'); }
     if (typeEl) typeEl.style.display = 'none';
@@ -415,6 +452,19 @@ export class UIManager {
 
     const isUnknown = unknownId || (error && !id);
     const canOperate = !closed && !error && count > 0 && id && !isUnknown;
+
+    if (undoBtn) {
+      if (canOperate) {
+        undoBtn.style.display = 'flex';
+        undoBtn.onclick = () => {
+          if (confirm(`Hủy RV ${rv} khỏi ID ${id}?`)) {
+            this.state.removeScan(rv, id, type);
+          }
+        };
+      } else {
+        undoBtn.style.display = 'none';
+      }
+    }
 
     if (error) {
       if (idBox) {
@@ -449,14 +499,11 @@ export class UIManager {
           <div style="font-size:16px; color:#555;">${error.detail || ''}</div>
         `;
       }
-      if (canOperate && btnContainer) {
-        btnContainer.style.display = 'block';
-        btnContainer.innerHTML = `<button class="btn btn-undo" id="btn-undo">↩️ Hủy đơn này</button>`;
-        btnContainer.querySelector('#btn-undo')?.addEventListener('click', () => {
-          if (confirm(`Hủy RV ${rv} khỏi ID ${id}?`)) {
-            this.state.removeScan(rv, id, type);
-          }
-        });
+      if (card) {
+        if (animate) {
+          card.classList.add('animate');
+          card.addEventListener('animationend', () => card.classList.remove('animate'), { once: true });
+        }
       }
       return;
     }
@@ -496,41 +543,27 @@ export class UIManager {
     }
 
     if (canOperate && btnContainer) {
-      const undoButton = `<button class="btn btn-undo" id="btn-undo">↩️ Hủy đơn này</button>`;
       if (isFull) {
-        btnContainer.innerHTML = `
-          <button class="btn btn-close" id="btn-close">Xác nhận đóng kiện (đầy)</button>
-          ${undoButton}
-        `;
+        btnContainer.innerHTML = `<button class="btn btn-close" id="btn-close">Xác nhận đóng kiện (đầy)</button>`;
         btnContainer.querySelector('#btn-close')?.addEventListener('click', () => this.state.closeSession(id, type));
       } else {
-        btnContainer.innerHTML = `
-          <button class="btn btn-close-early" id="btn-close-early">Đóng kiện ngay (${count}/${threshold || 30})</button>
-          ${undoButton}
-        `;
+        btnContainer.innerHTML = `<button class="btn btn-close-early" id="btn-close-early">Đóng kiện ngay (${count}/${threshold || 30})</button>`;
         btnContainer.querySelector('#btn-close-early')?.addEventListener('click', () => {
           if (confirm('Bạn có chắc muốn đóng kiện khi chưa đủ số lượng?\nThao tác này sẽ in tem TO và kết thúc lô hàng hiện tại.')) {
             this.state.closeSession(id, type);
           }
         });
       }
-      btnContainer.querySelector('#btn-undo')?.addEventListener('click', () => {
-        if (confirm(`Hủy RV ${rv} khỏi ID ${id}?`)) {
-          this.state.removeScan(rv, id, type);
-        }
-      });
     } else if (btnContainer) {
       btnContainer.innerHTML = '';
     }
 
-    // Không animation để tránh gây nhiễu
     if (card) {
       if (animate) {
         card.classList.add('animate');
-        // Tự xóa class sau khi animation kết thúc để lần sau có thể chạy lại
-        card.addEventListener('animationend', () => {
-          card.classList.remove('animate');
-        }, { once: true });
+        card.addEventListener('animationend', () => card.classList.remove('animate'), { once: true });
+      } else {
+        card.classList.remove('animate');
       }
     }
   }
@@ -538,9 +571,7 @@ export class UIManager {
   showDetected(rv, type, id, session) {
     this.currentId = id || '';
     this._updateCard({
-      id: id || null,
-      type: type || null,
-      rv,
+      id: id || null, type: type || null, rv,
       count: session?.item_count || 0,
       threshold: session?.threshold || 30,
       isFull: session?.status === 'full',
@@ -558,7 +589,8 @@ export class UIManager {
       threshold: serverData.threshold || 30,
       isFull: serverData.status === 'full',
       closed: serverData.status === 'closed',
-      unknownId: !id
+      unknownId: !id,
+      animate: true
     });
   }
 
@@ -582,11 +614,10 @@ export class UIManager {
   showScanError({ rv, type, id, reason, detail }) {
     this.currentId = id || '';
     this._updateCard({
-      id: id || null,
-      type: type || null,
-      rv,
+      id: id || null, type: type || null, rv,
       error: { reason, detail },
-      unknownId: !id
+      unknownId: !id,
+      animate: true
     });
   }
 

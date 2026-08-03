@@ -18,9 +18,9 @@ async function fetchMasterData() {
     if (json.success && Array.isArray(json.data)) {
       const map = {};
       json.data.forEach(item => {
-        const rv = String(item.rv || '').trim().toUpperCase().replace(/\s+/g, '');
+        const return_tn = String(item.rv || '').trim().toUpperCase().replace(/\s+/g, '');
         const type = String(item.type || '').trim();
-        if (rv) map[rv] = type;
+        if (return_tn) map[return_tn] = type;
       });
       await chrome.storage.local.set({ masterData: map, masterDataUpdated: Date.now() });
       masterDataMap = map;
@@ -37,6 +37,8 @@ async function fetchTypeMappings() {
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const json = await res.json();
     typeToIdMap = json;
+    // Lưu vào storage để content script có thể lấy trực tiếp
+    await chrome.storage.local.set({ typeMapping: json, typeMappingUpdated: Date.now() });
     console.log('[BG] Type mappings updated:', Object.keys(typeToIdMap).length);
   } catch (e) {
     console.error('[BG] Fetch type mappings error:', e);
@@ -149,7 +151,5 @@ chrome.runtime.onConnect.addListener((port) => {
   }
 });
 
-// Định kỳ cập nhật master data và type mapping
-setInterval(fetchMasterData, 5 * 60 * 1000);
 fetchTypeMappings();
 fetchMasterData();

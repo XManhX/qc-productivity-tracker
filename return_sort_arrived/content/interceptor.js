@@ -1,14 +1,14 @@
-// content/interceptor.js – luôn dispatch as-rv-arrived, không phân biệt lỗi
+// content/interceptor.js – luôn dispatch as-return-tn-arrived, không phân biệt lỗi
 (function () {
     if (window.__asInterceptorInjected) return;
     window.__asInterceptorInjected = true;
 
     console.log('[AS Interceptor] Injecting into main world...');
 
-    let pendingRV = null;
+    let pendingReturnTn = null;
 
-    function notifyArrived(rv) {
-        document.dispatchEvent(new CustomEvent('as-rv-arrived', { detail: { rv } }));
+    function notifyArrived(return_tn) {
+        document.dispatchEvent(new CustomEvent('as-return-tn-arrived', { detail: { return_tn } }));
     }
 
     // Tìm nút Complete (không phân biệt hoa thường)
@@ -81,7 +81,7 @@
                 const body = args[0]?.body;
                 if (typeof body === 'string') {
                     const parsed = JSON.parse(body);
-                    pendingRV = parsed.sheet_id || null; // luôn lấy sheet_id làm RV
+                    pendingReturnTn = parsed.sheet_id || null; // luôn lấy sheet_id làm pendingReturnTn, không phân biệt lỗi
                 }
             } catch (e) { }
         }
@@ -92,19 +92,19 @@
             const clone = response.clone();
             clone.json().then(async data => {
                 if (data.retcode === 0 && data.data?.list?.length) {
-                    // Thành công -> lấy return_no
-                    const rv = data.data.list[0].return_no;
-                    if (rv) {
-                        pendingRV = rv;
-                        notifyArrived(rv);
+                    // Thành công -> lấy return_no làm return_tn
+                    const return_tn = data.data.list[0].return_no;
+                    if (return_tn) {
+                        pendingReturnTn = return_tn;
+                        notifyArrived(return_tn);
                         await waitAndClickComplete();
                     }
                 } else {
                     // Lỗi -> vẫn dispatch với sheet_id
-                    if (pendingRV) {
-                        notifyArrived(pendingRV);
+                    if (pendingReturnTn) {
+                        notifyArrived(pendingReturnTn);
                     }
-                    pendingRV = null;
+                    pendingReturnTn = null;
                 }
             }).catch(e => console.error('[AS Interceptor] fetch parse error:', e));
         }
@@ -131,7 +131,7 @@
                     const body = args[0];
                     if (typeof body === 'string') {
                         const parsed = JSON.parse(body);
-                        pendingRV = parsed.sheet_id || null;
+                        pendingReturnTn = parsed.sheet_id || null;
                     }
                 } catch (e) { }
             }
@@ -141,17 +141,17 @@
                     try {
                         const data = JSON.parse(this.responseText);
                         if (data.retcode === 0 && data.data?.list?.length) {
-                            const rv = data.data.list[0].return_no;
-                            if (rv) {
-                                pendingRV = rv;
-                                notifyArrived(rv);
+                            const return_tn = data.data.list[0].return_no;
+                            if (return_tn) {
+                                pendingReturnTn = return_tn;
+                                notifyArrived(return_tn);
                                 await waitAndClickComplete();
                             }
                         } else {
-                            if (pendingRV) {
-                                notifyArrived(pendingRV);
+                            if (pendingReturnTn) {
+                                notifyArrived(pendingReturnTn);
                             }
-                            pendingRV = null;
+                            pendingReturnTn = null;
                         }
                     } catch (e) {
                         console.error(e);

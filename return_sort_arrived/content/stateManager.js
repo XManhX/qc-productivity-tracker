@@ -33,36 +33,53 @@ export class StateManager {
 
     _initTypeMapping() {
         this._typeMappingPromise = new Promise((resolve) => {
-            chrome.runtime.sendMessage({ action: 'GET_TYPE_MAPPING' }, (response) => {
-                if (response?.mapping) {
-                    this.typeToId = {};
-                    this.typeToDisplay = {};
-                    for (const [typeName, info] of Object.entries(response.mapping)) {
-                        this.typeToId[typeName] = info.station_id;
-                        this.typeToDisplay[typeName] = info.display_name || typeName;
-                    }
-                    console.log('[StateManager] Type mapping loaded:', Object.keys(this.typeToId).length);
-                    this._typeMappingReady = true;
+            // Ưu tiên lấy từ storage.local (nhanh, không cần message)
+            chrome.storage.local.get(['typeMapping'], (result) => {
+                if (result?.typeMapping) {
+                    this._applyTypeMapping(result.typeMapping);
                     resolve();
-                } else {
-                    console.warn('[StateManager] No type mapping received, retrying in 2s...');
-                    setTimeout(() => {
-                        chrome.runtime.sendMessage({ action: 'GET_TYPE_MAPPING' }, (res) => {
-                            if (res?.mapping) {
-                                this.typeToId = {};
-                                this.typeToDisplay = {};
-                                for (const [typeName, info] of Object.entries(res.mapping)) {
-                                    this.typeToId[typeName] = info.station_id;
-                                    this.typeToDisplay[typeName] = info.display_name || typeName;
-                                }
-                                console.log('[StateManager] Type mapping loaded (retry):', Object.keys(this.typeToId).length);
-                            }
-                            this._typeMappingReady = true;
-                            resolve();
-                        });
-                    }, 2000);
+                    return;
                 }
+                // Nếu chưa có, gửi message (có retry)
+                this._requestTypeMapping(resolve, 0);
             });
+        });
+    }
+
+    _applyTypeMapping(mapping) {
+        this.typeToId = {};
+        this.typeToDisplay = {};
+        for (const [typeName, info] of Object.entries(mapping)) {
+            this.typeToId[typeName] = info.station_id;
+            this.typeToDisplay[typeName] = info.display_name || typeName;
+        }
+        console.log('[StateManager] Type mapping loaded:', Object.keys(this.typeToId).length);
+        this._typeMappingReady = true;
+    }
+
+    _requestTypeMapping(resolve, attempt) {
+        chrome.runtime.sendMessage({ action: 'GET_TYPE_MAPPING' }, (response) => {
+            if (chrome.runtime.lastError) {
+                console.warn('[StateManager] GET_TYPE_MAPPING failed:', chrome.runtime.lastError.message);
+                // Retry sau 1 giây
+                if (attempt < 3) {
+                    setTimeout(() => this._requestTypeMapping(resolve, attempt + 1), 1000);
+                } else {
+                    console.warn('[StateManager] Type mapping failed after retries');
+                    this._typeMappingReady = true; // vẫn resolve để không block
+                    resolve();
+                }
+                return;
+            }
+            if (response?.mapping) {
+                this._applyTypeMapping(response.mapping);
+                // Lưu vào storage để lần sau dùng nhanh
+                chrome.storage.local.set({ typeMapping: response.mapping });
+            } else {
+                console.warn('[StateManager] No type mapping in response');
+                this._typeMappingReady = true;
+            }
+            resolve();
         });
     }
 
@@ -73,7 +90,7 @@ export class StateManager {
 
     getId(type) { return this.typeToId[type] || null; }
     getDisplayName(type) { return this.typeToDisplay[type] || type; }
-    getType(rv) { return this.masterData[rv.toUpperCase().replace(/\s+/g, '')] || null; }
+    getType(return_tn) { return this.masterData[return_tn.toUpperCase().replace(/\s+/g, '')] || null; }
 
     async _callApi(endpoint, body) {
         return new Promise((resolve, reject) => {
@@ -99,28 +116,45 @@ export class StateManager {
 
     setUI(ui) { this.ui = ui; }
 
-    handleArrived(rv) { this._handleScan(rv); }
+    handleArrived(return_tn) {
+        this._handleScan(return_tn);
+    }
+
+    async fetchLastReturnTn(stationId) {
+        try {
+            const data = await this._callApi('last_return_tn', { id: stationId });
+            return data.last_return_tn || null;
+        } catch (e) {
+            return null;
+        }
+    }
 
     showSessionDetail(id) {
         if (!this.ui) return;
         const session = this.sessions.find(s => s.id === id);
         if (session) {
             const displayType = this.getDisplayName(session.type_group);
-            this.ui.showDetected(`ID ${id}`, displayType, id, session);
+            // Dùng last_return_tn từ session, không cần fetch API
+            const returnTn = session.last_return_tn || `ID ${id}`;
+            this.ui.showDetected(returnTn, displayType, id, session);
         }
     }
 
-    async _handleScan(rv) {
+    async _handleScan(return_tn) {
         await this._waitForTypeMapping();
         if (!this.ui) return;
+        if (!return_tn) {
+            this.ui.showWarning('Không có mã đơn hàng');
+            return;
+        }
 
-        const type = this.getType(rv);
+        const type = this.getType(return_tn);
         const id = type ? this.getId(type) : null;
         const displayType = type ? this.getDisplayName(type) : null;
 
         if (type) {
             const session = id ? this.sessions.find(s => s.id === id) : null;
-            this.ui.showDetected(rv, displayType, id, session);
+            this.ui.showDetected(return_tn, displayType, id, session);
             const utterance = new SpeechSynthesisUtterance(id || 'không xác định');
             utterance.lang = 'vi';
             window.speechSynthesis.speak(utterance);
@@ -131,7 +165,7 @@ export class StateManager {
 
         if (!id) {
             this.ui.showScanError({
-                rv, type: displayType, id: null,
+                return_tn, type: displayType, id: null,
                 reason: 'Lỗi ánh xạ',
                 detail: `Type "${displayType}" chưa được gán ID`
             });
@@ -139,21 +173,21 @@ export class StateManager {
         }
 
         try {
-            const data = await this._callApi('increment', { id, rv, type, email: this.email });
+            const data = await this._callApi('increment', { id, return_tn, type, email: this.email });
             console.log('[StateManager] increment response:', data);
 
             if (!data.success) {
                 let reason = 'Lỗi';
                 let detail = data.error || 'Lỗi không xác định từ server';
-                if (data.error && data.error.includes('RV đã được quét')) reason = 'Trùng lặp';
+                if (data.error && data.error.includes('Return TN đã được quét')) reason = 'Trùng lặp';
                 else if (data.error && data.error.includes('ID đã đầy')) reason = 'Đầy';
-                this.ui.showScanError({ rv, type: displayType, id, reason, detail });
+                this.ui.showScanError({ return_tn, type: displayType, id, reason, detail });
                 return;
             }
 
             const freshSessions = await this._fetchSessions();
             this._onSessionsUpdate(freshSessions);
-            this.ui.showSuccess(rv, displayType, id, data);
+            this.ui.showSuccess(return_tn, displayType, id, data);
 
             if (data.status === 'full') {
                 this.ui.showFullAlert(id, displayType);
@@ -162,23 +196,23 @@ export class StateManager {
         } catch (e) {
             console.error('[StateManager] increment failed:', e);
             this.ui.showScanError({
-                rv, type: displayType, id,
+                return_tn, type: displayType, id,
                 reason: 'Lỗi',
                 detail: 'Lỗi kết nối đến server'
             });
         }
     }
 
-    async removeScan(rv, id, type) {
+    async removeScan(return_tn, id, type) {
         try {
-            const data = await this._callApi('decrement', { id, rv });
+            const data = await this._callApi('decrement', { id, return_tn });
             if (!data.success) {
                 this.ui.showError(data.error || 'Không thể hủy đơn này');
                 return;
             }
             const freshSessions = await this._fetchSessions();
             this._onSessionsUpdate(freshSessions);
-            this.ui.showSuccess(rv, type, id, { item_count: data.item_count, status: data.status });
+            this.ui.showSuccess(return_tn, type, id, { item_count: data.item_count, status: data.status });
         } catch (e) {
             this.ui.showError('Lỗi kết nối');
         }

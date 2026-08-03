@@ -1,136 +1,119 @@
-// content/content.js – xử lý triệt để lỗi context invalidated
-let keepAlivePort = null;
-let keepAliveTimer = null;
-let keepAliveAttempts = 0;
-const MAX_ATTEMPTS = 5;
-
-// Wrapper an toàn cho các Chrome API
-function safeCall(fn, fallback = () => { }) {
-    try {
-        return fn();
-    } catch (e) {
-        if (e.message?.includes('Extension context invalidated')) {
-            console.warn('[Content] Extension context không còn hợp lệ, dừng thao tác');
-            // Không làm gì thêm, tránh crash
-        } else {
-            console.error('[Content] Chrome API error:', e);
-            fallback();
-        }
-    }
+// content/content.js
+function isExtensionContextValid() {
+    try { return !!(chrome.runtime && chrome.runtime.id); }
+    catch (e) { return false; }
 }
 
-function connectKeepAlive() {
-    // Kiểm tra context
-    if (!chrome?.runtime?.connect) {
-        console.warn('[Content] Không thể kết nối keep-alive: context không hợp lệ');
-        return;
-    }
-
-    safeCall(() => {
-        keepAlivePort = chrome.runtime.connect({ name: 'as-keepalive' });
-        console.log('[Content] Keep-alive port connected (attempt ' + (keepAliveAttempts + 1) + ')');
-
-        keepAlivePort.onDisconnect.addListener(() => {
-            console.log('[Content] Keep-alive port disconnected');
-            keepAlivePort = null;
-
-            // Chiến lược thử lại với thời gian tăng dần
-            if (keepAliveAttempts < MAX_ATTEMPTS) {
-                const delay = Math.min(1000 * Math.pow(2, keepAliveAttempts), 30000); // tối đa 30s
-                keepAliveAttempts++;
-                console.log(`[Content] Thử kết nối lại sau ${delay / 1000}s...`);
-                keepAliveTimer = setTimeout(connectKeepAlive, delay);
-            } else {
-                console.warn('[Content] Đã thử kết nối lại tối đa, dừng keep-alive');
-            }
-        });
-
-        // Reset số lần thử nếu kết nối thành công
-        keepAliveAttempts = 0;
+function safeStorageGet(keys, callback) {
+    if (!isExtensionContextValid()) { callback({}); return; }
+    chrome.storage.local.get(keys, (result) => {
+        if (chrome.runtime.lastError) { callback({}); }
+        else { callback(result); }
     });
 }
 
-// Bắt đầu kết nối
-connectKeepAlive();
+function safeGetURL(path) {
+    if (!isExtensionContextValid()) return '';
+    return chrome.runtime.getURL(path);
+}
 
-// Bọc toàn bộ logic chính trong try-catch an toàn
+function safeRuntimeConnect(name) {
+    if (!isExtensionContextValid()) return null;
+    try { return chrome.runtime.connect({ name }); }
+    catch (e) { return null; }
+}
+
+let keepAlivePort = null;
+let keepAliveTimer = null;
+let keepAliveAttempts = 0;
+const MAX_KEEP_ALIVE_ATTEMPTS = 5;
+
+function connectKeepAlive() {
+    if (!isExtensionContextValid()) {
+        keepAliveTimer = setTimeout(connectKeepAlive, 1000);
+        return;
+    }
+    keepAlivePort = safeRuntimeConnect('as-keepalive');
+    if (!keepAlivePort) {
+        if (keepAliveAttempts < MAX_KEEP_ALIVE_ATTEMPTS) {
+            const delay = Math.min(1000 * Math.pow(2, keepAliveAttempts), 30000);
+            keepAliveAttempts++;
+            keepAliveTimer = setTimeout(connectKeepAlive, delay);
+        }
+        return;
+    }
+    console.log('[Content] Keep-alive connected');
+    keepAlivePort.onDisconnect.addListener(() => {
+        keepAlivePort = null;
+        if (keepAliveAttempts < MAX_KEEP_ALIVE_ATTEMPTS) {
+            const delay = Math.min(1000 * Math.pow(2, keepAliveAttempts), 30000);
+            keepAliveAttempts++;
+            keepAliveTimer = setTimeout(connectKeepAlive, delay);
+        }
+    });
+    keepAliveAttempts = 0;
+}
+
+if (document.readyState === 'complete') connectKeepAlive();
+else window.addEventListener('load', connectKeepAlive);
+
 (async () => {
     try {
-        // Inject interceptor
-        safeCall(() => {
-            const interceptorScript = document.createElement('script');
-            interceptorScript.src = chrome.runtime.getURL('content/interceptor.js');
-            interceptorScript.onload = () => interceptorScript.remove();
-            (document.head || document.documentElement).appendChild(interceptorScript);
-        });
+        const interceptorUrl = safeGetURL('content/interceptor.js');
+        if (interceptorUrl) {
+            const script = document.createElement('script');
+            script.src = interceptorUrl;
+            script.onload = () => script.remove();
+            (document.head || document.documentElement).appendChild(script);
+        }
 
-        // Inject QR generator
-        safeCall(() => {
-            const qrGenScript = document.createElement('script');
-            qrGenScript.src = chrome.runtime.getURL('content/qr-generator.js');
-            qrGenScript.onload = () => qrGenScript.remove();
-            (document.head || document.documentElement).appendChild(qrGenScript);
-        });
+        const qrGenUrl = safeGetURL('content/qr-generator.js');
+        if (qrGenUrl) {
+            const script = document.createElement('script');
+            script.src = qrGenUrl;
+            script.onload = () => script.remove();
+            (document.head || document.documentElement).appendChild(script);
+        }
 
-        // Import modules
         const { StateManager } = await import(chrome.runtime.getURL('content/stateManager.js'));
         const { UIManager } = await import(chrome.runtime.getURL('content/ui/popup.js'));
         const { DashboardUI } = await import(chrome.runtime.getURL('content/ui/dashboard.js'));
 
-        // Lấy master data
-        const stored = await new Promise((resolve) => {
-            safeCall(() => {
-                chrome.storage.local.get(['masterData'], (result) => {
-                    resolve(result);
-                });
-            }, () => resolve({})); // fallback nếu lỗi
-        });
-        const masterData = stored?.masterData || {};
+        safeStorageGet(['masterData'], (stored) => {
+            const masterData = stored?.masterData || {};
+            let email = 'unknown@shopee.com';
+            try {
+                email = localStorage.getItem('useremail');
+                if (!email && document.body) {
+                    const match = document.body.innerText.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
+                    if (match) email = match[0];
+                    localStorage.setItem('useremail', email);
+                }
+            } catch (e) { }
 
-        // Lấy email
-        let email = 'unknown@shopee.com';
-        try {
-            email = localStorage.getItem('useremail');
-            if (!email && document.body) {
-                const match = document.body.innerText.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
-                if (match) email = match[0];
-                localStorage.setItem('useremail', email);
-            }
-        } catch (e) {
-            console.warn('[Content] Không thể lấy email:', e);
-        }
+            const stateManager = new StateManager(masterData, email);
 
-        const stateManager = new StateManager(masterData, email);
+            document.addEventListener('as-return-tn-arrived', (e) => {
+                stateManager.handleArrived(e.detail.return_tn);
+            });
 
-        // Lắng nghe sự kiện
-        document.addEventListener('as-rv-arrived', (e) => {
-            safeCall(() => stateManager.handleArrived(e.detail.rv));
-        });
-
-        // Khởi tạo UI
-        function initUI() {
-            safeCall(() => {
+            function initUI() {
                 new UIManager(stateManager);
                 new DashboardUI(stateManager);
-            });
-        }
+            }
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', initUI);
+            } else {
+                initUI();
+            }
 
-        if (document.readyState === 'loading') {
-            document.addEventListener('DOMContentLoaded', initUI);
-        } else {
-            initUI();
-        }
-
-        // Lắng nghe thay đổi master data
-        safeCall(() => {
-            chrome.storage.onChanged.addListener((changes) => {
-                if (changes.masterData) {
-                    stateManager.updateMasterData(changes.masterData.newValue);
-                }
-            });
+            if (isExtensionContextValid()) {
+                chrome.storage.onChanged.addListener((changes) => {
+                    if (changes.masterData) stateManager.updateMasterData(changes.masterData.newValue);
+                });
+            }
         });
-
     } catch (e) {
-        console.error('[Content] Lỗi nghiêm trọng khi khởi tạo:', e);
+        console.error('[Content] Initialization error:', e);
     }
 })();

@@ -127,7 +127,7 @@ const STYLES = `
   background: repeating-linear-gradient(45deg, #f0f0f0, #f0f0f0 10px, #e0e0e0 10px, #e0e0e0 20px);
   color: #999; border: 2px dashed #ccc;
 }
-.rv-text { font-size: 28px; font-weight: 700; color: #0f172a; word-break: break-all; min-height: 40px; }
+.return-tn-text { font-size: 28px; font-weight: 700; color: #0f172a; word-break: break-all; min-height: 40px; }
 .type-text { font-size: 22px; font-weight: 700; color: #334155; min-height: 30px; }
 .progress-bar { height: 14px; background: #e2e8f0; border-radius: 7px; overflow: hidden; width: 100%; }
 .progress-fill { height: 100%; border-radius: 7px; transition: width 0.4s ease; background: #cbd5e1; }
@@ -232,7 +232,7 @@ export class UIManager {
           </div>
           <div id="id-box" class="id-big" style="background:#cbd5e1; color:#fff; min-width: 80px;">?</div>
           <div class="type-text" id="type-el">--</div>
-          <div class="rv-text" id="rv-el">----</div>
+          <div class="return-tn-text" id="return-tn-el">----</div>
           <div class="progress-bar"><div id="progress-fill" class="progress-fill" style="width:0%"></div></div>
           <div class="count-text" id="count-el">0/30</div>
           <div id="button-container"></div>
@@ -429,11 +429,11 @@ export class UIManager {
     if (this.shadowRoot) this._updateTop5();
   }
 
-  _updateCard({ id, type, rv, count, threshold, isFull, error, unknownId, closed, animate }) {
+  _updateCard({ id, type, return_tn, count, threshold, isFull, error, unknownId, closed, animate }) {
     if (!this.shadowRoot) return;
     const idBox = this.shadowRoot.getElementById('id-box');
     const typeEl = this.shadowRoot.getElementById('type-el');
-    const rvEl = this.shadowRoot.getElementById('rv-el');
+    const returnTnEl = this.shadowRoot.getElementById('return-tn-el');
     const progressFill = this.shadowRoot.getElementById('progress-fill');
     const progressBar = progressFill?.parentNode;
     const countEl = this.shadowRoot.getElementById('count-el');
@@ -444,7 +444,7 @@ export class UIManager {
 
     if (idBox) { idBox.style.display = 'none'; idBox.classList.remove('unknown'); }
     if (typeEl) typeEl.style.display = 'none';
-    if (rvEl) rvEl.style.display = 'none';
+    if (returnTnEl) returnTnEl.style.display = 'none';
     if (progressBar) progressBar.style.display = 'none';
     if (countEl) countEl.style.display = 'none';
     if (btnContainer) btnContainer.innerHTML = '';
@@ -457,8 +457,8 @@ export class UIManager {
       if (canOperate) {
         undoBtn.style.display = 'flex';
         undoBtn.onclick = () => {
-          if (confirm(`Hủy RV ${rv} khỏi ID ${id}?`)) {
-            this.state.removeScan(rv, id, type);
+          if (confirm(`Hủy Return TN ${return_tn} khỏi ID ${id}?`)) {
+            this.state.removeScan(return_tn, id, type);
           }
         };
       } else {
@@ -488,9 +488,9 @@ export class UIManager {
         typeEl.textContent = type;
         typeEl.style.display = 'block';
       }
-      if (rv && rvEl) {
-        rvEl.textContent = rv;
-        rvEl.style.display = 'block';
+      if (return_tn && returnTnEl) {
+        returnTnEl.textContent = return_tn;
+        returnTnEl.style.display = 'block';
       }
       if (errorInfo) {
         errorInfo.style.display = 'block';
@@ -510,7 +510,7 @@ export class UIManager {
 
     if (idBox) idBox.style.display = 'inline-block';
     if (typeEl) typeEl.style.display = 'block';
-    if (rvEl) rvEl.style.display = 'block';
+    if (returnTnEl) returnTnEl.style.display = 'block';
     if (progressBar) progressBar.style.display = 'block';
     if (countEl) countEl.style.display = 'block';
 
@@ -530,7 +530,7 @@ export class UIManager {
     }
     if (card) card.style.background = isUnknown ? '#fff7ed' : (isFull ? '#f0fdf4' : '#f8fafc');
     if (typeEl) typeEl.textContent = type || '--';
-    if (rvEl) rvEl.textContent = rv || '----';
+    if (returnTnEl) returnTnEl.textContent = return_tn || '----';
 
     const percent = (count !== undefined && threshold) ? Math.min(100, Math.round((count / threshold) * 100)) : 0;
     if (progressFill) {
@@ -568,10 +568,10 @@ export class UIManager {
     }
   }
 
-  showDetected(rv, type, id, session) {
+  showDetected(return_tn, type, id, session) {
     this.currentId = id || '';
     this._updateCard({
-      id: id || null, type: type || null, rv,
+      id: id || null, type: type || null, return_tn,
       count: session?.item_count || 0,
       threshold: session?.threshold || 30,
       isFull: session?.status === 'full',
@@ -581,10 +581,10 @@ export class UIManager {
     });
   }
 
-  showSuccess(rv, type, id, serverData) {
+  showSuccess(return_tn, type, id, serverData) {
     this.currentId = id;
     this._updateCard({
-      id, type, rv,
+      id, type, return_tn,
       count: serverData.item_count,
       threshold: serverData.threshold || 30,
       isFull: serverData.status === 'full',
@@ -604,17 +604,17 @@ export class UIManager {
   }
 
   showWarning(msg) {
-    this._updateCard({ rv: msg, error: { reason: 'Cảnh báo', detail: '' }, unknownId: true });
+    this._updateCard({ return_tn: msg, error: { reason: 'Cảnh báo', detail: '' }, unknownId: true });
   }
 
   showError(msg) {
-    this._updateCard({ rv: msg, error: { reason: 'Lỗi', detail: '' }, unknownId: true });
+    this._updateCard({ return_tn: msg, error: { reason: 'Lỗi', detail: '' }, unknownId: true });
   }
 
-  showScanError({ rv, type, id, reason, detail }) {
+  showScanError({ return_tn, type, id, reason, detail }) {
     this.currentId = id || '';
     this._updateCard({
-      id: id || null, type: type || null, rv,
+      id: id || null, type: type || null, return_tn,
       error: { reason, detail },
       unknownId: !id,
       animate: true
@@ -710,7 +710,7 @@ export class UIManager {
 
   printAndClose(id, type, toNumber, itemCount) {
     this._updateCard({
-      id, type, rv: 'Đang in...',
+      id, type, return_tn: 'Đang in...',
       count: itemCount, threshold: 0, isFull: false
     });
     const date = new Date();
@@ -721,14 +721,14 @@ export class UIManager {
         this._savePrintedLabel({ toNumber, type, id, dateStr, number: numberPart, email: this.state.email, itemCount });
         this.state.markPrinted(id);
         this._updateCard({
-          id, type, rv: '✅ Đã đóng kiện',
+          id, type, return_tn: '✅ Đã đóng kiện',
           count: itemCount, threshold: 0, isFull: false,
           closed: true
         });
       })
       .catch(() => {
         this._updateCard({
-          id, type, rv: '❌ In thất bại',
+          id, type, return_tn: '❌ In thất bại',
           count: itemCount, threshold: 0, isFull: false
         });
         if (this.shadowRoot) {

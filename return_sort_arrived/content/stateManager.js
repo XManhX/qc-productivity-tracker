@@ -1,4 +1,4 @@
-// content/stateManager.js
+// content/stateManager.js – xử lý tập trung, hiển thị ngay ID/type
 export class StateManager {
     constructor(masterData, email) {
         this.masterData = masterData;
@@ -7,10 +7,11 @@ export class StateManager {
         this.ui = null;
         this.sessions = [];
         this.typeToId = {};
-        this._pendingEvents = [];
         this._listeners = [];
+        this._typeMappingReady = false;
+        this._typeMappingPromise = null;
 
-        this._loadTypeMapping();
+        this._initTypeMapping();
 
         chrome.runtime.onMessage.addListener((msg) => {
             if (msg.action === 'UPDATE_SESSIONS') {
@@ -29,14 +30,38 @@ export class StateManager {
         if (this.sessions.length > 0) fn(this.sessions);
     }
 
-    _loadTypeMapping() {
-        chrome.runtime.sendMessage({ action: 'GET_TYPE_MAPPING' }, (response) => {
-            if (response?.mapping) {
-                this.typeToId = response.mapping;
-                console.log('[StateManager] Type mapping loaded:', Object.keys(this.typeToId).length);
-            } else console.warn('[StateManager] No type mapping received');
+    _initTypeMapping() {
+        this._typeMappingPromise = new Promise((resolve) => {
+            chrome.runtime.sendMessage({ action: 'GET_TYPE_MAPPING' }, (response) => {
+                if (response?.mapping) {
+                    this.typeToId = response.mapping;
+                    console.log('[StateManager] Type mapping loaded:', Object.keys(this.typeToId).length);
+                    this._typeMappingReady = true;
+                    resolve();
+                } else {
+                    console.warn('[StateManager] No type mapping received, retrying in 2s...');
+                    setTimeout(() => {
+                        chrome.runtime.sendMessage({ action: 'GET_TYPE_MAPPING' }, (res) => {
+                            if (res?.mapping) {
+                                this.typeToId = res.mapping;
+                                console.log('[StateManager] Type mapping loaded (retry):', Object.keys(this.typeToId).length);
+                            }
+                            this._typeMappingReady = true;
+                            resolve();
+                        });
+                    }, 2000);
+                }
+            });
         });
     }
+
+    async _waitForTypeMapping() {
+        if (this._typeMappingReady) return;
+        await this._typeMappingPromise;
+    }
+
+    getId(type) { return this.typeToId[type] || null; }
+    getType(rv) { return this.masterData[rv.toUpperCase().replace(/\s+/g, '')] || null; }
 
     async _callApi(endpoint, body) {
         return new Promise((resolve, reject) => {
@@ -60,122 +85,66 @@ export class StateManager {
         });
     }
 
-    setUI(ui) {
-        this.ui = ui;
-        this._pendingEvents.forEach(event => this._processEvent(event));
-        this._pendingEvents = [];
+    setUI(ui) { this.ui = ui; }
+
+    // Điểm vào duy nhất cho mọi RV (thành công hoặc lỗi)
+    handleArrived(rv) {
+        this._handleScan(rv);
     }
 
-    _processEvent(event) {
-        if (event.type === 'detected') {
-            const { rv, type, id, session } = event;
+    async _handleScan(rv) {
+        await this._waitForTypeMapping();
+        if (!this.ui) return;
+
+        const type = this.getType(rv);
+        const id = type ? this.getId(type) : null;
+
+        // Hiển thị ngay thông tin cơ bản
+        if (type) {
+            const session = id ? this.sessions.find(s => s.id === id) : null;
             this.ui.showDetected(rv, type, id, session);
-        } else if (event.type === 'arrived') {
-            this.handleScan(event.rv);
-        } else if (event.type === 'error') {
-            this.ui.showWarning(event.message);
-        } else if (event.type === 'scan_error') {
-            this.handleScanError(event.data.rv, event.data.retcode, event.data.message);
-        }
-    }
-
-    _queueEvent(event) {
-        if (this.ui) this._processEvent(event);
-        else this._pendingEvents.push(event);
-    }
-
-    getType(rv) { return this.masterData[rv.toUpperCase().replace(/\s+/g, '')] || null; }
-    getId(type) { return this.typeToId[type] || null; }
-
-    handleDetected(rv) {
-        const type = this.getType(rv);
-        const id = type ? this.getId(type) : null;
-        if (type && id) {
-            const utterance = new SpeechSynthesisUtterance(id);
-
-            // Bổ sung ngôn ngữ tiếng Việt
+            // Phát âm thanh
+            const utterance = new SpeechSynthesisUtterance(id || 'không xác định');
             utterance.lang = 'vi-VN';
-
             window.speechSynthesis.speak(utterance);
-            const session = this.sessions.find(s => s.id === id);
-            this._queueEvent({ type: 'detected', rv, type, id, session });
         } else {
-            this._queueEvent({ type: 'error', message: 'Không có trong master data' });
-        }
-    }
-
-    handleArrived(rv) { this._queueEvent({ type: 'arrived', rv }); }
-
-    async handleScanError(rv, retcode, message) {
-        if (!this.ui) {
-            this._queueEvent({ type: 'scan_error', data: { rv, retcode, message } });
-            return;
-        }
-
-        const type = this.getType(rv);
-        const id = type ? this.getId(type) : null;
-
-        // Nếu RV có trong master data (có type và id), coi như arrival thành công
-        if (type && id) {
-            console.log('[StateManager] RV has master data, treating as successful arrival:', rv);
-            this.handleScan(rv); // gọi increment luôn
-            return;
-        }
-
-        // Nếu không có trong master data, mới phân loại lỗi Sai tuyến / Cancelled
-        let reason = 'Lỗi';
-        let detail = message || '';
-
-        if (retcode === 3031004 && message && message.includes('Cannot find any inbound orders with')) {
-            reason = 'Sai tuyến';
-        } else if (retcode === 3031004 && message && message.includes('Inbound order is not in pending/In transit status!')) {
-            try {
-                const url = `https://wms.ssc.shopee.vn/api/apps/process/returninbound/riasn/search_asn?return_tn=${encodeURIComponent(rv)}&sort_field=&sort_type=1&pageno=1&count=20`;
-                const response = await fetch(url, { credentials: 'include' });
-                const data = await response.json();
-                if (data.retcode === 0 && data.data?.list?.length && data.data.list[0].task_status === 5) {
-                    reason = 'Cancelled';
-                } else {
-                    reason = 'Lỗi';
-                    detail = 'Không thể kiểm tra trạng thái đơn hàng';
-                }
-            } catch (e) {
-                console.error('Error calling search_asn:', e);
-                reason = 'Lỗi';
-                detail = 'Lỗi kiểm tra trạng thái đơn hàng';
-            }
-        }
-
-        this.ui.showScanError({ rv, type: null, id: null, reason, detail });
-    }
-
-    async handleScan(rv) {
-        if (!this.ui) {
-            this._queueEvent({ type: 'arrived', rv });
-            return;
-        }
-
-        const type = this.getType(rv);
-        if (!type) {
             this.ui.showWarning('Không có trong master data');
             return;
         }
 
-        const id = this.getId(type);
+        // Nếu không có ID thì không thể increment
         if (!id) {
-            this.ui.showWarning('Không xác định được ID cho type: ' + type);
+            this.ui.showScanError({
+                rv, type, id: null,
+                reason: 'Lỗi ánh xạ',
+                detail: `Type "${type}" chưa được gán ID`
+            });
             return;
         }
 
+        // Gọi increment
         try {
             const data = await this._callApi('increment', { id, rv, type, email: this.email });
             console.log('[StateManager] increment response:', data);
 
             if (!data.success) {
-                this.ui.showError(data.error || 'Lỗi không xác định từ server');
+                // Phân loại lỗi
+                let reason = 'Lỗi';
+                let detail = data.error || 'Lỗi không xác định từ server';
+
+                if (data.error && data.error.includes('RV đã được quét')) {
+                    reason = 'Trùng lặp';
+                } else if (data.error && data.error.includes('ID đã đầy')) {
+                    reason = 'Đầy';
+                }
+
+                // Với lỗi từ WMS (3031004) ta vẫn có thể phân loại thêm nếu cần,
+                // nhưng vì interceptor đã gửi tất cả RV nên ta có thể dựa vào dữ liệu increment trả về.
+                this.ui.showScanError({ rv, type, id, reason, detail });
                 return;
             }
 
+            // Thành công
             const freshSessions = await this._fetchSessions();
             this._onSessionsUpdate(freshSessions);
             this.ui.showSuccess(rv, type, id, data);
@@ -186,7 +155,27 @@ export class StateManager {
             }
         } catch (e) {
             console.error('[StateManager] increment failed:', e);
-            this.ui.showError('Lỗi kết nối đến server');
+            this.ui.showScanError({
+                rv, type, id,
+                reason: 'Lỗi',
+                detail: 'Lỗi kết nối đến server'
+            });
+        }
+    }
+
+    async removeScan(rv, id, type) {
+        try {
+            const data = await this._callApi('decrement', { id, rv });
+            if (!data.success) {
+                this.ui.showError(data.error || 'Không thể hủy RV này');
+                return;
+            }
+            const freshSessions = await this._fetchSessions();
+            this._onSessionsUpdate(freshSessions);
+            // Hiển thị lại thông tin sau khi hủy
+            this.ui.showSuccess(rv, type, id, { item_count: data.item_count, status: data.status });
+        } catch (e) {
+            this.ui.showError('Lỗi kết nối');
         }
     }
 

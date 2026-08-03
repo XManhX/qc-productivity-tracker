@@ -1,5 +1,5 @@
-// content/content.js
-chrome.runtime.connect({ name: 'qc-keepalive' });
+// content/content.js – chỉ lắng nghe as-rv-arrived
+chrome.runtime.connect({ name: 'as-keepalive' });
 
 (async () => {
     const interceptorScript = document.createElement('script');
@@ -30,9 +30,8 @@ chrome.runtime.connect({ name: 'qc-keepalive' });
 
     const stateManager = new StateManager(masterData, email);
 
-    document.addEventListener('qc-rv-detected', (e) => stateManager.handleDetected(e.detail.rv));
-    document.addEventListener('qc-rv-arrived', (e) => stateManager.handleArrived(e.detail.rv));
-    document.addEventListener('qc-rv-error', (e) => stateManager.handleScanError(e.detail.rv, e.detail.retcode, e.detail.message));
+    // Chỉ lắng nghe sự kiện as-rv-arrived
+    document.addEventListener('as-rv-arrived', (e) => stateManager.handleArrived(e.detail.rv));
 
     function initUI() {
         new UIManager(stateManager);

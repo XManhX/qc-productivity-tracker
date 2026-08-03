@@ -1,26 +1,14 @@
-// content/interceptor.js
+// content/interceptor.js – luôn dispatch as-rv-arrived, không phân biệt lỗi
 (function () {
-    if (window.__qcInterceptorInjected) return;
-    window.__qcInterceptorInjected = true;
+    if (window.__asInterceptorInjected) return;
+    window.__asInterceptorInjected = true;
 
-    console.log('[QC Interceptor] Injecting into main world...');
+    console.log('[AS Interceptor] Injecting into main world...');
 
     let pendingRV = null;
-    let pendingSheetId = null;
-
-    // Hàm notify lỗi
-    function notifyScanError(rv, retcode, message) {
-        document.dispatchEvent(new CustomEvent('qc-rv-error', {
-            detail: { rv, retcode, message }
-        }));
-    }
-
-    function notifyDetected(rv) {
-        document.dispatchEvent(new CustomEvent('qc-rv-detected', { detail: { rv } }));
-    }
 
     function notifyArrived(rv) {
-        document.dispatchEvent(new CustomEvent('qc-rv-arrived', { detail: { rv } }));
+        document.dispatchEvent(new CustomEvent('as-rv-arrived', { detail: { rv } }));
     }
 
     // Tìm nút Complete (không phân biệt hoa thường)
@@ -35,7 +23,7 @@
     function clickComplete() {
         const btn = findCompleteButton();
         if (btn) {
-            console.log('[QC Interceptor] Clicking Complete button...');
+            console.log('[AS Interceptor] Clicking Complete button...');
             btn.click();
             return true;
         }
@@ -51,7 +39,7 @@
                     resolve(true);
                 } else if (++attempts >= retries) {
                     clearInterval(timer);
-                    console.warn('[QC Interceptor] Complete button not found after retries');
+                    console.warn('[AS Interceptor] Complete button not found after retries');
                     resolve(false);
                 }
             }, interval);
@@ -93,7 +81,7 @@
                 const body = args[0]?.body;
                 if (typeof body === 'string') {
                     const parsed = JSON.parse(body);
-                    pendingSheetId = parsed.sheet_id || null;
+                    pendingRV = parsed.sheet_id || null; // luôn lấy sheet_id làm RV
                 }
             } catch (e) { }
         }
@@ -104,35 +92,21 @@
             const clone = response.clone();
             clone.json().then(async data => {
                 if (data.retcode === 0 && data.data?.list?.length) {
-                    // Thành công
+                    // Thành công -> lấy return_no
                     const rv = data.data.list[0].return_no;
                     if (rv) {
                         pendingRV = rv;
-                        notifyDetected(rv);
+                        notifyArrived(rv);
                         await waitAndClickComplete();
                     }
-                } else if (data.retcode !== 0) {
-                    // Lỗi – gửi sự kiện với sheet_id làm RV
-                    const rv = pendingSheetId || '';
-                    notifyScanError(rv, data.retcode, data.message || '');
-                    pendingSheetId = null;
-                }
-            }).catch(e => console.error('[QC Interceptor] fetch parse error:', e));
-        }
-
-        if (url && url.includes('create_accept_reject_arrival')) {
-            const clone = response.clone();
-            clone.json().then(data => {
-                if (data.retcode === 0) {
-                    console.log('[QC Interceptor] create_accept_reject_arrival success');
+                } else {
+                    // Lỗi -> vẫn dispatch với sheet_id
                     if (pendingRV) {
                         notifyArrived(pendingRV);
-                        pendingRV = null;
                     }
-                } else {
                     pendingRV = null;
                 }
-            }).catch(e => console.error(e));
+            }).catch(e => console.error('[AS Interceptor] fetch parse error:', e));
         }
 
         return response;
@@ -145,7 +119,6 @@
         const origOpen = xhr.open;
         const origSend = xhr.send;
         let requestURL = '';
-        let requestBody = '';
 
         xhr.open = function (method, url, ...rest) {
             requestURL = url;
@@ -155,10 +128,10 @@
         xhr.send = function (...args) {
             if (requestURL && requestURL.includes('scan_sheet_id')) {
                 try {
-                    requestBody = args[0];
-                    if (typeof requestBody === 'string') {
-                        const parsed = JSON.parse(requestBody);
-                        pendingSheetId = parsed.sheet_id || null;
+                    const body = args[0];
+                    if (typeof body === 'string') {
+                        const parsed = JSON.parse(body);
+                        pendingRV = parsed.sheet_id || null;
                     }
                 } catch (e) { }
             }
@@ -171,29 +144,13 @@
                             const rv = data.data.list[0].return_no;
                             if (rv) {
                                 pendingRV = rv;
-                                notifyDetected(rv);
+                                notifyArrived(rv);
                                 await waitAndClickComplete();
                             }
-                        } else if (data.retcode !== 0) {
-                            const rv = pendingSheetId || '';
-                            notifyScanError(rv, data.retcode, data.message || '');
-                            pendingSheetId = null;
-                        }
-                    } catch (e) {
-                        console.error(e);
-                    }
-                }
-
-                if (requestURL && requestURL.includes('create_accept_reject_arrival')) {
-                    try {
-                        const data = JSON.parse(this.responseText);
-                        if (data.retcode === 0) {
-                            console.log('[QC Interceptor] create_accept_reject_arrival (XHR) success');
+                        } else {
                             if (pendingRV) {
                                 notifyArrived(pendingRV);
-                                pendingRV = null;
                             }
-                        } else {
                             pendingRV = null;
                         }
                     } catch (e) {
@@ -207,10 +164,9 @@
         return xhr;
     };
 
-    // Copy static properties của XMLHttpRequest
     ['UNSENT', 'OPENED', 'HEADERS_RECEIVED', 'LOADING', 'DONE'].forEach(p => {
         window.XMLHttpRequest[p] = OrigXHR[p];
     });
 
-    console.log('[QC Interceptor] Interceptors active.');
+    console.log('[AS Interceptor] Interceptors active.');
 })();

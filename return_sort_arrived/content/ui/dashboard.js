@@ -1,4 +1,4 @@
-// content/ui/dashboard.js – Dashboard quản lý TO (hoàn chỉnh, sửa lỗi await)
+// content/ui/dashboard.js – realtime thuần, không polling
 import { printLabel } from '../printer.js';
 
 const ID_COLORS = {
@@ -115,9 +115,9 @@ export class DashboardUI {
     this._searchTerm = '';
     this._sessions = [];
     this._printedLabels = [];
-    this._closedCount = 0;
     this._closedPage = 1;
     this._hasMoreClosed = true;
+    this._closedCount = 0;
     this._currentUrl = window.location.href;
     this._init();
     document.addEventListener('url-change', (e) => this._onUrlChange(e.detail.url));
@@ -134,13 +134,10 @@ export class DashboardUI {
     this._fetchClosedCount();
   }
 
-  async _fetchClosedCount() {
-    chrome.runtime.sendMessage({ action: 'GET_CLOSED_COUNT' }, (response) => {
-      if (response?.count !== undefined) {
-        this._closedCount = response.count;
-        this._updateBadges();
-      }
-    });
+  destroy() {
+    if (this.host && this.host.parentNode) {
+      this.host.parentNode.removeChild(this.host);
+    }
   }
 
   _onUrlChange(newUrl) {
@@ -161,7 +158,7 @@ export class DashboardUI {
 
   _createHost() {
     this.host = document.createElement('div');
-    this.host.id = 'qc-dashboard-host';
+    this.host.id = 'as-dashboard-host';
     this.shadowRoot = this.host.attachShadow({ mode: 'open' });
 
     const style = document.createElement('style');
@@ -241,7 +238,7 @@ export class DashboardUI {
       this.popup.style.left = '';
       this.popup.style.top = '';
     } else {
-      const arrivalHost = document.getElementById('qc-popup-host');
+      const arrivalHost = document.getElementById('as-popup-host');
       if (arrivalHost && arrivalHost.style.display !== 'none') {
         const arrivalPopup = arrivalHost.shadowRoot?.querySelector('.popup');
         if (arrivalPopup && !arrivalPopup.classList.contains('minimized')) {
@@ -333,14 +330,22 @@ export class DashboardUI {
 
   _onSessionsUpdate(sessions) {
     this._sessions = sessions;
+    this._fetchClosedCount(); // cập nhật badge Đã đóng
     this._renderAll();
-    this._fetchClosedCount();
   }
 
   async _loadPrintedLabels() {
     const { printedLabels } = await chrome.storage.local.get('printedLabels');
     this._printedLabels = printedLabels || [];
-    this._renderAll();
+  }
+
+  async _fetchClosedCount() {
+    chrome.runtime.sendMessage({ action: 'GET_CLOSED_COUNT' }, (response) => {
+      if (response?.count !== undefined) {
+        this._closedCount = response.count;
+        this._updateBadges();
+      }
+    });
   }
 
   _filter(items) {
@@ -377,10 +382,11 @@ export class DashboardUI {
   _updateBadges() {
     const sessions = this._sessions || [];
     const openCount = sessions.filter(s => s.status === 'open' || s.status === 'full').length;
-    // Số lượng closed không lấy từ this._sessions, nhưng vẫn hiển thị badge tạm
+    const reprintCount = (this._printedLabels || []).length;
+
     this.shadowRoot.getElementById('badge-open').textContent = openCount;
     this.shadowRoot.getElementById('badge-closed').textContent = this._closedCount;
-    this.shadowRoot.getElementById('badge-reprint').textContent = (this._printedLabels || []).length;
+    this.shadowRoot.getElementById('badge-reprint').textContent = reprintCount;
   }
 
   _renderOpenTab() {
@@ -429,61 +435,57 @@ export class DashboardUI {
     const count = session.item_count;
     const percent = Math.min(100, Math.round((count / threshold) * 100));
     const statusClass = status === 'full' ? 'status-full' : (status === 'open' ? 'status-open' : 'status-closed');
-
-    // Lấy màu từ ID_COLORS, nếu không có thì dùng màu mặc định
     const color = ID_COLORS[session.id] || '#94a3b8';
     const textColor = getTextColor(color);
-
     const timeStr = session.session_start ? new Date(session.session_start).toLocaleTimeString('vi-VN') : '';
 
     return `
-    <div class="card ${statusClass}" data-id="${session.id}" data-type="${session.type_group || ''}">
-      <div class="card-row">
-        <div class="card-left">
-          <div class="id-badge" style="background:${color}; color:${textColor};">${session.id}</div>
-          <div>
-            <div class="type">${session.type_group || ''}</div>
-            ${timeStr ? `<div class="time">${timeStr}</div>` : ''}
+      <div class="card ${statusClass}" data-id="${session.id}" data-type="${session.type_group || ''}">
+        <div class="card-row">
+          <div class="card-left">
+            <div class="id-badge" style="background:${color}; color:${textColor};">${session.id}</div>
+            <div>
+              <div class="type">${session.type_group || ''}</div>
+              ${timeStr ? `<div class="time">${timeStr}</div>` : ''}
+            </div>
+          </div>
+          <div class="card-actions">
+            ${(status === 'open' || status === 'full') && count > 0 ? `<button class="btn btn-close" data-action="close" data-id="${session.id}" data-type="${session.type_group}">Đóng</button>` : ''}
+            ${status === 'closed' ? `<button class="btn btn-reprint" data-action="reprint-closed" data-id="${session.id}" data-type="${session.type_group}" data-to="${session.to_number || ''}" data-date="${timeStr}" data-number="${session.to_number ? session.to_number.split('-').pop() : ''}" data-qty="${count}">In lại</button>` : ''}
           </div>
         </div>
-        <div class="card-actions">
-          ${(status === 'open' || status === 'full') && count > 0 ? `<button class="btn btn-close" data-action="close" data-id="${session.id}" data-type="${session.type_group}">Đóng</button>` : ''}
-          ${status === 'closed' ? `<button class="btn btn-reprint" data-action="reprint-closed" data-id="${session.id}" data-type="${session.type_group}" data-to="${session.to_number || ''}" data-date="${timeStr}" data-number="${session.to_number ? session.to_number.split('-').pop() : ''}" data-qty="${count}">In lại</button>` : ''}
+        <div class="progress-row">
+          <div class="progress-bar">
+            <div class="progress-fill" style="width:${percent}%; background:${color};"></div>
+          </div>
+          <span class="progress-text">${count}/${threshold}</span>
         </div>
       </div>
-      <div class="progress-row">
-        <div class="progress-bar">
-          <div class="progress-fill" style="width:${percent}%; background:${color};"></div>
-        </div>
-        <span class="progress-text">${count}/${threshold}</span>
-      </div>
-    </div>
-  `;
+    `;
   }
 
   _renderCardFromLabel(label) {
     const color = ID_COLORS[label.id] || '#3b82f6';
     const textColor = getTextColor(color);
-
     return `
-    <div class="card status-closed" data-id="${label.id}" data-type="${label.type}">
-      <div class="card-row">
-        <div class="card-left">
-          <div class="id-badge" style="background:${color}; color:${textColor};">${label.id || '?'}</div>
-          <div>
-            <div class="type">${label.type || ''}</div>
-            <div class="time">${label.dateStr || ''}</div>
+      <div class="card status-closed" data-id="${label.id}" data-type="${label.type}">
+        <div class="card-row">
+          <div class="card-left">
+            <div class="id-badge" style="background:${color}; color:${textColor};">${label.id || '?'}</div>
+            <div>
+              <div class="type">${label.type || ''}</div>
+              <div class="time">${label.dateStr || ''}</div>
+            </div>
+          </div>
+          <div class="card-actions">
+            <button class="btn btn-reprint" data-action="reprint-label" data-to="${label.toNumber}" data-type="${label.type}" data-id="${label.id}" data-date="${label.dateStr}" data-number="${label.number}" data-email="${label.email}" data-qty="${label.itemCount}">In lại</button>
           </div>
         </div>
-        <div class="card-actions">
-          <button class="btn btn-reprint" data-action="reprint-label" data-to="${label.toNumber}" data-type="${label.type}" data-id="${label.id}" data-date="${label.dateStr}" data-number="${label.number}" data-email="${label.email}" data-qty="${label.itemCount}">In lại</button>
+        <div class="progress-row">
+          <span class="progress-text">QTY: ${label.itemCount}</span>
         </div>
       </div>
-      <div class="progress-row">
-        <span class="progress-text">QTY: ${label.itemCount}</span>
-      </div>
-    </div>
-  `;
+    `;
   }
 
   _attachCardEvents() {
@@ -525,7 +527,6 @@ export class DashboardUI {
       });
     });
 
-    // Sự kiện nút "Tải thêm" cho tab Đã đóng
     const loadMoreBtn = this.shadowRoot.getElementById('load-more-closed');
     if (loadMoreBtn) {
       loadMoreBtn.addEventListener('click', async () => {

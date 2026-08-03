@@ -1,7 +1,7 @@
 // content/qr-generator.js – QR Code generator với thư viện nhúng sẵn (offline)
 (function () {
-    if (window.__qcQrGeneratorInjected) return;
-    window.__qcQrGeneratorInjected = true;
+    if (window.__asQrGeneratorInjected) return;
+    window.__asQrGeneratorInjected = true;
 
     // ============================================================
     // Nội dung thư viện qrcode.min.js (đã được nhúng vào đây)
@@ -17,7 +17,7 @@
     // Sau khi dán, biến toàn cục QRCode sẽ có sẵn trong main world.
 
     // Lắng nghe yêu cầu từ content script
-    document.addEventListener('qc-generate-qr', function (e) {
+    document.addEventListener('as-generate-qr', function (e) {
         const { text, requestId } = e.detail;
         try {
             if (typeof QRCode === 'undefined' || typeof QRCode.toDataURL !== 'function') {
@@ -30,17 +30,17 @@
                 color: { dark: '#000000', light: '#ffffff' }
             }, function (err, url) {
                 if (err) {
-                    document.dispatchEvent(new CustomEvent('qc-qr-generated', {
+                    document.dispatchEvent(new CustomEvent('as-qr-generated', {
                         detail: { requestId, error: err.message || String(err) }
                     }));
                 } else {
-                    document.dispatchEvent(new CustomEvent('qc-qr-generated', {
+                    document.dispatchEvent(new CustomEvent('as-qr-generated', {
                         detail: { requestId, url }
                     }));
                 }
             });
         } catch (err) {
-            document.dispatchEvent(new CustomEvent('qc-qr-generated', {
+            document.dispatchEvent(new CustomEvent('as-qr-generated', {
                 detail: { requestId, error: err.message || String(err) }
             }));
         }

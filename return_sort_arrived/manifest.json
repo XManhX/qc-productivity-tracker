@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
-  "name": "QC Arrival Manager Pro",
-  "version": "2.1.0",
+  "name": "Arrival Sort Pro",
+  "version": "2.1.2",
   "permissions": ["storage", "activeTab", "scripting"],
   "host_permissions": [
     "https://wms.ssc.shopee.vn/*",

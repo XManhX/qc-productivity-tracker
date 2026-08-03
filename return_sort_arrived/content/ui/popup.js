@@ -1,4 +1,4 @@
-// content/ui/popup.js – Popup chính (Arrival) - đã sửa hiển thị lỗi
+// content/ui/popup.js – Popup chính (Arrival) - hiển thị ngay, có animation
 import { printLabel } from '../printer.js';
 
 const ID_COLORS = {
@@ -81,6 +81,11 @@ const STYLES = `
 .state-card {
   border-radius: 20px; padding: 24px; text-align: center; transition: background 0.3s;
   width: 100%; box-sizing: border-box; display: flex; flex-direction: column; align-items: center; gap: 12px;
+  animation: cardUpdate 0.25s ease;
+}
+@keyframes cardUpdate {
+  0% { opacity: 0.7; transform: scale(0.98); }
+  100% { opacity: 1; transform: scale(1); }
 }
 .id-big {
   font-size: 64px; font-weight: 800; line-height: 1.2; padding: 20px; border-radius: 20px;
@@ -92,7 +97,7 @@ const STYLES = `
   border: 2px dashed #ccc;
 }
 .rv-text { font-size: 28px; font-weight: 700; color: #0f172a; word-break: break-all; min-height: 40px; }
-.type-text { font-size: 22px; color: #334155; min-height: 30px; }
+.type-text { font-size: 22px; font-weight: 700; color: #334155; min-height: 30px; }
 .progress-bar { height: 14px; background: #e2e8f0; border-radius: 7px; overflow: hidden; width: 100%; }
 .progress-fill { height: 100%; border-radius: 7px; transition: width 0.4s ease; background: #cbd5e1; }
 .count-text { font-size: 42px; font-weight: 800; color: #0f172a; min-height: 50px; }
@@ -107,6 +112,10 @@ const STYLES = `
 .btn-close-early:hover { background: #1976D2; }
 .btn-warning { background: #f97316; color: white; }
 .btn-warning:hover { background: #ea580c; }
+.btn-undo {
+  background: #e2e8f0; color: #475569; font-size: 16px; padding: 8px 16px;
+}
+.btn-undo:hover { background: #cbd5e1; }
 `;
 
 export class UIManager {
@@ -153,7 +162,7 @@ export class UIManager {
 
   _createHost({ left, top }) {
     this.host = document.createElement('div');
-    this.host.id = 'qc-popup-host';
+    this.host.id = 'as-popup-host';
     this.shadowRoot = this.host.attachShadow({ mode: 'open' });
 
     const style = document.createElement('style');
@@ -168,7 +177,7 @@ export class UIManager {
     this.popup.innerHTML = `
       <div class="header" id="header">
         <div class="header-left">
-          <div class="title-row"><span>📦 QC Arrival</span></div>
+          <div class="title-row"><span>📦 Arrival Sort</span></div>
           <div class="top-row" id="top-row"></div>
         </div>
         <div class="actions">
@@ -350,10 +359,7 @@ export class UIManager {
     const card = this.shadowRoot.getElementById('state-card');
     const errorInfo = this.shadowRoot.getElementById('error-info');
 
-    if (idBox) {
-      idBox.style.display = 'none';
-      idBox.classList.remove('unknown');
-    }
+    if (idBox) { idBox.style.display = 'none'; idBox.classList.remove('unknown'); }
     if (typeEl) typeEl.style.display = 'none';
     if (rvEl) rvEl.style.display = 'none';
     if (progressBar) progressBar.style.display = 'none';
@@ -361,11 +367,9 @@ export class UIManager {
     if (btnContainer) btnContainer.innerHTML = '';
     if (errorInfo) errorInfo.style.display = 'none';
 
-    // Xác định xem có đang ở trạng thái lỗi (không xác định được ID) hay không
     const isUnknown = unknownId || (error && !id);
 
     if (error) {
-      // Chế độ lỗi
       if (idBox) {
         if (isUnknown) {
           idBox.style.background = '';
@@ -398,10 +402,23 @@ export class UIManager {
           <div style="font-size:16px; color:#555;">${error.detail || ''}</div>
         `;
       }
+      if (card) {
+        card.style.animation = 'none';
+        card.offsetHeight;
+        card.style.animation = 'cardUpdate 0.25s ease';
+      }
+      if (id && count > 0 && btnContainer) {
+        btnContainer.style.display = 'block'; // đảm bảo visible
+        btnContainer.innerHTML = `<button class="btn btn-undo" id="btn-undo">↩️ Hủy RV này</button>`;
+        btnContainer.querySelector('#btn-undo')?.addEventListener('click', () => {
+          if (confirm(`Hủy RV ${rv} khỏi ID ${id}?`)) {
+            this.state.removeScan(rv, id, type);
+          }
+        });
+      }
       return;
     }
 
-    // Chế độ bình thường (có ID hoặc không)
     if (idBox) idBox.style.display = 'inline-block';
     if (typeEl) typeEl.style.display = 'block';
     if (rvEl) rvEl.style.display = 'block';
@@ -422,11 +439,7 @@ export class UIManager {
         idBox.textContent = id;
       }
     }
-
-    if (card) {
-      card.style.background = isUnknown ? '#fff7ed' : (isFull ? '#f0fdf4' : '#f8fafc');
-    }
-
+    if (card) card.style.background = isUnknown ? '#fff7ed' : (isFull ? '#f0fdf4' : '#f8fafc');
     if (typeEl) typeEl.textContent = type || '--';
     if (rvEl) rvEl.textContent = rv || '----';
 
@@ -441,19 +454,39 @@ export class UIManager {
     }
 
     if (count > 0 && id && !isUnknown && btnContainer) {
+      const undoButton = `<button class="btn btn-undo" id="btn-undo">↩️ Hủy RV này</button>`;
       if (isFull) {
-        btnContainer.innerHTML = '<button class="btn btn-close" id="btn-close">Xác nhận đóng gói (đầy)</button>';
-        btnContainer.querySelector('#btn-close')?.addEventListener('click', () => this.state.closeSession(id, type));
+        btnContainer.innerHTML = `
+      <button class="btn btn-close" id="btn-close">Xác nhận đóng gói (đầy)</button>
+      ${undoButton}
+    `;
       } else {
-        btnContainer.innerHTML = `<button class="btn btn-close-early" id="btn-close-early">Đóng gói ngay (${count}/${threshold || 30})</button>`;
-        btnContainer.querySelector('#btn-close-early')?.addEventListener('click', () => {
-          if (confirm('Bạn có chắc muốn đóng gói khi chưa đủ số lượng?\nThao tác này sẽ in tem TO và kết thúc lô hàng hiện tại.')) {
-            this.state.closeSession(id, type);
-          }
-        });
+        btnContainer.innerHTML = `
+      <button class="btn btn-close-early" id="btn-close-early">Đóng gói ngay (${count}/${threshold || 30})</button>
+      ${undoButton}
+    `;
       }
+      // Gán sự kiện cho nút đóng gói
+      btnContainer.querySelector('#btn-close')?.addEventListener('click', () => this.state.closeSession(id, type));
+      btnContainer.querySelector('#btn-close-early')?.addEventListener('click', () => {
+        if (confirm('Bạn có chắc muốn đóng gói khi chưa đủ số lượng?\nThao tác này sẽ in tem TO và kết thúc lô hàng hiện tại.')) {
+          this.state.closeSession(id, type);
+        }
+      });
+      // Gán sự kiện cho nút hủy
+      btnContainer.querySelector('#btn-undo')?.addEventListener('click', () => {
+        if (confirm(`Hủy RV ${rv} khỏi ID ${id}?`)) {
+          this.state.removeScan(rv, id, type);
+        }
+      });
     } else if (btnContainer) {
       btnContainer.innerHTML = '';
+    }
+
+    if (card) {
+      card.style.animation = 'none';
+      card.offsetHeight;
+      card.style.animation = 'cardUpdate 0.25s ease';
     }
   }
 

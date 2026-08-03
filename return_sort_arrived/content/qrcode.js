@@ -5,7 +5,7 @@ export async function generateQR(text) {
 
         function handler(e) {
             if (e.detail.requestId === requestId) {
-                document.removeEventListener('qc-qr-generated', handler);
+                document.removeEventListener('as-qr-generated', handler);
                 if (e.detail.error) {
                     reject(new Error(e.detail.error));
                 } else {
@@ -14,8 +14,8 @@ export async function generateQR(text) {
             }
         }
 
-        document.addEventListener('qc-qr-generated', handler);
-        document.dispatchEvent(new CustomEvent('qc-generate-qr', {
+        document.addEventListener('as-qr-generated', handler);
+        document.dispatchEvent(new CustomEvent('as-generate-qr', {
             detail: { text, requestId }
         }));
     });

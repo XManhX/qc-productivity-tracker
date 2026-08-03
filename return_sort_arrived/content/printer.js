@@ -1,4 +1,4 @@
-// content/printer.js – In tem TO qua iframe ẩn (Promise, tuân thủ CSP)
+// content/printer.js – In tem TO qua popup chuyên nghiệp, có phản hồi kết quả
 import { generateQR } from './qrcode.js';
 
 function waitForEvent(target, event, timeoutMs = 0) {
@@ -86,41 +86,42 @@ export async function printLabel(toNumber, type, id, dateStr, number, email, ite
     </div>
     <div class="qty-small">QTY: ${itemCount}</div>
   </div>
+  <script>
+    window.addEventListener('DOMContentLoaded', () => {
+      const img = document.getElementById('qr-img');
+      if (img && !img.complete) {
+        img.onload = () => setTimeout(() => window.print(), 300);
+        img.onerror = () => setTimeout(() => window.print(), 300);
+      } else {
+        setTimeout(() => window.print(), 300);
+      }
+    });
+  </script>
 </body>
 </html>`;
 
-  const iframe = document.createElement('iframe');
-  iframe.style.position = 'fixed';
-  iframe.style.top = '-9999px';
-  iframe.style.left = '-9999px';
-  iframe.style.width = '100mm';
-  iframe.style.height = '50mm';
-  document.body.appendChild(iframe);
+  const blob = new Blob([html], { type: 'text/html;charset=UTF-8' });
+  const url = URL.createObjectURL(blob);
+  const win = window.open(url, '_blank', 'width=400,height=300');
+
+  if (!win) {
+    // Popup bị chặn → fallback tải file
+    alert('Popup bị chặn. Vui lòng cho phép popup hoặc tải file để in.');
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${toNumber}.html`;
+    a.click();
+    // Không reject, coi như đã xử lý
+    return;
+  }
 
   try {
-    await new Promise((resolve, reject) => {
-      iframe.onload = resolve;
-      iframe.onerror = () => reject(new Error('Iframe load failed'));
-      iframe.contentDocument.open();
-      iframe.contentDocument.write(html);
-      iframe.contentDocument.close();
-    });
-
-    const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
-    const qrImg = iframeDoc.getElementById('qr-img');
-    if (qrImg) await waitForImage(qrImg, 5000);
-
-    iframe.contentWindow.focus();
-    iframe.contentWindow.print();
-
-    await Promise.race([
-      waitForEvent(iframe.contentWindow, 'afterprint'),
-      new Promise(resolve => setTimeout(resolve, 10000))
-    ]);
-  } catch (error) {
-    console.error('[Printer] Print failed:', error);
-    throw error;
+    // Đợi afterprint trên cửa sổ popup
+    await waitForEvent(win, 'afterprint', 30000); // 30 giây timeout
+  } catch (e) {
+    console.warn('[Printer] afterprint timeout:', e);
   } finally {
-    if (iframe.parentNode) iframe.remove();
+    win.close();
+    URL.revokeObjectURL(url);
   }
 }

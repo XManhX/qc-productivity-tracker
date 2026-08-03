@@ -500,18 +500,28 @@ export class DashboardUI {
     });
 
     contentArea.querySelectorAll('.btn-reprint[data-action="reprint-closed"]').forEach(btn => {
-      btn.addEventListener('click', (e) => {
+      btn.addEventListener('click', async (e) => {
         e.stopPropagation();
         const { to, type, id, date, number, qty } = btn.dataset;
-        printLabel(to, type, id, date, number, this.state.email, parseInt(qty));
+        try {
+          await printLabel(to, type, id, date, number, this.state.email, parseInt(qty));
+          this.state.markPrinted(id);
+        } catch (err) {
+          console.error('Reprint failed:', err);
+        }
       });
     });
 
     contentArea.querySelectorAll('.btn-reprint[data-action="reprint-label"]').forEach(btn => {
-      btn.addEventListener('click', (e) => {
+      btn.addEventListener('click', async (e) => {
         e.stopPropagation();
         const { to, type, id, date, number, email, qty } = btn.dataset;
-        printLabel(to, type, id, date, number, email, parseInt(qty));
+        try {
+          await printLabel(to, type, id, date, number, email, parseInt(qty));
+          if (id) this.state.markPrinted(id);
+        } catch (err) {
+          console.error('Reprint failed:', err);
+        }
       });
     });
 

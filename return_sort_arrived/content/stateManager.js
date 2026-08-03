@@ -137,12 +137,12 @@ export class StateManager {
                     reason = 'Cancelled';
                 } else {
                     reason = 'Lỗi';
-                    detail = 'Không xác nhận được Cancelled';
+                    detail = 'Không thể kiểm tra trạng thái đơn hàng';
                 }
             } catch (e) {
                 console.error('Error calling search_asn:', e);
                 reason = 'Lỗi';
-                detail = 'Không thể kiểm tra trạng thái Cancelled';
+                detail = 'Lỗi kiểm tra trạng thái đơn hàng';
             }
         }
 
@@ -198,6 +198,15 @@ export class StateManager {
             if (data.success) this.ui.printAndClose(id, type, data.to_number, data.item_count);
             else this.ui.showError(data.error);
         } catch (e) { this.ui.showError('Lỗi kết nối'); }
+    }
+
+    async markPrinted(id) {
+        try {
+            await this._callApi('mark_printed', { id });
+            console.log('[StateManager] Marked as printed:', id);
+        } catch (e) {
+            console.error('[StateManager] Failed to mark printed:', e);
+        }
     }
 
     updateMasterData(newData) { this.masterData = newData; }

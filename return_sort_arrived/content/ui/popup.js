@@ -1,4 +1,4 @@
-// content/ui/popup.js – Popup chính (Arrival)
+// content/ui/popup.js – Popup chính (Arrival) - đã sửa hiển thị lỗi
 import { printLabel } from '../printer.js';
 
 const ID_COLORS = {
@@ -85,6 +85,11 @@ const STYLES = `
 .id-big {
   font-size: 64px; font-weight: 800; line-height: 1.2; padding: 20px; border-radius: 20px;
   display: inline-block; transition: background 0.3s, color 0.3s;
+}
+.id-big.unknown {
+  background: repeating-linear-gradient(45deg, #f0f0f0, #f0f0f0 10px, #e0e0e0 10px, #e0e0e0 20px);
+  color: #999;
+  border: 2px dashed #ccc;
 }
 .rv-text { font-size: 28px; font-weight: 700; color: #0f172a; word-break: break-all; min-height: 40px; }
 .type-text { font-size: 22px; color: #334155; min-height: 30px; }
@@ -333,7 +338,7 @@ export class UIManager {
     if (this.shadowRoot) this._updateTop5();
   }
 
-  _updateCard({ id, type, rv, count, threshold, isFull, error }) {
+  _updateCard({ id, type, rv, count, threshold, isFull, error, unknownId }) {
     if (!this.shadowRoot) return;
     const idBox = this.shadowRoot.getElementById('id-box');
     const typeEl = this.shadowRoot.getElementById('type-el');
@@ -345,7 +350,10 @@ export class UIManager {
     const card = this.shadowRoot.getElementById('state-card');
     const errorInfo = this.shadowRoot.getElementById('error-info');
 
-    if (idBox) idBox.style.display = 'none';
+    if (idBox) {
+      idBox.style.display = 'none';
+      idBox.classList.remove('unknown');
+    }
     if (typeEl) typeEl.style.display = 'none';
     if (rvEl) rvEl.style.display = 'none';
     if (progressBar) progressBar.style.display = 'none';
@@ -353,19 +361,28 @@ export class UIManager {
     if (btnContainer) btnContainer.innerHTML = '';
     if (errorInfo) errorInfo.style.display = 'none';
 
+    // Xác định xem có đang ở trạng thái lỗi (không xác định được ID) hay không
+    const isUnknown = unknownId || (error && !id);
+
     if (error) {
-      if (id && idBox) {
-        const bgColor = ID_COLORS[id] || '#607D8B';
-        const textColor = getTextColor(bgColor);
-        idBox.style.background = bgColor;
-        idBox.style.color = textColor;
-        idBox.textContent = id;
-        idBox.style.display = 'inline-block';
-        if (card) card.style.background = error.reason === 'Sai tuyến' ? '#fff3cd' : '#f8d7da';
-      } else {
-        if (idBox) idBox.style.display = 'none';
-        if (card) card.style.background = '#f8d7da';
+      // Chế độ lỗi
+      if (idBox) {
+        if (isUnknown) {
+          idBox.style.background = '';
+          idBox.style.color = '';
+          idBox.textContent = '?';
+          idBox.classList.add('unknown');
+          idBox.style.display = 'inline-block';
+        } else {
+          const bgColor = ID_COLORS[id] || '#607D8B';
+          const textColor = getTextColor(bgColor);
+          idBox.style.background = bgColor;
+          idBox.style.color = textColor;
+          idBox.textContent = id;
+          idBox.style.display = 'inline-block';
+        }
       }
+      if (card) card.style.background = error.reason === 'Sai tuyến' ? '#fff3cd' : '#f8d7da';
       if (type && typeEl) {
         typeEl.textContent = type;
         typeEl.style.display = 'block';
@@ -384,26 +401,30 @@ export class UIManager {
       return;
     }
 
+    // Chế độ bình thường (có ID hoặc không)
     if (idBox) idBox.style.display = 'inline-block';
     if (typeEl) typeEl.style.display = 'block';
     if (rvEl) rvEl.style.display = 'block';
     if (progressBar) progressBar.style.display = 'block';
     if (countEl) countEl.style.display = 'block';
 
-    if (id && idBox) {
-      const bgColor = ID_COLORS[id] || '#607D8B';
-      const textColor = getTextColor(bgColor);
-      idBox.style.background = bgColor;
-      idBox.style.color = textColor;
-      idBox.textContent = id;
-      if (card) card.style.background = isFull ? '#f0fdf4' : '#f8fafc';
-    } else {
-      if (idBox) {
-        idBox.style.background = '#cbd5e1';
-        idBox.style.color = '#fff';
+    if (idBox) {
+      if (isUnknown) {
+        idBox.style.background = '';
+        idBox.style.color = '';
         idBox.textContent = '?';
+        idBox.classList.add('unknown');
+      } else {
+        const bgColor = ID_COLORS[id] || '#607D8B';
+        const textColor = getTextColor(bgColor);
+        idBox.style.background = bgColor;
+        idBox.style.color = textColor;
+        idBox.textContent = id;
       }
-      if (card) card.style.background = '#f8fafc';
+    }
+
+    if (card) {
+      card.style.background = isUnknown ? '#fff7ed' : (isFull ? '#f0fdf4' : '#f8fafc');
     }
 
     if (typeEl) typeEl.textContent = type || '--';
@@ -412,14 +433,14 @@ export class UIManager {
     const percent = (count !== undefined && threshold) ? Math.min(100, Math.round((count / threshold) * 100)) : 0;
     if (progressFill) {
       progressFill.style.width = percent + '%';
-      progressFill.style.background = id && ID_COLORS[id] ? ID_COLORS[id] : '#cbd5e1';
+      progressFill.style.background = (id && !isUnknown && ID_COLORS[id]) ? ID_COLORS[id] : '#cbd5e1';
     }
 
     if (countEl) {
       countEl.textContent = count !== undefined ? `${count}/${threshold || 30}` : `0/30`;
     }
 
-    if (count > 0 && id && !error && btnContainer) {
+    if (count > 0 && id && !isUnknown && btnContainer) {
       if (isFull) {
         btnContainer.innerHTML = '<button class="btn btn-close" id="btn-close">Xác nhận đóng gói (đầy)</button>';
         btnContainer.querySelector('#btn-close')?.addEventListener('click', () => this.state.closeSession(id, type));
@@ -437,12 +458,15 @@ export class UIManager {
   }
 
   showDetected(rv, type, id, session) {
-    this.currentId = id;
+    this.currentId = id || '';
     this._updateCard({
-      id, type, rv,
+      id: id || null,
+      type: type || null,
+      rv,
       count: session?.item_count || 0,
       threshold: session?.threshold || 30,
-      isFull: session?.status === 'full'
+      isFull: session?.status === 'full',
+      unknownId: !id
     });
   }
 
@@ -452,7 +476,8 @@ export class UIManager {
       id, type, rv,
       count: serverData.item_count,
       threshold: serverData.threshold || 30,
-      isFull: serverData.status === 'full'
+      isFull: serverData.status === 'full',
+      unknownId: !id
     });
   }
 
@@ -466,11 +491,11 @@ export class UIManager {
   }
 
   showWarning(msg) {
-    this._updateCard({ rv: msg, error: { reason: 'Cảnh báo', detail: '' } });
+    this._updateCard({ rv: msg, error: { reason: 'Cảnh báo', detail: '' }, unknownId: true });
   }
 
   showError(msg) {
-    this._updateCard({ rv: msg, error: { reason: 'Lỗi', detail: '' } });
+    this._updateCard({ rv: msg, error: { reason: 'Lỗi', detail: '' }, unknownId: true });
   }
 
   showScanError({ rv, type, id, reason, detail }) {
@@ -478,8 +503,9 @@ export class UIManager {
     this._updateCard({
       id: id || null,
       type: type || null,
-      rv: rv,
-      error: { reason, detail }
+      rv,
+      error: { reason, detail },
+      unknownId: !id
     });
   }
 
@@ -581,6 +607,7 @@ export class UIManager {
     this._retryPrint(toNumber, type, id, dateStr, numberPart, this.state.email, itemCount)
       .then(() => {
         this._savePrintedLabel({ toNumber, type, id, dateStr, number: numberPart, email: this.state.email, itemCount });
+        this.state.markPrinted(id);
         this._updateCard({
           id, type, rv: '✅ Đã đóng gói',
           count: itemCount, threshold: 0, isFull: false

@@ -79,9 +79,10 @@ const STYLES = `
 }
 .btn-icon:hover { background: rgba(255,255,255,0.35); }
 .btn-icon.active { background: rgba(255,255,255,0.4); }
+.btn-icon:disabled { opacity: 0.5; cursor: not-allowed; }
 .body {
   padding: 24px; display: flex; flex-direction: column; gap: 16px;
-  overflow-x: hidden; overflow-y: auto; max-height: 70vh;
+  overflow-x: hidden; overflow-y: auto; max-height: 60vh;
   align-items: center; position: relative;
 }
 .minimized .body { display: none; }
@@ -140,13 +141,23 @@ const STYLES = `
   display: inline-flex; align-items: center; justify-content: center; gap: 8px;
   padding: 16px 32px; border-radius: 16px; font-weight: 700; font-size: 22px;
   border: none; cursor: pointer; transition: all 0.2s; width: 100%;
+  position: relative;
+}
+.btn:disabled { opacity: 0.6; cursor: not-allowed; pointer-events: none; }
+.btn .spinner {
+  width: 20px; height: 20px; border: 2px solid rgba(255,255,255,0.3); border-top-color: white;
+  border-radius: 50%; animation: spin 0.6s linear infinite;
 }
 .btn-close { background: #ee4d2d; color: white; }
-.btn-close:hover { background: #d43d1a; }
+.btn-close:hover:not(:disabled) { background: #d43d1a; }
 .btn-close-early { background: #2196F3; color: white; }
-.btn-close-early:hover { background: #1976D2; }
+.btn-close-early:hover:not(:disabled) { background: #1976D2; }
 .btn-warning { background: #f97316; color: white; }
-.btn-warning:hover { background: #ea580c; }
+.btn-warning:hover:not(:disabled) { background: #ea580c; }
+.btn-undo {
+  background: #e2e8f0; color: #475569; font-size: 16px; padding: 8px 16px;
+}
+.btn-undo:hover:not(:disabled) { background: #cbd5e1; }
 .dashboard-container {
   width: 100%; display: none; flex-direction: column; gap: 8px;
 }
@@ -174,7 +185,7 @@ export class UIManager {
     this.minimized = false;
     this.currentId = '';
     this._viewMode = 'arrival'; // 'arrival' | 'dashboard'
-    this._dashboardInstance = null; // sẽ khởi tạo khi chuyển sang dashboard lần đầu
+    this._dashboardInstance = null;
     this._currentUrl = window.location.href;
     this._init();
     document.addEventListener('url-change', (e) => this._onUrlChange(e.detail.url));
@@ -331,20 +342,6 @@ export class UIManager {
     this._dragStartHandler = startDrag;
   }
 
-  resetCard() {
-    this._updateCard({
-      id: null,
-      type: null,
-      return_tn: null,
-      count: 0,
-      threshold: 30,
-      isFull: false,
-      closed: false,
-      unknownId: false,
-      animate: false
-    });
-  }
-
   _bindEvents() {
     this.shadowRoot.getElementById('btn-minimize').addEventListener('click', (e) => {
       e.stopPropagation();
@@ -360,7 +357,9 @@ export class UIManager {
     // Nút refresh Master Data
     const refreshMaster = this.shadowRoot.getElementById('btn-refresh-master');
     refreshMaster.addEventListener('click', async () => {
+      if (refreshMaster.disabled) return;
       refreshMaster.disabled = true;
+      const originalHTML = refreshMaster.innerHTML;
       refreshMaster.innerHTML = '<span class="spinner"></span>';
       try {
         await this.state.refreshMasterData();
@@ -369,14 +368,16 @@ export class UIManager {
         this._showToast('❌ Lỗi cập nhật Master Data');
       } finally {
         refreshMaster.disabled = false;
-        refreshMaster.innerHTML = '🔄';
+        refreshMaster.innerHTML = originalHTML;
       }
     });
 
     // Nút refresh Type Mapping
     const refreshMapping = this.shadowRoot.getElementById('btn-refresh-mapping');
     refreshMapping.addEventListener('click', async () => {
+      if (refreshMapping.disabled) return;
       refreshMapping.disabled = true;
+      const originalHTML = refreshMapping.innerHTML;
       refreshMapping.innerHTML = '<span class="spinner"></span>';
       try {
         await this.state.refreshTypeMapping();
@@ -385,7 +386,7 @@ export class UIManager {
         this._showToast('❌ Lỗi cập nhật Type Mapping');
       } finally {
         refreshMapping.disabled = false;
-        refreshMapping.innerHTML = '🗂️';
+        refreshMapping.innerHTML = originalHTML;
       }
     });
   }
@@ -408,17 +409,14 @@ export class UIManager {
       stateCard.style.display = 'flex';
       dashboardContainer.classList.remove('visible');
       toggleBtn.classList.remove('active');
-      // Cập nhật top5
       this._updateTop5();
     } else {
       stateCard.style.display = 'none';
       dashboardContainer.classList.add('visible');
       toggleBtn.classList.add('active');
-      // Khởi tạo dashboard nếu chưa có
       if (!this._dashboardInstance) {
         this._dashboardInstance = DashboardUI.attachTo(dashboardContainer, this.state);
       }
-      // Làm mới dữ liệu dashboard
       if (this._dashboardInstance) {
         this._dashboardInstance.refresh();
       }
@@ -529,7 +527,6 @@ export class UIManager {
     if (errorInfo) errorInfo.style.display = 'none';
 
     const isUnknown = unknownId || (error && !id);
-    // Chỉ cho phép thao tác khi không có lỗi, không processing, không closed và có đủ thông tin
     const canOperate = !processing && !closed && !error && count > 0 && id && !isUnknown;
 
     // Nút hủy (góc trên phải)
@@ -537,14 +534,20 @@ export class UIManager {
       const canUndo = (canOperate || (error && id && count > 0));
       undoBtn.style.display = canUndo ? 'flex' : 'none';
       if (canUndo) {
-        undoBtn.disabled = false; // luôn bắt đầu ở trạng thái sẵn sàng
+        undoBtn.disabled = false; // reset trạng thái
         undoBtn.onclick = (e) => {
-          if (undoBtn.disabled) return; // chặn click đúp
+          if (undoBtn.disabled) return;
           undoBtn.disabled = true;
+          const originalHTML = undoBtn.innerHTML;
+          undoBtn.innerHTML = '<span class="spinner"></span>';
           if (confirm(`Hủy Return TN ${return_tn} khỏi ID ${id}?`)) {
-            this.state.removeScan(return_tn, id, type);
+            this.state.removeScan(return_tn, id, type).finally(() => {
+              undoBtn.disabled = false;
+              undoBtn.innerHTML = originalHTML;
+            });
           } else {
-            undoBtn.disabled = false; // cho phép hủy lại nếu người dùng Cancel
+            undoBtn.disabled = false;
+            undoBtn.innerHTML = originalHTML;
           }
         };
       }
@@ -598,7 +601,6 @@ export class UIManager {
                 <div style="font-size:16px; color:#555;">${error.detail || ''}</div>
             `;
       }
-      // Nếu có lỗi nhưng vẫn có thể hủy, nút hủy đã được hiển thị ở trên
       if (card && animate) {
         card.classList.add('animate');
         card.addEventListener('animationend', () => card.classList.remove('animate'), { once: true });
@@ -690,12 +692,28 @@ export class UIManager {
     if (canOperate && btnContainer) {
       if (isFull) {
         btnContainer.innerHTML = `<button class="btn btn-close" id="btn-close">Xác nhận đóng kiện (đầy)</button>`;
-        btnContainer.querySelector('#btn-close')?.addEventListener('click', () => this.state.closeSession(id, type));
+        const closeBtn = btnContainer.querySelector('#btn-close');
+        closeBtn.addEventListener('click', () => {
+          if (closeBtn.disabled) return;
+          closeBtn.disabled = true;
+          closeBtn.innerHTML = '<span class="spinner"></span> Đang đóng...';
+          this.state.closeSession(id, type).finally(() => {
+            closeBtn.disabled = false;
+            closeBtn.textContent = 'Xác nhận đóng kiện (đầy)';
+          });
+        });
       } else {
         btnContainer.innerHTML = `<button class="btn btn-close-early" id="btn-close-early">Đóng kiện ngay (${count}/${threshold || 30})</button>`;
-        btnContainer.querySelector('#btn-close-early')?.addEventListener('click', () => {
+        const closeEarlyBtn = btnContainer.querySelector('#btn-close-early');
+        closeEarlyBtn.addEventListener('click', () => {
+          if (closeEarlyBtn.disabled) return;
           if (confirm('Bạn có chắc muốn đóng kiện khi chưa đủ số lượng?\nThao tác này sẽ in tem TO và kết thúc lô hàng hiện tại.')) {
-            this.state.closeSession(id, type);
+            closeEarlyBtn.disabled = true;
+            closeEarlyBtn.innerHTML = '<span class="spinner"></span> Đang đóng...';
+            this.state.closeSession(id, type).finally(() => {
+              closeEarlyBtn.disabled = false;
+              closeEarlyBtn.textContent = `Đóng kiện ngay (${count}/${threshold || 30})`;
+            });
           }
         });
       }
@@ -747,7 +765,16 @@ export class UIManager {
     const btnContainer = this.shadowRoot.getElementById('button-container');
     if (btnContainer && !btnContainer.querySelector('#btn-close')) {
       btnContainer.innerHTML = '<button class="btn btn-close" id="btn-close">Xác nhận đóng kiện (đầy)</button>';
-      btnContainer.querySelector('#btn-close')?.addEventListener('click', () => this.state.closeSession(id, type));
+      const closeBtn = btnContainer.querySelector('#btn-close');
+      closeBtn.addEventListener('click', () => {
+        if (closeBtn.disabled) return;
+        closeBtn.disabled = true;
+        closeBtn.innerHTML = '<span class="spinner"></span> Đang đóng...';
+        this.state.closeSession(id, type).finally(() => {
+          closeBtn.disabled = false;
+          closeBtn.textContent = 'Xác nhận đóng kiện (đầy)';
+        });
+      });
     }
   }
 
@@ -766,6 +793,14 @@ export class UIManager {
       error: { reason, detail },
       unknownId: !id,
       animate: true
+    });
+  }
+
+  resetCard() {
+    this._updateCard({
+      id: null, type: null, return_tn: null,
+      count: 0, threshold: 30, isFull: false,
+      closed: false, unknownId: false, animate: false
     });
   }
 
@@ -883,7 +918,16 @@ export class UIManager {
           const btnContainer = this.shadowRoot.getElementById('button-container');
           if (btnContainer) {
             btnContainer.innerHTML = '<button class="btn btn-warning" id="btn-retry-print">In lại</button>';
-            btnContainer.querySelector('#btn-retry-print')?.addEventListener('click', () => this.printAndClose(id, type, toNumber, itemCount));
+            const retryBtn = btnContainer.querySelector('#btn-retry-print');
+            retryBtn.addEventListener('click', () => {
+              if (retryBtn.disabled) return;
+              retryBtn.disabled = true;
+              retryBtn.innerHTML = '<span class="spinner"></span> Đang in...';
+              this.printAndClose(id, type, toNumber, itemCount).finally(() => {
+                retryBtn.disabled = false;
+                retryBtn.textContent = 'In lại';
+              });
+            });
           }
         }
       });

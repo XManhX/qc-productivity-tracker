@@ -15,7 +15,7 @@ const DASH_STYLES = `
 :host { all: initial; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; }
 .dashboard { display: flex; flex-direction: column; gap: 8px; }
 .tabs {
-  display: flex; border-bottom: 1px solid #e2e8f0; background: #f8fafc;
+  display: flex; border-radius:12px; border-bottom: 1px solid #e2e8f0; background: #f8fafc;
 }
 .tab {
   flex: 1; text-align: center; padding: 10px 6px; font-size: 12px; font-weight: 600;
@@ -35,9 +35,15 @@ const DASH_STYLES = `
 .btn-action {
   padding: 8px 14px; border: none; border-radius: 8px; font-weight: 600; font-size: 13px;
   cursor: pointer; transition: all 0.2s;
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+}
+.btn-action:disabled { opacity: 0.6; cursor: not-allowed; pointer-events: none; }
+.btn-action .spinner {
+  width: 14px; height: 14px; border: 2px solid rgba(255,255,255,0.3); border-top-color: white;
+  border-radius: 50%; animation: spin 0.6s linear infinite;
 }
 .btn-close-all { background: #ef4444; color: white; }
-.btn-close-all:hover { background: #dc2626; }
+.btn-close-all:hover:not(:disabled) { background: #dc2626; }
 .card {
   background: #f8fafc; border-radius: 12px; padding: 10px; margin-bottom: 6px;
   animation: fadeIn 0.3s ease; border-left: 4px solid #cbd5e1;
@@ -61,17 +67,26 @@ const DASH_STYLES = `
 .card-actions { display: flex; gap: 6px; }
 .btn {
   border: none; padding: 6px 12px; border-radius: 6px; font-weight: 600; font-size: 12px; cursor: pointer; transition: all 0.2s;
+  display: inline-flex; align-items: center; justify-content: center; gap: 4px;
+}
+.btn:disabled { opacity: 0.6; cursor: not-allowed; pointer-events: none; }
+.btn .spinner {
+  width: 12px; height: 12px; border: 2px solid rgba(255,255,255,0.3); border-top-color: white;
+  border-radius: 50%; animation: spin 0.6s linear infinite;
 }
 .btn-close { background: #ef4444; color: white; }
-.btn-close:hover { background: #dc2626; }
+.btn-close:hover:not(:disabled) { background: #dc2626; }
 .btn-reprint { background: #3b82f6; color: white; }
-.btn-reprint:hover { background: #2563eb; }
+.btn-reprint:hover:not(:disabled) { background: #2563eb; }
 .no-data {
   display: flex; flex-direction: column; align-items: center; justify-content: center;
   padding: 20px; color: #94a3b8;
 }
 .no-data-icon { font-size: 36px; margin-bottom: 6px; }
 .no-data-text { font-size: 14px; }
+.end-of-list {
+  text-align: center; color: #94a3b8; font-size: 13px; padding: 12px 0;
+}
 `;
 
 export class DashboardUI {
@@ -152,7 +167,14 @@ export class DashboardUI {
       const openSessions = (this._sessions || []).filter(s => s.status === 'open' || s.status === 'full');
       if (openSessions.length === 0) return;
       if (confirm(`Đóng tất cả ${openSessions.length} ID đang mở?`)) {
-        openSessions.forEach(s => this.state.closeSession(s.id, s.type_group));
+        const btn = this.shadowRoot.getElementById('btn-close-all');
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner"></span> Đang đóng...';
+        Promise.all(openSessions.map(s => this.state.closeSession(s.id, s.type_group)))
+          .finally(() => {
+            btn.disabled = false;
+            btn.textContent = 'Đóng tất cả';
+          });
       }
     });
   }
@@ -169,6 +191,15 @@ export class DashboardUI {
     this._sessions = sessions;
     this._fetchClosedCount();
     this._fetchActiveEventsCount();
+    // Khi có realtime, reset về trang 1 cho tab đã đóng và active events
+    if (this._activeTab === 'closed') {
+      this._closedPage = 1;
+      this._hasMoreClosed = true;
+    }
+    if (this._activeTab === 'active-events') {
+      this._activeEventsPage = 1;
+      this._hasMoreActiveEvents = true;
+    }
     this._renderAll();
   }
 
@@ -256,12 +287,31 @@ export class DashboardUI {
   async _renderClosedTabAsync() {
     const sessions = await this._fetchClosedSessions(this._closedPage);
     const filtered = this._filter(sessions);
+
+    // Trang đầu không có dữ liệu
     if (filtered.length === 0 && this._closedPage === 1) {
+      this._hasMoreClosed = false;
       return '<div class="no-data"><div class="no-data-icon">📦</div><div class="no-data-text">Không có TO nào đã đóng</div></div>';
     }
+
+    // Trang > 1 mà không có dữ liệu → đã hết
+    if (filtered.length === 0 && this._closedPage > 1) {
+      this._hasMoreClosed = false;
+      return '<div class="end-of-list">Đã tải hết</div>';
+    }
+
     let html = filtered.map(s => this._renderCard(s)).join('');
+
+    // Nếu số bản ghi trả về ít hơn limit → đánh dấu hết
+    if (sessions.length < 20) {
+      this._hasMoreClosed = false;
+    }
+
+    // Hiển thị nút "Tải thêm" hoặc "Đã tải hết"
     if (this._hasMoreClosed) {
       html += '<button id="load-more-closed" class="btn-action" style="width:100%; margin-top:8px;">Tải thêm</button>';
+    } else {
+      html += '<div class="end-of-list">Đã tải hết</div>';
     }
     return html;
   }
@@ -270,7 +320,6 @@ export class DashboardUI {
     return new Promise((resolve) => {
       chrome.runtime.sendMessage({ action: 'GET_CLOSED_SESSIONS', page, limit: 20 }, (response) => {
         if (response?.sessions) {
-          if (response.sessions.length < 20) this._hasMoreClosed = false;
           resolve(response.sessions);
         } else {
           resolve([]);
@@ -288,12 +337,29 @@ export class DashboardUI {
   async _renderActiveEventsTabAsync() {
     const events = await this.state.fetchActiveScanEvents(this._activeEventsPage, 20);
     const filtered = this._filter(events);
+
+    // Trang đầu không có dữ liệu
     if (filtered.length === 0 && this._activeEventsPage === 1) {
+      this._hasMoreActiveEvents = false;
       return '<div class="no-data"><div class="no-data-icon">📋</div><div class="no-data-text">Không có đơn nào đang active</div></div>';
     }
+
+    // Trang > 1 mà không có dữ liệu → đã hết
+    if (filtered.length === 0 && this._activeEventsPage > 1) {
+      this._hasMoreActiveEvents = false;
+      return '<div class="end-of-list">Đã tải hết</div>';
+    }
+
     let html = filtered.map(e => this._renderActiveEventCard(e)).join('');
+
+    if (events.length < 20) {
+      this._hasMoreActiveEvents = false;
+    }
+
     if (this._hasMoreActiveEvents) {
       html += '<button id="load-more-active-events" class="btn-action" style="width:100%; margin-top:8px;">Tải thêm</button>';
+    } else {
+      html += '<div class="end-of-list">Đã tải hết</div>';
     }
     return html;
   }
@@ -389,9 +455,18 @@ export class DashboardUI {
     contentArea.querySelectorAll('.btn-close[data-action="close"]').forEach(btn => {
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
+        if (btn.disabled) return;
         const id = btn.dataset.id;
         const type = btn.dataset.type;
-        if (confirm(`Đóng kiện ID ${id}?`)) this.state.closeSession(id, type);
+        if (confirm(`Đóng kiện ID ${id}?`)) {
+          btn.disabled = true;
+          const originalHTML = btn.innerHTML;
+          btn.innerHTML = '<span class="spinner"></span>';
+          this.state.closeSession(id, type).finally(() => {
+            btn.disabled = false;
+            btn.innerHTML = originalHTML;
+          });
+        }
       });
     });
 
@@ -399,16 +474,25 @@ export class DashboardUI {
     contentArea.querySelectorAll('.btn-close[data-action="cancel-event"]').forEach(btn => {
       btn.addEventListener('click', async (e) => {
         e.stopPropagation();
+        if (btn.disabled) return;
         const stationId = btn.dataset.station;
         const returnTn = btn.dataset.return;
         const typeGroup = btn.dataset.type;
         if (confirm(`Hủy đơn ${returnTn} khỏi ID ${stationId}?`)) {
-          await this.state.removeScan(returnTn, stationId, typeGroup);
-          await this._fetchActiveEventsCount();
-          if (this._activeTab === 'active-events') {
-            this._activeEventsPage = 1;
-            this._hasMoreActiveEvents = true;
-            this._renderAll();
+          btn.disabled = true;
+          const originalHTML = btn.innerHTML;
+          btn.innerHTML = '<span class="spinner"></span>';
+          try {
+            await this.state.removeScan(returnTn, stationId, typeGroup);
+            await this._fetchActiveEventsCount();
+            if (this._activeTab === 'active-events') {
+              this._activeEventsPage = 1;
+              this._hasMoreActiveEvents = true;
+              this._renderAll();
+            }
+          } finally {
+            btn.disabled = false;
+            btn.innerHTML = originalHTML;
           }
         }
       });
@@ -418,12 +502,19 @@ export class DashboardUI {
     contentArea.querySelectorAll('.btn-reprint[data-action="reprint-closed"]').forEach(btn => {
       btn.addEventListener('click', async (e) => {
         e.stopPropagation();
+        if (btn.disabled) return;
         const { to, type, id, date, number, qty } = btn.dataset;
+        btn.disabled = true;
+        const originalHTML = btn.innerHTML;
+        btn.innerHTML = '<span class="spinner"></span>';
         try {
           await printLabel(to, type, id, date, number, this.state.email, parseInt(qty));
           this.state.markPrinted(id);
         } catch (err) {
           console.error('Reprint failed:', err);
+        } finally {
+          btn.disabled = false;
+          btn.innerHTML = originalHTML;
         }
       });
     });
@@ -432,12 +523,19 @@ export class DashboardUI {
     contentArea.querySelectorAll('.btn-reprint[data-action="reprint-label"]').forEach(btn => {
       btn.addEventListener('click', async (e) => {
         e.stopPropagation();
+        if (btn.disabled) return;
         const { to, type, id, date, number, email, qty } = btn.dataset;
+        btn.disabled = true;
+        const originalHTML = btn.innerHTML;
+        btn.innerHTML = '<span class="spinner"></span>';
         try {
           await printLabel(to, type, id, date, number, email, parseInt(qty));
           if (id) this.state.markPrinted(id);
         } catch (err) {
           console.error('Reprint failed:', err);
+        } finally {
+          btn.disabled = false;
+          btn.innerHTML = originalHTML;
         }
       });
     });
@@ -446,11 +544,21 @@ export class DashboardUI {
     const loadMoreClosedBtn = this.shadowRoot.getElementById('load-more-closed');
     if (loadMoreClosedBtn) {
       loadMoreClosedBtn.addEventListener('click', async () => {
-        this._closedPage++;
-        const moreHtml = await this._renderClosedTabAsync();
-        loadMoreClosedBtn.remove();
-        contentArea.insertAdjacentHTML('beforeend', moreHtml);
-        this._attachCardEvents();
+        if (loadMoreClosedBtn.disabled) return;
+        loadMoreClosedBtn.disabled = true;
+        loadMoreClosedBtn.innerHTML = '<span class="spinner"></span> Đang tải...';
+        try {
+          this._closedPage++;
+          const moreHtml = await this._renderClosedTabAsync();
+          loadMoreClosedBtn.remove();
+          contentArea.insertAdjacentHTML('beforeend', moreHtml);
+          this._attachCardEvents();
+        } finally {
+          if (loadMoreClosedBtn.parentNode) {
+            loadMoreClosedBtn.disabled = false;
+            loadMoreClosedBtn.textContent = 'Tải thêm';
+          }
+        }
       });
     }
 
@@ -458,11 +566,21 @@ export class DashboardUI {
     const loadMoreActiveBtn = this.shadowRoot.getElementById('load-more-active-events');
     if (loadMoreActiveBtn) {
       loadMoreActiveBtn.addEventListener('click', async () => {
-        this._activeEventsPage++;
-        const moreHtml = await this._renderActiveEventsTabAsync();
-        loadMoreActiveBtn.remove();
-        contentArea.insertAdjacentHTML('beforeend', moreHtml);
-        this._attachCardEvents();
+        if (loadMoreActiveBtn.disabled) return;
+        loadMoreActiveBtn.disabled = true;
+        loadMoreActiveBtn.innerHTML = '<span class="spinner"></span> Đang tải...';
+        try {
+          this._activeEventsPage++;
+          const moreHtml = await this._renderActiveEventsTabAsync();
+          loadMoreActiveBtn.remove();
+          contentArea.insertAdjacentHTML('beforeend', moreHtml);
+          this._attachCardEvents();
+        } finally {
+          if (loadMoreActiveBtn.parentNode) {
+            loadMoreActiveBtn.disabled = false;
+            loadMoreActiveBtn.textContent = 'Tải thêm';
+          }
+        }
       });
     }
   }

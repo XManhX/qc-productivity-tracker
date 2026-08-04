@@ -263,7 +263,7 @@ export class UIManager {
           <div class="type-text" id="type-el">--</div>
           <div class="return-tn-text" id="return-tn-el">----</div>
           <div class="progress-bar"><div id="progress-fill" class="progress-fill" style="width:0%"></div></div>
-          <div class="count-text" id="count-el">0/30</div>
+          <div class="count-text" id="count-el">∞/∞</div>
           <div id="button-container"></div>
           <div id="error-info" style="display:none;"></div>
         </div>
@@ -685,7 +685,7 @@ export class UIManager {
 
     // Count text
     if (countEl) {
-      countEl.textContent = count !== undefined ? `${count}/${threshold || 30}` : `0/30`;
+      countEl.textContent = count !== undefined ? `${count}/${threshold || 30}` : `∞/∞`;
     }
 
     // Buttons

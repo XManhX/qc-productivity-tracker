@@ -11,7 +11,10 @@ export class AudioManager {
     this._setupAutoUnlock();
   }
 
-  /** Đảm bảo context hoạt động (cần user gesture) */
+  /**
+   * Đảm bảo AudioContext ở trạng thái 'running'.
+   * Trả về true nếu context sẵn sàng phát âm thanh.
+   */
   async _ensureContext() {
     if (!this.ctx) return false;
     if (this.ctx.state === "suspended") {
@@ -24,56 +27,48 @@ export class AudioManager {
     return this.ctx.state === "running";
   }
 
-  /** Phát một tone đơn giản */
-  _playTone(frequency, duration, type = "sine", volume = 0.3) {
+  /**
+   * Tạo và phát một tone tại thời điểm startTime (tính bằng giây của AudioContext).
+   * Nếu không truyền startTime, dùng thời điểm hiện tại.
+   */
+  _playTone(frequency, duration, type = "sine", volume = 0.3, startTime) {
     if (!this.ctx) return;
-    const oscillator = this.ctx.createOscillator();
-    const gainNode = this.ctx.createGain();
-    oscillator.type = type;
-    oscillator.frequency.setValueAtTime(frequency, this.ctx.currentTime);
-    gainNode.gain.setValueAtTime(volume, this.ctx.currentTime);
-    gainNode.gain.exponentialRampToValueAtTime(
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+
+    osc.type = type;
+    osc.frequency.setValueAtTime(frequency, startTime ?? this.ctx.currentTime);
+
+    // An toàn: dùng linearRamp để tránh lỗi exponential khi volume = 0
+    gain.gain.setValueAtTime(volume, startTime ?? this.ctx.currentTime);
+    gain.gain.linearRampToValueAtTime(
       0.001,
-      this.ctx.currentTime + duration,
+      (startTime ?? this.ctx.currentTime) + duration,
     );
-    oscillator.connect(gainNode);
-    gainNode.connect(this.ctx.destination);
-    oscillator.start(this.ctx.currentTime);
-    oscillator.stop(this.ctx.currentTime + duration);
+
+    osc.connect(gain);
+    gain.connect(this.ctx.destination);
+    osc.start(startTime ?? this.ctx.currentTime);
+    osc.stop((startTime ?? this.ctx.currentTime) + duration);
   }
 
-  /** Phát chuỗi các nốt */
-  _playSequence(notes, noteDuration = 100, gap = 50) {
+  /**
+   * Phát một chuỗi các nốt nhạc nối tiếp nhau.
+   */
+  _playSequence(notes, noteDurationMs = 100, gapMs = 50) {
     if (!this.ctx) return;
     let time = this.ctx.currentTime;
     notes.forEach(({ freq, dur, type, vol }) => {
-      this._playToneAtTime(
-        freq,
-        dur || noteDuration / 1000,
-        type || "sine",
-        vol || 0.3,
-        time,
-      );
-      time += (dur || noteDuration) / 1000 + gap / 1000;
+      const durationSec = (dur || noteDurationMs) / 1000;
+      const gapSec = gapMs / 1000;
+      this._playTone(freq, durationSec, type || "sine", vol || 0.3, time);
+      time += durationSec + gapSec;
     });
   }
 
-  _playToneAtTime(freq, duration, type, volume, startTime) {
-    const osc = this.ctx.createOscillator();
-    const gain = this.ctx.createGain();
-    osc.type = type;
-    osc.frequency.setValueAtTime(freq, startTime);
-    gain.gain.setValueAtTime(volume, startTime);
-    gain.gain.exponentialRampToValueAtTime(0.001, startTime + duration);
-    osc.connect(gain);
-    gain.connect(this.ctx.destination);
-    osc.start(startTime);
-    osc.stop(startTime + duration);
-  }
-
+  /** Tự động unlock AudioContext khi có tương tác người dùng */
   _setupAutoUnlock() {
     if (!this.ctx) return;
-
     const events = ["click", "keydown", "touchstart"];
     const unlock = () => {
       if (this._unlocked) return;
@@ -82,121 +77,12 @@ export class AudioManager {
         events.forEach((evt) => document.removeEventListener(evt, unlock));
       }
     };
-
     events.forEach((evt) =>
       document.addEventListener(evt, unlock, { once: false }),
     );
-    // Dùng `once: false` và tự xóa để đảm bảo tương thích, tránh trường hợp sự kiện không được bắt nếu dùng `once: true` không đồng nhất.
   }
 
-  // ========== Các hiệu ứng âm thanh ==========
-
-  /** Scan sheet thành công */
-  playScanSuccess() {
-    this._ensureContext().then(() => {
-      this._playSequence([
-        { freq: 880, dur: 100 },
-        { freq: 1100, dur: 150 },
-      ]);
-    });
-  }
-
-  /** Cảnh báo chung (không có trong master data) */
-  playNotFound() {
-    this._ensureContext().then(() => {
-      this._playSequence(
-        [
-          { freq: 440, dur: 120 },
-          { freq: 370, dur: 200 },
-        ],
-        120,
-        60,
-      );
-    });
-  }
-
-  /** Lỗi ánh xạ type -> ID */
-  playMappingError() {
-    this._ensureContext().then(() => {
-      this._playSequence(
-        [
-          { freq: 600, dur: 80 },
-          { freq: 450, dur: 80 },
-          { freq: 350, dur: 150 },
-        ],
-        100,
-        40,
-      );
-    });
-  }
-
-  /** Lỗi chung (server, mạng) */
-  playError() {
-    this._ensureContext().then(() => {
-      this._playSequence(
-        [
-          { freq: 250, dur: 150 },
-          { freq: 200, dur: 200 },
-          { freq: 150, dur: 300 },
-        ],
-        150,
-        30,
-      );
-    });
-  }
-
-  /** Đóng kiện thành công */
-  playCloseSuccess() {
-    this._ensureContext().then(() => {
-      this._playSequence(
-        [
-          { freq: 660, dur: 120 },
-          { freq: 880, dur: 120 },
-          { freq: 1100, dur: 180 },
-        ],
-        120,
-        50,
-      );
-    });
-  }
-
-  /** Khi session đạt ngưỡng (full) */
-  playFullAlert() {
-    this._ensureContext().then(() => {
-      this._playTone(1200, 0.4, "square", 0.2);
-    });
-  }
-
-  /** In thành công */
-  playPrintSuccess() {
-    this._ensureContext().then(() => {
-      this._playSequence([
-        { freq: 1000, dur: 100 },
-        { freq: 1200, dur: 100 },
-      ]);
-    });
-  }
-
-  /** In thất bại */
-  playPrintError() {
-    this._ensureContext().then(() => {
-      this._playSequence([
-        { freq: 300, dur: 150 },
-        { freq: 250, dur: 200 },
-      ]);
-    });
-  }
-
-  /** Hủy scan (undo) thành công */
-  playUndo() {
-    this._ensureContext().then(() => {
-      this._playSequence([
-        { freq: 500, dur: 100 },
-        { freq: 400, dur: 100 },
-      ]);
-    });
-  }
-
+  /** Kích hoạt thủ công (có thể gọi từ UI nếu cần) */
   unlock() {
     if (!this.ctx) return;
     if (this.ctx.state === "suspended") {
@@ -206,5 +92,95 @@ export class AudioManager {
     } else {
       this._unlocked = true;
     }
+  }
+
+  // ========== Hiệu ứng âm thanh ==========
+
+  async playScanSuccess() {
+    if (!(await this._ensureContext())) return;
+    this._playSequence([
+      { freq: 880, dur: 100 },
+      { freq: 1100, dur: 150 },
+    ]);
+  }
+
+  async playNotFound() {
+    if (!(await this._ensureContext())) return;
+    this._playSequence(
+      [
+        { freq: 440, dur: 120 },
+        { freq: 370, dur: 200 },
+      ],
+      120,
+      60,
+    );
+  }
+
+  async playMappingError() {
+    if (!(await this._ensureContext())) return;
+    this._playSequence(
+      [
+        { freq: 600, dur: 80 },
+        { freq: 450, dur: 80 },
+        { freq: 350, dur: 150 },
+      ],
+      100,
+      40,
+    );
+  }
+
+  async playError() {
+    if (!(await this._ensureContext())) return;
+    this._playSequence(
+      [
+        { freq: 250, dur: 150 },
+        { freq: 200, dur: 200 },
+        { freq: 150, dur: 300 },
+      ],
+      150,
+      30,
+    );
+  }
+
+  async playCloseSuccess() {
+    if (!(await this._ensureContext())) return;
+    this._playSequence(
+      [
+        { freq: 660, dur: 120 },
+        { freq: 880, dur: 120 },
+        { freq: 1100, dur: 180 },
+      ],
+      120,
+      50,
+    );
+  }
+
+  async playFullAlert() {
+    if (!(await this._ensureContext())) return;
+    this._playTone(1200, 0.4, "square", 0.2);
+  }
+
+  async playPrintSuccess() {
+    if (!(await this._ensureContext())) return;
+    this._playSequence([
+      { freq: 1000, dur: 100 },
+      { freq: 1200, dur: 100 },
+    ]);
+  }
+
+  async playPrintError() {
+    if (!(await this._ensureContext())) return;
+    this._playSequence([
+      { freq: 300, dur: 150 },
+      { freq: 250, dur: 200 },
+    ]);
+  }
+
+  async playUndo() {
+    if (!(await this._ensureContext())) return;
+    this._playSequence([
+      { freq: 500, dur: 100 },
+      { freq: 400, dur: 100 },
+    ]);
   }
 }

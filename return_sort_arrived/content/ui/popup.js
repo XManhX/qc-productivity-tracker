@@ -1,15 +1,34 @@
 // content/ui/popup.js – Popup chính Arrival, tích hợp Dashboard
-import { printLabel } from '../printer.js';
-import { DashboardUI } from './dashboard.js';
+import { printLabel } from "../printer.js";
+import { DashboardUI } from "./dashboard.js";
 
 const ID_COLORS = {
-  '1': '#E74C3C', '2': '#3498DB', '3': '#2ECC71', '4': '#F39C12',
-  '5': '#9B59B6', '6': '#1ABC9C', '7': '#E67E22', '8': '#2C3E50',
-  '9': '#E91E63', 'A': '#00BCD4', 'B': '#FF5722', 'C': '#795548', 'D': '#607D8B'
+  1: "#E74C3C",
+  2: "#3498DB",
+  3: "#2ECC71",
+  4: "#F39C12",
+  5: "#9B59B6",
+  6: "#1ABC9C",
+  7: "#E67E22",
+  8: "#2C3E50",
+  9: "#E91E63",
+  A: "#00BCD4",
+  B: "#FF5722",
+  C: "#795548",
+  D: "#607D8B",
 };
 
 function getTextColor(bg) {
-  return ['#2C3E50', '#795548', '#607D8B', '#F39C12', '#E67E22', '#00BCD4'].includes(bg) ? '#000' : '#fff';
+  return [
+    "#2C3E50",
+    "#795548",
+    "#607D8B",
+    "#F39C12",
+    "#E67E22",
+    "#00BCD4",
+  ].includes(bg)
+    ? "#000"
+    : "#fff";
 }
 
 const STYLES = `
@@ -176,19 +195,22 @@ const STYLES = `
 `;
 
 export class UIManager {
-  constructor(stateManager) {
+  constructor(stateManager, audioManager) {
     this.state = stateManager;
+    this.audio = audioManager;
     stateManager.setUI(this);
     this.host = null;
     this.shadowRoot = null;
     this.popup = null;
     this.minimized = false;
-    this.currentId = '';
-    this._viewMode = 'arrival'; // 'arrival' | 'dashboard'
+    this.currentId = "";
+    this._viewMode = "arrival"; // 'arrival' | 'dashboard'
     this._dashboardInstance = null;
     this._currentUrl = window.location.href;
     this._init();
-    document.addEventListener('url-change', (e) => this._onUrlChange(e.detail.url));
+    document.addEventListener("url-change", (e) =>
+      this._onUrlChange(e.detail.url),
+    );
   }
 
   _onUrlChange(newUrl) {
@@ -198,46 +220,46 @@ export class UIManager {
   }
 
   _isArrivingPage() {
-    return window.location.href.includes('/v2/returninbound/arrving');
+    return window.location.href.includes("/v2/returninbound/arrving");
   }
 
   _updateVisibility() {
     if (!this.host) return;
     const isArriving = this._isArrivingPage();
-    this.host.style.display = isArriving ? '' : 'none';
-    if (isArriving && this._viewMode === 'arrival') {
+    this.host.style.display = isArriving ? "" : "none";
+    if (isArriving && this._viewMode === "arrival") {
       this._updateTop5();
     }
   }
 
   _init() {
     if (!document.body) {
-      document.addEventListener('DOMContentLoaded', () => this._init());
+      document.addEventListener("DOMContentLoaded", () => this._init());
       return;
     }
     this._createHost({ left: 50, top: 50 });
-    chrome.storage.local.get('popupPosition', (result) => {
+    chrome.storage.local.get("popupPosition", (result) => {
       if (result.popupPosition) {
-        this.popup.style.left = result.popupPosition.left + 'px';
-        this.popup.style.top = result.popupPosition.top + 'px';
+        this.popup.style.left = result.popupPosition.left + "px";
+        this.popup.style.top = result.popupPosition.top + "px";
         this._clampPosition();
       }
     });
   }
 
   _createHost({ left, top }) {
-    this.host = document.createElement('div');
-    this.host.id = 'as-popup-host';
-    this.shadowRoot = this.host.attachShadow({ mode: 'open' });
+    this.host = document.createElement("div");
+    this.host.id = "as-popup-host";
+    this.shadowRoot = this.host.attachShadow({ mode: "open" });
 
-    const style = document.createElement('style');
+    const style = document.createElement("style");
     style.textContent = STYLES;
     this.shadowRoot.appendChild(style);
 
-    this.popup = document.createElement('div');
-    this.popup.className = 'popup';
-    this.popup.style.left = left + 'px';
-    this.popup.style.top = top + 'px';
+    this.popup = document.createElement("div");
+    this.popup.className = "popup";
+    this.popup.style.left = left + "px";
+    this.popup.style.top = top + "px";
 
     this.popup.innerHTML = `
       <div class="header" id="header">
@@ -277,7 +299,7 @@ export class UIManager {
     this._clampPosition();
     this._setupDrag();
     this._bindEvents();
-    this._switchView('arrival');
+    this._switchView("arrival");
   }
 
   _clampPosition() {
@@ -288,8 +310,8 @@ export class UIManager {
     const maxTop = window.innerHeight - rect.height;
     left = Math.max(0, Math.min(left, maxLeft));
     top = Math.max(0, Math.min(top, maxTop));
-    this.popup.style.left = left + 'px';
-    this.popup.style.top = top + 'px';
+    this.popup.style.left = left + "px";
+    this.popup.style.top = top + "px";
   }
 
   _savePosition() {
@@ -299,73 +321,87 @@ export class UIManager {
   }
 
   _setupDrag() {
-    const header = this.shadowRoot.getElementById('header');
+    const header = this.shadowRoot.getElementById("header");
     if (!header) return;
-    let startX, startY, initialLeft, initialTop, moved = false;
+    let startX,
+      startY,
+      initialLeft,
+      initialTop,
+      moved = false;
 
     const onMouseMove = (e) => {
       moved = true;
-      const dx = e.clientX - startX, dy = e.clientY - startY;
-      let newLeft = initialLeft + dx, newTop = initialTop + dy;
+      const dx = e.clientX - startX,
+        dy = e.clientY - startY;
+      let newLeft = initialLeft + dx,
+        newTop = initialTop + dy;
       const rect = this.popup.getBoundingClientRect();
       const maxLeft = window.innerWidth - rect.width;
       const maxTop = window.innerHeight - rect.height;
       newLeft = Math.max(0, Math.min(newLeft, maxLeft));
       newTop = Math.max(0, Math.min(newTop, maxTop));
-      this.popup.style.left = newLeft + 'px';
-      this.popup.style.top = newTop + 'px';
+      this.popup.style.left = newLeft + "px";
+      this.popup.style.top = newTop + "px";
     };
 
     const onMouseUp = () => {
-      document.removeEventListener('mousemove', onMouseMove);
-      document.removeEventListener('mouseup', onMouseUp);
+      document.removeEventListener("mousemove", onMouseMove);
+      document.removeEventListener("mouseup", onMouseUp);
       if (!moved && this.minimized) this.toggleMinimize();
       if (moved) this._savePosition();
       moved = false;
     };
 
     const startDrag = (e) => {
-      if (e.target.closest('#btn-minimize') || e.target.closest('#btn-toggle-dashboard')) return;
-      startX = e.clientX; startY = e.clientY;
+      if (
+        e.target.closest("#btn-minimize") ||
+        e.target.closest("#btn-toggle-dashboard")
+      )
+        return;
+      startX = e.clientX;
+      startY = e.clientY;
       const rect = this.popup.getBoundingClientRect();
-      initialLeft = rect.left; initialTop = rect.top;
+      initialLeft = rect.left;
+      initialTop = rect.top;
       moved = false;
-      document.addEventListener('mousemove', onMouseMove);
-      document.addEventListener('mouseup', onMouseUp);
+      document.addEventListener("mousemove", onMouseMove);
+      document.addEventListener("mouseup", onMouseUp);
     };
 
     if (this.minimized) {
-      this.popup.addEventListener('mousedown', startDrag);
+      this.popup.addEventListener("mousedown", startDrag);
     } else {
-      header.addEventListener('mousedown', startDrag);
+      header.addEventListener("mousedown", startDrag);
     }
     this._dragStartHandler = startDrag;
   }
 
   _bindEvents() {
-    this.shadowRoot.getElementById('btn-minimize').addEventListener('click', (e) => {
-      e.stopPropagation();
-      this.toggleMinimize();
-    });
+    this.shadowRoot
+      .getElementById("btn-minimize")
+      .addEventListener("click", (e) => {
+        e.stopPropagation();
+        this.toggleMinimize();
+      });
 
-    const toggleBtn = this.shadowRoot.getElementById('btn-toggle-dashboard');
-    toggleBtn.addEventListener('click', (e) => {
+    const toggleBtn = this.shadowRoot.getElementById("btn-toggle-dashboard");
+    toggleBtn.addEventListener("click", (e) => {
       e.stopPropagation();
       this._toggleView();
     });
 
     // Nút refresh Master Data
-    const refreshMaster = this.shadowRoot.getElementById('btn-refresh-master');
-    refreshMaster.addEventListener('click', async () => {
+    const refreshMaster = this.shadowRoot.getElementById("btn-refresh-master");
+    refreshMaster.addEventListener("click", async () => {
       if (refreshMaster.disabled) return;
       refreshMaster.disabled = true;
       const originalHTML = refreshMaster.innerHTML;
       refreshMaster.innerHTML = '<span class="spinner"></span>';
       try {
         await this.state.refreshMasterData();
-        this._showToast('✅ Master Data đã được cập nhật');
+        this._showToast("✅ Master Data đã được cập nhật");
       } catch (e) {
-        this._showToast('❌ Lỗi cập nhật Master Data');
+        this._showToast("❌ Lỗi cập nhật Master Data");
       } finally {
         refreshMaster.disabled = false;
         refreshMaster.innerHTML = originalHTML;
@@ -373,17 +409,19 @@ export class UIManager {
     });
 
     // Nút refresh Type Mapping
-    const refreshMapping = this.shadowRoot.getElementById('btn-refresh-mapping');
-    refreshMapping.addEventListener('click', async () => {
+    const refreshMapping = this.shadowRoot.getElementById(
+      "btn-refresh-mapping",
+    );
+    refreshMapping.addEventListener("click", async () => {
       if (refreshMapping.disabled) return;
       refreshMapping.disabled = true;
       const originalHTML = refreshMapping.innerHTML;
       refreshMapping.innerHTML = '<span class="spinner"></span>';
       try {
         await this.state.refreshTypeMapping();
-        this._showToast('✅ Type Mapping đã được cập nhật');
+        this._showToast("✅ Type Mapping đã được cập nhật");
       } catch (e) {
-        this._showToast('❌ Lỗi cập nhật Type Mapping');
+        this._showToast("❌ Lỗi cập nhật Type Mapping");
       } finally {
         refreshMapping.disabled = false;
         refreshMapping.innerHTML = originalHTML;
@@ -392,30 +430,35 @@ export class UIManager {
   }
 
   _toggleView() {
-    if (this._viewMode === 'arrival') {
-      this._switchView('dashboard');
+    if (this._viewMode === "arrival") {
+      this._switchView("dashboard");
     } else {
-      this._switchView('arrival');
+      this._switchView("arrival");
     }
   }
 
   _switchView(mode) {
     this._viewMode = mode;
-    const stateCard = this.shadowRoot.getElementById('state-card');
-    const dashboardContainer = this.shadowRoot.getElementById('dashboard-container');
-    const toggleBtn = this.shadowRoot.getElementById('btn-toggle-dashboard');
+    const stateCard = this.shadowRoot.getElementById("state-card");
+    const dashboardContainer = this.shadowRoot.getElementById(
+      "dashboard-container",
+    );
+    const toggleBtn = this.shadowRoot.getElementById("btn-toggle-dashboard");
 
-    if (mode === 'arrival') {
-      stateCard.style.display = 'flex';
-      dashboardContainer.classList.remove('visible');
-      toggleBtn.classList.remove('active');
+    if (mode === "arrival") {
+      stateCard.style.display = "flex";
+      dashboardContainer.classList.remove("visible");
+      toggleBtn.classList.remove("active");
       this._updateTop5();
     } else {
-      stateCard.style.display = 'none';
-      dashboardContainer.classList.add('visible');
-      toggleBtn.classList.add('active');
+      stateCard.style.display = "none";
+      dashboardContainer.classList.add("visible");
+      toggleBtn.classList.add("active");
       if (!this._dashboardInstance) {
-        this._dashboardInstance = DashboardUI.attachTo(dashboardContainer, this.state);
+        this._dashboardInstance = DashboardUI.attachTo(
+          dashboardContainer,
+          this.state,
+        );
       }
       if (this._dashboardInstance) {
         this._dashboardInstance.refresh();
@@ -425,60 +468,62 @@ export class UIManager {
 
   toggleMinimize() {
     this.minimized = !this.minimized;
-    const header = this.shadowRoot.getElementById('header');
+    const header = this.shadowRoot.getElementById("header");
 
     if (this.minimized) {
       const rect = this.popup.getBoundingClientRect();
       this.popup.dataset.savedLeft = rect.left;
       this.popup.dataset.savedTop = rect.top;
-      this.popup.classList.add('minimized');
-      this.popup.style.left = '';
-      this.popup.style.top = '';
-      header.setAttribute('data-current-id', this.currentId || '?');
+      this.popup.classList.add("minimized");
+      this.popup.style.left = "";
+      this.popup.style.top = "";
+      header.setAttribute("data-current-id", this.currentId || "?");
     } else {
       const savedLeft = parseFloat(this.popup.dataset.savedLeft);
       const savedTop = parseFloat(this.popup.dataset.savedTop);
-      if (!isNaN(savedLeft)) this.popup.style.left = savedLeft + 'px';
-      if (!isNaN(savedTop)) this.popup.style.top = savedTop + 'px';
-      this.popup.classList.remove('minimized');
-      header.removeAttribute('data-current-id');
-      if (this._viewMode === 'arrival') {
+      if (!isNaN(savedLeft)) this.popup.style.left = savedLeft + "px";
+      if (!isNaN(savedTop)) this.popup.style.top = savedTop + "px";
+      this.popup.classList.remove("minimized");
+      header.removeAttribute("data-current-id");
+      if (this._viewMode === "arrival") {
         this._updateTop5();
       }
     }
 
     if (this._dragStartHandler) {
       if (this.minimized) {
-        header.removeEventListener('mousedown', this._dragStartHandler);
-        this.popup.addEventListener('mousedown', this._dragStartHandler);
+        header.removeEventListener("mousedown", this._dragStartHandler);
+        this.popup.addEventListener("mousedown", this._dragStartHandler);
       } else {
-        this.popup.removeEventListener('mousedown', this._dragStartHandler);
-        header.addEventListener('mousedown', this._dragStartHandler);
+        this.popup.removeEventListener("mousedown", this._dragStartHandler);
+        header.addEventListener("mousedown", this._dragStartHandler);
       }
     }
   }
 
   _updateTop5() {
     if (this.minimized || !this.shadowRoot) return;
-    const topRow = this.shadowRoot.getElementById('top-row');
+    const topRow = this.shadowRoot.getElementById("top-row");
     if (!topRow) return;
 
     const sessions = this.state.sessions || [];
     const top5 = sessions.slice(0, 5);
     const SLOT_COUNT = 5;
 
-    let html = '';
+    let html = "";
     for (let i = 0; i < SLOT_COUNT; i++) {
       const s = top5[i];
       if (s) {
         const threshold = s.threshold || 30;
         const count = s.item_count;
         const percent = Math.min(100, Math.round((count / threshold) * 100));
-        const bgColor = ID_COLORS[s.id] || '#607D8B';
-        const displayType = this.state.getDisplayName(s.type_group) || (s.type_group || '').substring(0, 12);
+        const bgColor = ID_COLORS[s.id] || "#607D8B";
+        const displayType =
+          this.state.getDisplayName(s.type_group) ||
+          (s.type_group || "").substring(0, 12);
         html += `<div class="badge-card" style="background:${bgColor};" title="ID ${s.id}: ${s.type_group} – ${count}/${threshold}" data-id="${s.id}">
           <div class="badge-id">${s.id}</div>
-          <div class="badge-type" title="${s.type_group}">${displayType || '-'}</div>
+          <div class="badge-type" title="${s.type_group}">${displayType || "-"}</div>
           <div class="badge-count">${count}/${threshold}</div>
           <div class="badge-bar"><div class="badge-fill" style="width:${percent}%"></div></div>
         </div>`;
@@ -491,48 +536,66 @@ export class UIManager {
     }
     topRow.innerHTML = html;
 
-    topRow.querySelectorAll('.badge-card:not(.placeholder)').forEach(badge => {
-      badge.addEventListener('click', (e) => {
-        const id = badge.dataset.id;
-        if (id) this.state.showSessionDetail(id);
+    topRow
+      .querySelectorAll(".badge-card:not(.placeholder)")
+      .forEach((badge) => {
+        badge.addEventListener("click", (e) => {
+          const id = badge.dataset.id;
+          if (id) this.state.showSessionDetail(id);
+        });
       });
-    });
   }
 
   updateTop5(sessions) {
     this.state.sessions = sessions;
-    if (this.shadowRoot && this._viewMode === 'arrival') this._updateTop5();
+    if (this.shadowRoot && this._viewMode === "arrival") this._updateTop5();
   }
 
-  _updateCard({ id, type, return_tn, count, threshold, isFull, error, unknownId, closed, animate, processing }) {
+  _updateCard({
+    id,
+    type,
+    return_tn,
+    count,
+    threshold,
+    isFull,
+    error,
+    unknownId,
+    closed,
+    animate,
+    processing,
+  }) {
     if (!this.shadowRoot) return;
-    const idBox = this.shadowRoot.getElementById('id-box');
-    const typeEl = this.shadowRoot.getElementById('type-el');
-    const returnTnEl = this.shadowRoot.getElementById('return-tn-el');
-    const progressFill = this.shadowRoot.getElementById('progress-fill');
+    const idBox = this.shadowRoot.getElementById("id-box");
+    const typeEl = this.shadowRoot.getElementById("type-el");
+    const returnTnEl = this.shadowRoot.getElementById("return-tn-el");
+    const progressFill = this.shadowRoot.getElementById("progress-fill");
     const progressBar = progressFill?.parentNode;
-    const countEl = this.shadowRoot.getElementById('count-el');
-    const btnContainer = this.shadowRoot.getElementById('button-container');
-    const card = this.shadowRoot.getElementById('state-card');
-    const errorInfo = this.shadowRoot.getElementById('error-info');
-    const undoBtn = this.shadowRoot.getElementById('btn-undo');
+    const countEl = this.shadowRoot.getElementById("count-el");
+    const btnContainer = this.shadowRoot.getElementById("button-container");
+    const card = this.shadowRoot.getElementById("state-card");
+    const errorInfo = this.shadowRoot.getElementById("error-info");
+    const undoBtn = this.shadowRoot.getElementById("btn-undo");
 
     // Ẩn tất cả trước khi render
-    if (idBox) { idBox.style.display = 'none'; idBox.classList.remove('unknown'); }
-    if (typeEl) typeEl.style.display = 'none';
-    if (returnTnEl) returnTnEl.style.display = 'none';
-    if (progressBar) progressBar.style.display = 'none';
-    if (countEl) countEl.style.display = 'none';
-    if (btnContainer) btnContainer.innerHTML = '';
-    if (errorInfo) errorInfo.style.display = 'none';
+    if (idBox) {
+      idBox.style.display = "none";
+      idBox.classList.remove("unknown");
+    }
+    if (typeEl) typeEl.style.display = "none";
+    if (returnTnEl) returnTnEl.style.display = "none";
+    if (progressBar) progressBar.style.display = "none";
+    if (countEl) countEl.style.display = "none";
+    if (btnContainer) btnContainer.innerHTML = "";
+    if (errorInfo) errorInfo.style.display = "none";
 
     const isUnknown = unknownId || (error && !id);
-    const canOperate = !processing && !closed && !error && count > 0 && id && !isUnknown;
+    const canOperate =
+      !processing && !closed && !error && count > 0 && id && !isUnknown;
 
     // Nút hủy (góc trên phải)
     if (undoBtn) {
-      const canUndo = (canOperate || (error && id && count > 0));
-      undoBtn.style.display = canUndo ? 'flex' : 'none';
+      const canUndo = canOperate || (error && id && count > 0);
+      undoBtn.style.display = canUndo ? "flex" : "none";
       if (canUndo) {
         undoBtn.disabled = false; // reset trạng thái
         undoBtn.onclick = (e) => {
@@ -556,15 +619,16 @@ export class UIManager {
     // ---- Xác định màu nền của card dựa trên trạng thái ----
     if (card) {
       if (processing) {
-        card.style.background = '#f5f5f5';
+        card.style.background = "#f5f5f5";
       } else if (error) {
-        card.style.background = error.reason === 'Sai tuyến' ? '#fff3cd' : '#f8d7da';
+        card.style.background =
+          error.reason === "Sai tuyến" ? "#fff3cd" : "#f8d7da";
       } else if (isUnknown) {
-        card.style.background = '#fff7ed';
+        card.style.background = "#fff7ed";
       } else if (isFull) {
-        card.style.background = '#f0fdf4';
+        card.style.background = "#f0fdf4";
       } else {
-        card.style.background = '#f8fafc';
+        card.style.background = "#f8fafc";
       }
     }
 
@@ -572,38 +636,42 @@ export class UIManager {
     if (error) {
       if (idBox) {
         if (isUnknown) {
-          idBox.style.background = '';
-          idBox.style.color = '';
-          idBox.textContent = '?';
-          idBox.classList.add('unknown');
-          idBox.style.display = 'inline-block';
+          idBox.style.background = "";
+          idBox.style.color = "";
+          idBox.textContent = "?";
+          idBox.classList.add("unknown");
+          idBox.style.display = "inline-block";
         } else {
-          const bgColor = ID_COLORS[id] || '#607D8B';
+          const bgColor = ID_COLORS[id] || "#607D8B";
           const textColor = getTextColor(bgColor);
           idBox.style.background = bgColor;
           idBox.style.color = textColor;
           idBox.textContent = id;
-          idBox.style.display = 'inline-block';
+          idBox.style.display = "inline-block";
         }
       }
       if (type && typeEl) {
         typeEl.textContent = type;
-        typeEl.style.display = 'block';
+        typeEl.style.display = "block";
       }
       if (return_tn && returnTnEl) {
         returnTnEl.textContent = return_tn;
-        returnTnEl.style.display = 'block';
+        returnTnEl.style.display = "block";
       }
       if (errorInfo) {
-        errorInfo.style.display = 'block';
+        errorInfo.style.display = "block";
         errorInfo.innerHTML = `
-                <div style="font-size:24px; font-weight:700; color:${error.reason === 'Sai tuyến' ? '#856404' : '#721c24'}; margin-bottom:8px;">${error.reason}</div>
-                <div style="font-size:16px; color:#555;">${error.detail || ''}</div>
+                <div style="font-size:24px; font-weight:700; color:${error.reason === "Sai tuyến" ? "#856404" : "#721c24"}; margin-bottom:8px;">${error.reason}</div>
+                <div style="font-size:16px; color:#555;">${error.detail || ""}</div>
             `;
       }
       if (card && animate) {
-        card.classList.add('animate');
-        card.addEventListener('animationend', () => card.classList.remove('animate'), { once: true });
+        card.classList.add("animate");
+        card.addEventListener(
+          "animationend",
+          () => card.classList.remove("animate"),
+          { once: true },
+        );
       }
       return;
     }
@@ -612,59 +680,63 @@ export class UIManager {
     if (processing) {
       if (idBox) {
         if (isUnknown) {
-          idBox.style.background = '';
-          idBox.style.color = '';
-          idBox.textContent = '?';
-          idBox.classList.add('unknown');
-          idBox.style.display = 'inline-block';
+          idBox.style.background = "";
+          idBox.style.color = "";
+          idBox.textContent = "?";
+          idBox.classList.add("unknown");
+          idBox.style.display = "inline-block";
         } else {
-          const bgColor = ID_COLORS[id] || '#607D8B';
+          const bgColor = ID_COLORS[id] || "#607D8B";
           const textColor = getTextColor(bgColor);
           idBox.style.background = bgColor;
           idBox.style.color = textColor;
           idBox.textContent = id;
-          idBox.style.display = 'inline-block';
+          idBox.style.display = "inline-block";
         }
       }
       if (typeEl) {
-        typeEl.textContent = type || '--';
-        typeEl.style.display = 'block';
+        typeEl.textContent = type || "--";
+        typeEl.style.display = "block";
       }
       if (returnTnEl) {
-        returnTnEl.textContent = return_tn || '----';
-        returnTnEl.style.display = 'block';
+        returnTnEl.textContent = return_tn || "----";
+        returnTnEl.style.display = "block";
       }
-      if (progressBar) progressBar.style.display = 'none';
-      if (countEl) countEl.style.display = 'none';
+      if (progressBar) progressBar.style.display = "none";
+      if (countEl) countEl.style.display = "none";
       if (errorInfo) {
-        errorInfo.style.display = 'block';
+        errorInfo.style.display = "block";
         errorInfo.innerHTML = `
                 <div style="font-size:20px; font-weight:600; color:#666;">⏳ Đang xử lý...</div>
             `;
       }
       if (card && animate) {
-        card.classList.add('animate');
-        card.addEventListener('animationend', () => card.classList.remove('animate'), { once: true });
+        card.classList.add("animate");
+        card.addEventListener(
+          "animationend",
+          () => card.classList.remove("animate"),
+          { once: true },
+        );
       }
       return;
     }
 
     // ---- Xử lý chế độ NORMAL (thành công hoặc trạng thái bình thường) ----
-    if (idBox) idBox.style.display = 'inline-block';
-    if (typeEl) typeEl.style.display = 'block';
-    if (returnTnEl) returnTnEl.style.display = 'block';
-    if (progressBar) progressBar.style.display = 'block';
-    if (countEl) countEl.style.display = 'block';
+    if (idBox) idBox.style.display = "inline-block";
+    if (typeEl) typeEl.style.display = "block";
+    if (returnTnEl) returnTnEl.style.display = "block";
+    if (progressBar) progressBar.style.display = "block";
+    if (countEl) countEl.style.display = "block";
 
     // ID box
     if (idBox) {
       if (isUnknown) {
-        idBox.style.background = '';
-        idBox.style.color = '';
-        idBox.textContent = '?';
-        idBox.classList.add('unknown');
+        idBox.style.background = "";
+        idBox.style.color = "";
+        idBox.textContent = "?";
+        idBox.classList.add("unknown");
       } else {
-        const bgColor = ID_COLORS[id] || '#607D8B';
+        const bgColor = ID_COLORS[id] || "#607D8B";
         const textColor = getTextColor(bgColor);
         idBox.style.background = bgColor;
         idBox.style.color = textColor;
@@ -673,43 +745,53 @@ export class UIManager {
     }
 
     // Type & Return TN
-    if (typeEl) typeEl.textContent = type || '--';
-    if (returnTnEl) returnTnEl.textContent = return_tn || '----';
+    if (typeEl) typeEl.textContent = type || "--";
+    if (returnTnEl) returnTnEl.textContent = return_tn || "----";
 
     // Progress bar
-    const percent = (count !== undefined && threshold) ? Math.min(100, Math.round((count / threshold) * 100)) : 0;
+    const percent =
+      count !== undefined && threshold
+        ? Math.min(100, Math.round((count / threshold) * 100))
+        : 0;
     if (progressFill) {
-      progressFill.style.width = percent + '%';
-      progressFill.style.background = (id && !isUnknown && ID_COLORS[id]) ? ID_COLORS[id] : '#cbd5e1';
+      progressFill.style.width = percent + "%";
+      progressFill.style.background =
+        id && !isUnknown && ID_COLORS[id] ? ID_COLORS[id] : "#cbd5e1";
     }
 
     // Count text
     if (countEl) {
-      countEl.textContent = count !== undefined ? `${count}/${threshold || 30}` : `∞/∞`;
+      countEl.textContent =
+        count !== undefined ? `${count}/${threshold || 30}` : `∞/∞`;
     }
 
     // Buttons
     if (canOperate && btnContainer) {
       if (isFull) {
         btnContainer.innerHTML = `<button class="btn btn-close" id="btn-close">Xác nhận đóng kiện (đầy)</button>`;
-        const closeBtn = btnContainer.querySelector('#btn-close');
-        closeBtn.addEventListener('click', () => {
+        const closeBtn = btnContainer.querySelector("#btn-close");
+        closeBtn.addEventListener("click", () => {
           if (closeBtn.disabled) return;
           closeBtn.disabled = true;
           closeBtn.innerHTML = '<span class="spinner"></span> Đang đóng...';
           this.state.closeSession(id, type).finally(() => {
             closeBtn.disabled = false;
-            closeBtn.textContent = 'Xác nhận đóng kiện (đầy)';
+            closeBtn.textContent = "Xác nhận đóng kiện (đầy)";
           });
         });
       } else {
         btnContainer.innerHTML = `<button class="btn btn-close-early" id="btn-close-early">Đóng kiện ngay (${count}/${threshold || 30})</button>`;
-        const closeEarlyBtn = btnContainer.querySelector('#btn-close-early');
-        closeEarlyBtn.addEventListener('click', () => {
+        const closeEarlyBtn = btnContainer.querySelector("#btn-close-early");
+        closeEarlyBtn.addEventListener("click", () => {
           if (closeEarlyBtn.disabled) return;
-          if (confirm('Bạn có chắc muốn đóng kiện khi chưa đủ số lượng?\nThao tác này sẽ in tem TO và kết thúc lô hàng hiện tại.')) {
+          if (
+            confirm(
+              "Bạn có chắc muốn đóng kiện khi chưa đủ số lượng?\nThao tác này sẽ in tem TO và kết thúc lô hàng hiện tại.",
+            )
+          ) {
             closeEarlyBtn.disabled = true;
-            closeEarlyBtn.innerHTML = '<span class="spinner"></span> Đang đóng...';
+            closeEarlyBtn.innerHTML =
+              '<span class="spinner"></span> Đang đóng...';
             this.state.closeSession(id, type).finally(() => {
               closeEarlyBtn.disabled = false;
               closeEarlyBtn.textContent = `Đóng kiện ngay (${count}/${threshold || 30})`;
@@ -718,89 +800,129 @@ export class UIManager {
         });
       }
     } else if (btnContainer) {
-      btnContainer.innerHTML = '';
+      btnContainer.innerHTML = "";
     }
 
     // Animation
     if (card) {
       if (animate) {
-        card.classList.add('animate');
-        card.addEventListener('animationend', () => card.classList.remove('animate'), { once: true });
+        card.classList.add("animate");
+        card.addEventListener(
+          "animationend",
+          () => card.classList.remove("animate"),
+          { once: true },
+        );
       } else {
-        card.classList.remove('animate');
+        card.classList.remove("animate");
       }
     }
   }
 
   // Khi status === 'processing', hiển thị màu xám
-  showDetected(return_tn, type, id, session, status = 'detected') {
-    this.currentId = id || '';
+  showDetected(return_tn, type, id, session, status = "detected") {
+    this.currentId = id || "";
     this._updateCard({
-      id: id || null, type: type || null, return_tn,
+      id: id || null,
+      type: type || null,
+      return_tn,
       count: session?.item_count || 0,
       threshold: session?.threshold || 30,
-      isFull: session?.status === 'full',
-      closed: session?.status === 'closed',
+      isFull: session?.status === "full",
+      closed: session?.status === "closed",
       unknownId: !id,
       animate: true,
-      processing: status === 'processing'
+      processing: status === "processing",
     });
   }
 
   showSuccess(return_tn, type, id, serverData) {
     this.currentId = id;
+    this.audio.playScanSuccess();
     this._updateCard({
-      id, type, return_tn,
+      id,
+      type,
+      return_tn,
       count: serverData.item_count,
       threshold: serverData.threshold || 30,
-      isFull: serverData.status === 'full',
-      closed: serverData.status === 'closed',
+      isFull: serverData.status === "full",
+      closed: serverData.status === "closed",
       unknownId: !id,
-      animate: true
+      animate: true,
     });
   }
 
   showFullAlert(id, type) {
     if (!this.shadowRoot) return;
-    const btnContainer = this.shadowRoot.getElementById('button-container');
-    if (btnContainer && !btnContainer.querySelector('#btn-close')) {
-      btnContainer.innerHTML = '<button class="btn btn-close" id="btn-close">Xác nhận đóng kiện (đầy)</button>';
-      const closeBtn = btnContainer.querySelector('#btn-close');
-      closeBtn.addEventListener('click', () => {
+    this.audio.playFullAlert();
+    const btnContainer = this.shadowRoot.getElementById("button-container");
+    if (btnContainer && !btnContainer.querySelector("#btn-close")) {
+      btnContainer.innerHTML =
+        '<button class="btn btn-close" id="btn-close">Xác nhận đóng kiện (đầy)</button>';
+      const closeBtn = btnContainer.querySelector("#btn-close");
+      closeBtn.addEventListener("click", () => {
         if (closeBtn.disabled) return;
         closeBtn.disabled = true;
         closeBtn.innerHTML = '<span class="spinner"></span> Đang đóng...';
         this.state.closeSession(id, type).finally(() => {
           closeBtn.disabled = false;
-          closeBtn.textContent = 'Xác nhận đóng kiện (đầy)';
+          closeBtn.textContent = "Xác nhận đóng kiện (đầy)";
         });
       });
     }
   }
 
   showWarning(msg) {
-    this._updateCard({ return_tn: msg, error: { reason: 'Cảnh báo', detail: '' }, unknownId: true });
+    this.audio.playNotFound();
+    this._updateCard({
+      return_tn: msg,
+      error: { reason: "Cảnh báo", detail: "" },
+      unknownId: true,
+    });
   }
 
   showError(msg) {
-    this._updateCard({ return_tn: msg, error: { reason: 'Lỗi', detail: '' }, unknownId: true });
+    this.audio.playError();
+    this._updateCard({
+      return_tn: msg,
+      error: { reason: "Lỗi", detail: "" },
+      unknownId: true,
+    });
   }
 
   showScanError({ return_tn, type, id, reason, detail }) {
-    this.currentId = id || '';
+    this.currentId = id || "";
+    // Chọn âm thanh dựa vào reason
+    if (reason.includes("Không có trong master data")) {
+      this.audio.playNotFound();
+    } else if (reason.includes("Lỗi ánh xạ")) {
+      this.audio.playMappingError();
+    } else if (reason.includes("Sai tuyến")) {
+      this.audio.playMappingError(); // hoặc âm riêng
+    } else {
+      this.audio.playError(); // Lỗi server, mạng
+    }
+
     this._updateCard({
-      id: id || null, type: type || null, return_tn,
+      id: id || null,
+      type: type || null,
+      return_tn,
       error: { reason, detail },
       unknownId: !id,
-      animate: true
+      animate: true,
     });
   }
 
   resetCard() {
     this._updateCard({
-      id: null, type: null, return_tn: null,
-      count: 0, threshold: 30, isFull: false,
-      closed: false, unknownId: false, animate: false
+      id: null,
+      type: null,
+      return_tn: null,
+      count: 0,
+      threshold: 30,
+      isFull: false,
+      closed: false,
+      unknownId: false,
+      animate: false,
     });
   }
 
@@ -814,14 +936,25 @@ export class UIManager {
       } catch (e) {
         console.error(`Print attempt ${attempts + 1} failed:`, e);
         attempts++;
-        if (attempts < maxAttempts) await new Promise(r => setTimeout(r, 1000));
+        if (attempts < maxAttempts)
+          await new Promise((r) => setTimeout(r, 1000));
       }
     }
-    alert('In thất bại sau 3 lần thử. Vui lòng kiểm tra máy in hoặc tải file HTML.');
-    const html = this._generateLabelHTML(toNumber, type, id, dateStr, number, email, itemCount);
-    const blob = new Blob([html], { type: 'text/html;charset=UTF-8' });
+    alert(
+      "In thất bại sau 3 lần thử. Vui lòng kiểm tra máy in hoặc tải file HTML.",
+    );
+    const html = this._generateLabelHTML(
+      toNumber,
+      type,
+      id,
+      dateStr,
+      number,
+      email,
+      itemCount,
+    );
+    const blob = new Blob([html], { type: "text/html;charset=UTF-8" });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
+    const a = document.createElement("a");
     a.href = url;
     a.download = `${toNumber}.html`;
     a.click();
@@ -884,7 +1017,7 @@ export class UIManager {
   }
 
   async _savePrintedLabel(labelData) {
-    const { printedLabels } = await chrome.storage.local.get('printedLabels');
+    const { printedLabels } = await chrome.storage.local.get("printedLabels");
     const labels = printedLabels || [];
     labels.unshift(labelData);
     if (labels.length > 10) labels.pop();
@@ -892,40 +1025,72 @@ export class UIManager {
   }
 
   printAndClose(id, type, toNumber, itemCount) {
+    this.audio.playCloseSuccess();
     this._updateCard({
-      id, type, return_tn: 'Đang in...',
-      count: itemCount, threshold: 0, isFull: false
+      id,
+      type,
+      return_tn: "Đang in...",
+      count: itemCount,
+      threshold: 0,
+      isFull: false,
     });
     const date = new Date();
-    const dateStr = `${date.getDate().toString().padStart(2, '0')} ${date.getMonth() + 1} ${date.getFullYear().toString().slice(-2)}`;
-    const numberPart = toNumber.split('-').pop();
-    this._retryPrint(toNumber, type, id, dateStr, numberPart, this.state.email, itemCount)
+    const dateStr = `${date.getDate().toString().padStart(2, "0")} ${date.getMonth() + 1} ${date.getFullYear().toString().slice(-2)}`;
+    const numberPart = toNumber.split("-").pop();
+    this._retryPrint(
+      toNumber,
+      type,
+      id,
+      dateStr,
+      numberPart,
+      this.state.email,
+      itemCount,
+    )
       .then(() => {
-        this._savePrintedLabel({ toNumber, type, id, dateStr, number: numberPart, email: this.state.email, itemCount });
+        this._savePrintedLabel({
+          toNumber,
+          type,
+          id,
+          dateStr,
+          number: numberPart,
+          email: this.state.email,
+          itemCount,
+        });
         this.state.markPrinted(id);
         this._updateCard({
-          id, type, return_tn: '✅ Đã đóng kiện',
-          count: itemCount, threshold: 0, isFull: false,
-          closed: true
+          id,
+          type,
+          return_tn: "✅ Đã đóng kiện",
+          count: itemCount,
+          threshold: 0,
+          isFull: false,
+          closed: true,
         });
       })
       .catch(() => {
+        this.audio.playPrintError();
         this._updateCard({
-          id, type, return_tn: '❌ In thất bại',
-          count: itemCount, threshold: 0, isFull: false
+          id,
+          type,
+          return_tn: "❌ In thất bại",
+          count: itemCount,
+          threshold: 0,
+          isFull: false,
         });
         if (this.shadowRoot) {
-          const btnContainer = this.shadowRoot.getElementById('button-container');
+          const btnContainer =
+            this.shadowRoot.getElementById("button-container");
           if (btnContainer) {
-            btnContainer.innerHTML = '<button class="btn btn-warning" id="btn-retry-print">In lại</button>';
-            const retryBtn = btnContainer.querySelector('#btn-retry-print');
-            retryBtn.addEventListener('click', () => {
+            btnContainer.innerHTML =
+              '<button class="btn btn-warning" id="btn-retry-print">In lại</button>';
+            const retryBtn = btnContainer.querySelector("#btn-retry-print");
+            retryBtn.addEventListener("click", () => {
               if (retryBtn.disabled) return;
               retryBtn.disabled = true;
               retryBtn.innerHTML = '<span class="spinner"></span> Đang in...';
               this.printAndClose(id, type, toNumber, itemCount).finally(() => {
                 retryBtn.disabled = false;
-                retryBtn.textContent = 'In lại';
+                retryBtn.textContent = "In lại";
               });
             });
           }
@@ -934,8 +1099,8 @@ export class UIManager {
   }
 
   _showToast(message) {
-    const toast = document.createElement('div');
-    toast.className = 'toast-msg';
+    const toast = document.createElement("div");
+    toast.className = "toast-msg";
     toast.textContent = message;
     this.shadowRoot.appendChild(toast);
     setTimeout(() => toast.remove(), 2500);

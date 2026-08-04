@@ -2,20 +2,25 @@
 import { printLabel } from "../printer.js";
 import { DashboardUI } from "./dashboard.js";
 
-const STATUS_COLORS = {
-  1: "#E74C3C",
-  2: "#3498DB",
-  3: "#2ECC71",
-  4: "#F39C12",
-  5: "#9B59B6",
-  6: "#1ABC9C",
-  7: "#E67E22",
-  8: "#2C3E50",
-  9: "#E91E63",
-  A: "#00BCD4",
-  B: "#FF5722",
-  C: "#795548",
-  D: "#607D8B",
+/**
+ * Màu nền cho từng mã trạm (station_id).
+ * Key: station_id (dạng string "1".."9","A".."D")
+ * Value: mã màu hex
+ */
+const STATION_COLORS = {
+  1: "#E74C3C", // NA, NA-COM
+  2: "#3498DB", // CB, WH-QC
+  3: "#2ECC71", // CB-GTC
+  4: "#F39C12", // FBS_Premium-B
+  5: "#9B59B6", // FBS_Standard-A
+  6: "#1ABC9C", // FBS_Standard-B
+  7: "#E67E22", // FBS_Vinamilk
+  8: "#2C3E50", // Wrong-A
+  9: "#E91E63", // Wrong-B
+  A: "#00BCD4", // L'Oreal
+  B: "#FF5722", // SBS-B
+  C: "#795548", // SBS-GTC
+  D: "#607D8B", // SBS-Resell
 };
 
 const getLuminance = (hex) => {
@@ -74,8 +79,10 @@ const STYLES = `
 .badge-card {
   border-radius: 14px; padding: 6px 8px; width: 88px;
   display: flex; flex-direction: column; align-items: center; gap: 1px;
-  flex-shrink: 0; transition: filter 0.2s, box-shadow 0.2s; color: white; font-weight: 700;
-  cursor: pointer;
+  flex-shrink: 0; transition: filter 0.2s, box-shadow 0.2s;
+  font-weight: 700; cursor: pointer;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
 }
 .badge-card.placeholder {
   background: rgba(255,255,255,0.1); color: rgba(255,255,255,0.4);
@@ -520,11 +527,12 @@ export class UIManager {
         const threshold = s.threshold || 30;
         const count = s.item_count;
         const percent = Math.min(100, Math.round((count / threshold) * 100));
-        const bgColor = ID_COLORS[s.id] || "#607D8B";
+        const bgColor = STATION_COLORS[s.id] || "#607D8B";
+        const textColor = getTextColor(bgColor);
         const displayType =
           this.state.getDisplayName(s.type_group) ||
           (s.type_group || "").substring(0, 12);
-        html += `<div class="badge-card" style="background:${bgColor};" title="ID ${s.id}: ${s.type_group} – ${count}/${threshold}" data-id="${s.id}">
+        html += `<div class="badge-card" style="background:${bgColor}; color:${textColor};" title="ID ${s.id}: ${s.type_group} – ${count}/${threshold}" data-id="${s.id}">
           <div class="badge-id">${s.id}</div>
           <div class="badge-type" title="${s.type_group}">${displayType || "-"}</div>
           <div class="badge-count">${count}/${threshold}</div>
@@ -645,7 +653,7 @@ export class UIManager {
           idBox.classList.add("unknown");
           idBox.style.display = "inline-block";
         } else {
-          const bgColor = ID_COLORS[id] || "#607D8B";
+          const bgColor = STATION_COLORS[id] || "#607D8B";
           const textColor = getTextColor(bgColor);
           idBox.style.background = bgColor;
           idBox.style.color = textColor;
@@ -689,7 +697,7 @@ export class UIManager {
           idBox.classList.add("unknown");
           idBox.style.display = "inline-block";
         } else {
-          const bgColor = ID_COLORS[id] || "#607D8B";
+          const bgColor = STATION_COLORS[id] || "#607D8B";
           const textColor = getTextColor(bgColor);
           idBox.style.background = bgColor;
           idBox.style.color = textColor;
@@ -739,7 +747,7 @@ export class UIManager {
         idBox.textContent = "?";
         idBox.classList.add("unknown");
       } else {
-        const bgColor = ID_COLORS[id] || "#607D8B";
+        const bgColor = STATION_COLORS[id] || "#607D8B";
         const textColor = getTextColor(bgColor);
         idBox.style.background = bgColor;
         idBox.style.color = textColor;
@@ -759,7 +767,7 @@ export class UIManager {
     if (progressFill) {
       progressFill.style.width = percent + "%";
       progressFill.style.background =
-        id && !isUnknown && ID_COLORS[id] ? ID_COLORS[id] : "#cbd5e1";
+        id && !isUnknown && STATION_COLORS[id] ? STATION_COLORS[id] : "#cbd5e1";
     }
 
     // Count text

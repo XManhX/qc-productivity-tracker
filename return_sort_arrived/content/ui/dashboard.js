@@ -418,7 +418,7 @@ export class DashboardUI {
   }
 
   _renderActiveEventCard(event) {
-    const color = ID_COLORS[event.station_id] || "#94a3b8";
+    const color = STATION_COLORS[event.station_id] || "#94a3b8";
     const textColor = getTextColor(color);
     const timeStr = event.created_at
       ? new Date(event.created_at).toLocaleTimeString("vi-VN")
@@ -454,7 +454,7 @@ export class DashboardUI {
         : status === "open"
           ? "status-open"
           : "status-closed";
-    const color = ID_COLORS[session.id] || "#94a3b8";
+    const color = STATION_COLORS[session.id] || "#94a3b8";
     const textColor = getTextColor(color);
     const timeStr = session.session_start
       ? new Date(session.session_start).toLocaleTimeString("vi-VN")
@@ -486,7 +486,7 @@ export class DashboardUI {
   }
 
   _renderCardFromLabel(label) {
-    const color = ID_COLORS[label.id] || "#3b82f6";
+    const color = STATION_COLORS[label.id] || "#3b82f6";
     const textColor = getTextColor(color);
     return `
       <div class="card status-closed" data-id="${label.id}" data-type="${label.type}">

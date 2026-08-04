@@ -2,7 +2,7 @@
 import { printLabel } from "../printer.js";
 import { DashboardUI } from "./dashboard.js";
 
-const ID_COLORS = {
+const STATUS_COLORS = {
   1: "#E74C3C",
   2: "#3498DB",
   3: "#2ECC71",
@@ -18,18 +18,21 @@ const ID_COLORS = {
   D: "#607D8B",
 };
 
-function getTextColor(bg) {
-  return [
-    "#2C3E50",
-    "#795548",
-    "#607D8B",
-    "#F39C12",
-    "#E67E22",
-    "#00BCD4",
-  ].includes(bg)
-    ? "#000"
-    : "#fff";
-}
+const getLuminance = (hex) => {
+  const [r, g, b] = hex.match(/\w\w/g).map((c) => {
+    const v = parseInt(c, 16) / 255;
+    return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+  });
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+};
+
+const contrastRatio = (l1, l2) =>
+  (Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05);
+
+const getTextColor = (bgHex) => {
+  const lum = getLuminance(bgHex);
+  return contrastRatio(lum, 0) >= 4.5 ? "#000000" : "#FFFFFF";
+};
 
 const STYLES = `
 :host { all: initial; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; }

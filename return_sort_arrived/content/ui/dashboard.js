@@ -1,20 +1,25 @@
 // content/ui/dashboard.js – Dashboard nhúng vào popup chính, đầy đủ badge & realtime
 import { printLabel } from "../printer.js";
 
-const STATUS_COLORS = {
-  1: "#E74C3C",
-  2: "#3498DB",
-  3: "#2ECC71",
-  4: "#F39C12",
-  5: "#9B59B6",
-  6: "#1ABC9C",
-  7: "#E67E22",
-  8: "#2C3E50",
-  9: "#E91E63",
-  A: "#00BCD4",
-  B: "#FF5722",
-  C: "#795548",
-  D: "#607D8B",
+/**
+ * Màu nền cho từng mã trạm (station_id).
+ * Key: station_id (dạng string "1".."9","A".."D")
+ * Value: mã màu hex
+ */
+const STATION_COLORS = {
+  1: "#E74C3C", // NA, NA-COM
+  2: "#3498DB", // CB, WH-QC
+  3: "#2ECC71", // CB-GTC
+  4: "#F39C12", // FBS_Premium-B
+  5: "#9B59B6", // FBS_Standard-A
+  6: "#1ABC9C", // FBS_Standard-B
+  7: "#E67E22", // FBS_Vinamilk
+  8: "#2C3E50", // Wrong-A
+  9: "#E91E63", // Wrong-B
+  A: "#00BCD4", // L'Oreal
+  B: "#FF5722", // SBS-B
+  C: "#795548", // SBS-GTC
+  D: "#607D8B", // SBS-Resell
 };
 
 const getLuminance = (hex) => {

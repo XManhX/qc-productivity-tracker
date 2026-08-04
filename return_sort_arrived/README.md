@@ -116,7 +116,7 @@ Tích hợp trực tiếp trong popup, gồm 4 tab:
 ### Quét mã phiếu
 
 - Khi nhân viên quét mã `sheet_id`, popup sẽ hiện **ID trạm tương ứng**, số lượng hiện tại.
-- Đèn tín hiệu (màu card) thay đổi theo trạng thái: xám (đang xử lý), xanh lá (đầy), vàng (cảnh báo), đỏ (lỗi).
+- Đèn tín hiệu (màu card) thay đổi theo trạng thái: xám (đang xử lý), xanh lá (thành công), vàng (cảnh báo), đỏ (lỗi).
 
 ### Đóng kiện
 

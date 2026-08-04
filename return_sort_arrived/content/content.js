@@ -99,8 +99,18 @@ else window.addEventListener('load', connectKeepAlive);
 
         const stateManager = new StateManager(masterData, email);
 
-        // Lắng nghe sự kiện
-        document.addEventListener('as-return-tn-arrived', (e) => stateManager.handleArrived(e.detail.returnTn));
+        // ==== 3 sự kiện ====
+        document.addEventListener('as-return-tn-detected', (e) => {
+            stateManager.handleDetected(e.detail.sheetId);
+        });
+
+        document.addEventListener('as-return-tn-arrived', (e) => {
+            stateManager.handleArrived(e.detail.returnTn, e.detail.sheetId);
+        });
+
+        document.addEventListener('as-return-tn-error', (e) => {
+            stateManager.handleError(e.detail.sheetId, e.detail.retcode, e.detail.message);
+        });
 
         // Khởi tạo UI ngay lập tức
         function initUI() {

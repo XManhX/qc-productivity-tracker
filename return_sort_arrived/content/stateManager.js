@@ -1,4 +1,4 @@
-// content/stateManager.js – hỗ trợ display_name
+// content/stateManager.js – backend ưu tiên, chờ cả hai luồng, hỗ trợ fetch active scan events
 export class StateManager {
     constructor(masterData, email) {
         this.masterData = masterData;
@@ -11,13 +11,13 @@ export class StateManager {
         this._listeners = [];
         this._typeMappingReady = false;
         this._typeMappingPromise = null;
+        this._pendingIncrements = new Map();
 
         this._initTypeMapping();
         this._initSessions();
 
         chrome.runtime.onMessage.addListener((msg) => {
             if (msg.action === 'UPDATE_SESSIONS') {
-                console.log('[StateManager] Received UPDATE_SESSIONS:', msg.sessions.length);
                 this._onSessionsUpdate(msg.sessions);
             }
         });
@@ -30,44 +30,24 @@ export class StateManager {
 
     _initTypeMapping() {
         this._typeMappingPromise = new Promise((resolve) => {
-            // 1. Đọc từ storage trước
             chrome.storage.local.get(['typeMapping'], (result) => {
                 if (result?.typeMapping) {
                     this._applyTypeMapping(result.typeMapping);
                     resolve();
                     return;
                 }
-                // 2. Nếu storage rỗng, gửi message (có retry)
                 this._requestTypeMapping(resolve, 0);
             });
         });
     }
 
     _initSessions() {
-        // 1. Đọc từ storage trước
         chrome.storage.local.get(['activeSessions'], (result) => {
             if (result?.activeSessions && Array.isArray(result.activeSessions)) {
-                console.log('[StateManager] Loaded sessions from storage:', result.activeSessions.length);
                 this._onSessionsUpdate(result.activeSessions);
                 return;
             }
-            // 2. Nếu storage rỗng, gửi message (có retry)
             this._requestSessions(0);
-        });
-    }
-
-    _requestSessions(attempt) {
-        chrome.runtime.sendMessage({ action: 'GET_SESSIONS' }, (response) => {
-            if (chrome.runtime.lastError) {
-                console.warn('[StateManager] GET_SESSIONS failed:', chrome.runtime.lastError.message);
-                if (attempt < 3) {
-                    setTimeout(() => this._requestSessions(attempt + 1), 2000);
-                }
-                return;
-            }
-            if (response?.sessions) {
-                this._onSessionsUpdate(response.sessions);
-            }
         });
     }
 
@@ -85,26 +65,27 @@ export class StateManager {
     _requestTypeMapping(resolve, attempt) {
         chrome.runtime.sendMessage({ action: 'GET_TYPE_MAPPING' }, (response) => {
             if (chrome.runtime.lastError) {
-                console.warn('[StateManager] GET_TYPE_MAPPING failed:', chrome.runtime.lastError.message);
-                // Retry sau 1 giây
-                if (attempt < 3) {
-                    setTimeout(() => this._requestTypeMapping(resolve, attempt + 1), 1000);
-                } else {
-                    console.warn('[StateManager] Type mapping failed after retries');
-                    this._typeMappingReady = true; // vẫn resolve để không block
-                    resolve();
-                }
+                if (attempt < 3) setTimeout(() => this._requestTypeMapping(resolve, attempt + 1), 1000);
+                else { this._typeMappingReady = true; resolve(); }
                 return;
             }
             if (response?.mapping) {
                 this._applyTypeMapping(response.mapping);
-                // Lưu vào storage để lần sau dùng nhanh
                 chrome.storage.local.set({ typeMapping: response.mapping });
             } else {
-                console.warn('[StateManager] No type mapping in response');
                 this._typeMappingReady = true;
             }
             resolve();
+        });
+    }
+
+    _requestSessions(attempt) {
+        chrome.runtime.sendMessage({ action: 'GET_SESSIONS' }, (response) => {
+            if (chrome.runtime.lastError) {
+                if (attempt < 3) setTimeout(() => this._requestSessions(attempt + 1), 2000);
+                return;
+            }
+            if (response?.sessions) this._onSessionsUpdate(response.sessions);
         });
     }
 
@@ -115,23 +96,17 @@ export class StateManager {
 
     getId(type) { return this.typeToId[type] || null; }
     getDisplayName(type) { return this.typeToDisplay[type] || type; }
-    getType(return_tn) { return this.masterData[return_tn.toUpperCase().replace(/\s+/g, '')] || null; }
+    getType(returnTn) {
+        if (!returnTn) return null;
+        return this.masterData[returnTn.toUpperCase().replace(/\s+/g, '')] || null;
+    }
 
     async _callApi(endpoint, body) {
         return new Promise((resolve, reject) => {
-            if (!chrome.runtime?.id) {
-                reject(new Error('Extension context không hợp lệ'));
-                return;
-            }
+            if (!chrome.runtime?.id) { reject(new Error('Extension context không hợp lệ')); return; }
             chrome.runtime.sendMessage({ action: 'API_CALL', endpoint, body }, (res) => {
-                if (chrome.runtime.lastError) {
-                    reject(new Error(chrome.runtime.lastError.message));
-                    return;
-                }
-                if (!res?.success) {
-                    reject(new Error(res?.error || 'Lỗi không xác định'));
-                    return;
-                }
+                if (chrome.runtime.lastError) { reject(new Error(chrome.runtime.lastError.message)); return; }
+                if (!res?.success) { reject(new Error(res?.error || 'Lỗi không xác định')); return; }
                 resolve(res.data);
             });
         });
@@ -151,94 +126,100 @@ export class StateManager {
 
     setUI(ui) { this.ui = ui; }
 
-    handleArrived(return_tn) {
-        this._handleScan(return_tn);
+    // ============ EVENT HANDLERS ============
+
+    handleDetected(sheetId) {
+        this._handleScan(sheetId);
     }
 
-    async fetchLastReturnTn(stationId) {
-        try {
-            const data = await this._callApi('last_return_tn', { id: stationId });
-            return data.last_return_tn || null;
-        } catch (e) {
-            return null;
-        }
+    handleArrived(returnTn, sheetId) {
+        this._resolvePending(sheetId, true, 0, '', returnTn);
     }
 
-    showSessionDetail(id) {
-        if (!this.ui) return;
-        const session = this.sessions.find(s => s.id === id);
-        if (session) {
-            const displayType = this.getDisplayName(session.type_group);
-            // Dùng last_return_tn từ session, không cần fetch API
-            const returnTn = session.last_return_tn || `ID ${id}`;
-            this.ui.showDetected(returnTn, displayType, id, session);
-        }
+    handleError(sheetId, retcode, message) {
+        this._resolvePending(sheetId, false, retcode, message);
     }
 
-    async _handleScan(return_tn) {
+    // ============ LOGIC CHÍNH ============
+
+    async _handleScan(sheetId) {
         await this._waitForTypeMapping();
-        if (!this.ui) return;
-        if (!return_tn) {
-            this.ui.showWarning('Không có mã đơn hàng');
-            return;
-        }
+        if (!this.ui) return null;
+        if (!sheetId) { this.ui.showWarning('Không có mã đơn hàng'); return null; }
 
-        const type = this.getType(return_tn);
+        const type = this.getType(sheetId);
         const id = type ? this.getId(type) : null;
         const displayType = type ? this.getDisplayName(type) : null;
 
         if (type) {
             const session = id ? this.sessions.find(s => s.id === id) : null;
-            this.ui.showDetected(return_tn, displayType, id, session);
+            this.ui.showDetected(sheetId, displayType, id, session, 'processing');
             const utterance = new SpeechSynthesisUtterance(id || 'không xác định');
-            utterance.lang = 'vi';
+            utterance.lang = 'vi-VN';
             window.speechSynthesis.speak(utterance);
         } else {
             this.ui.showWarning('Không có trong master data');
-            return;
+            return null;
         }
 
         if (!id) {
             this.ui.showScanError({
-                return_tn, type: displayType, id: null,
+                return_tn: sheetId, type: displayType, id: null,
                 reason: 'Lỗi ánh xạ',
                 detail: `Type "${displayType}" chưa được gán ID`
             });
-            return;
+            return null;
         }
 
-        try {
-            const data = await this._callApi('increment', { id, return_tn, type, email: this.email });
-            console.log('[StateManager] increment response:', data);
+        const incrementPromise = this._callApi('increment', { id, return_tn: sheetId, type, email: this.email })
+            .then(async (data) => {
+                if (!data.success) {
+                    throw new Error(data.error || 'Lỗi không xác định');
+                }
+                const freshSessions = await this._fetchSessions();
+                this._onSessionsUpdate(freshSessions);
+                return { success: true, data, displayType, id };
+            })
+            .catch(e => {
+                return { success: false, error: e.message, displayType, id };
+            });
 
-            if (!data.success) {
-                let reason = 'Lỗi';
-                let detail = data.error || 'Lỗi không xác định từ server';
-                if (data.error && data.error.includes('Return TN đã được quét')) reason = 'Trùng lặp';
-                else if (data.error && data.error.includes('ID đã đầy')) reason = 'Đầy';
-                this.ui.showScanError({ return_tn, type: displayType, id, reason, detail });
-                return;
-            }
+        this._pendingIncrements.set(sheetId, incrementPromise);
+        return incrementPromise;
+    }
 
-            const freshSessions = await this._fetchSessions();
-            this._onSessionsUpdate(freshSessions);
-            this.ui.showSuccess(return_tn, displayType, id, data);
+    async _resolvePending(sheetId, responseSuccess, retcode, message, returnNo = null) {
+        let incrementPromise = this._pendingIncrements.get(sheetId);
 
-            if (data.status === 'full') {
+        if (!incrementPromise) {
+            incrementPromise = await this._handleScan(sheetId);
+            if (!incrementPromise) return;
+        }
+
+        const incResult = await incrementPromise;
+        this._pendingIncrements.delete(sheetId);
+
+        const { displayType, id } = incResult;
+
+        if (incResult.success) {
+            this.ui.showSuccess(sheetId, displayType, id, incResult.data);
+            if (incResult.data.status === 'full') {
                 this.ui.showFullAlert(id, displayType);
                 try { speechSynthesis.speak(new SpeechSynthesisUtterance(`ID ${id} đã đầy`)); } catch (e) { }
             }
-        } catch (e) {
-            console.error('[StateManager] increment failed:', e);
+        } else {
             this.ui.showScanError({
-                return_tn, type: displayType, id,
+                return_tn: sheetId, type: displayType, id,
                 reason: 'Lỗi',
-                detail: 'Lỗi kết nối đến server'
+                detail: incResult.error
             });
         }
     }
 
+    // ============ CÁC PHƯƠNG CÒN LẠI ============
+
     async removeScan(return_tn, id, type) {
+        if (!this.ui) return;
         try {
             const data = await this._callApi('decrement', { id, return_tn });
             if (!data.success) {
@@ -247,7 +228,20 @@ export class StateManager {
             }
             const freshSessions = await this._fetchSessions();
             this._onSessionsUpdate(freshSessions);
-            this.ui.showSuccess(return_tn, type, id, { item_count: data.item_count, status: data.status });
+
+            const updatedSession = freshSessions.find(s => s.id === id);
+            const newCount = updatedSession ? updatedSession.item_count : 0;
+            const lastReturnTn = updatedSession ? updatedSession.last_return_tn : null;
+
+            if (newCount > 0 && lastReturnTn) {
+                const displayType = this.getDisplayName(updatedSession.type_group);
+                this.ui.showSuccess(lastReturnTn, displayType, id, {
+                    item_count: newCount,
+                    status: updatedSession.status
+                });
+            } else {
+                this.ui.resetCard();
+            }
         } catch (e) {
             this.ui.showError('Lỗi kết nối');
         }
@@ -264,22 +258,40 @@ export class StateManager {
     }
 
     async markPrinted(id) {
-        try {
-            await this._callApi('mark_printed', { id });
-            console.log('[StateManager] Marked as printed:', id);
-        } catch (e) {
-            console.error('[StateManager] Failed to mark printed:', e);
+        try { await this._callApi('mark_printed', { id }); } catch (e) { }
+    }
+
+    showSessionDetail(id) {
+        if (!this.ui) return;
+        const session = this.sessions.find(s => s.id === id);
+        if (session) {
+            const displayType = this.getDisplayName(session.type_group);
+            const returnTn = session.last_return_tn || `ID ${id}`;
+            this.ui.showDetected(returnTn, displayType, id, session);
         }
     }
 
-    // Refresh methods cho nút cập nhật
+    fetchActiveEventsCount() {
+        return new Promise((resolve) => {
+            chrome.runtime.sendMessage({ action: 'GET_ACTIVE_EVENTS_COUNT' }, (response) => {
+                resolve(response?.count || 0);
+            });
+        });
+    }
+
+    fetchActiveScanEvents(page = 1, limit = 20) {
+        return new Promise((resolve) => {
+            chrome.runtime.sendMessage({ action: 'GET_ACTIVE_SCAN_EVENTS', page, limit }, (response) => {
+                resolve(response?.events || []);
+            });
+        });
+    }
+
     async refreshMasterData() {
         return new Promise((resolve, reject) => {
             chrome.runtime.sendMessage({ action: 'FETCH_MASTER_DATA' }, (response) => {
-                if (response?.success) {
-                    this.masterData = response.masterData;
-                    resolve();
-                } else reject(new Error(response?.error || 'Không thể cập nhật master data'));
+                if (response?.success) { this.masterData = response.masterData; resolve(); }
+                else reject(new Error(response?.error || 'Không thể cập nhật master data'));
             });
         });
     }
@@ -287,16 +299,8 @@ export class StateManager {
     async refreshTypeMapping() {
         return new Promise((resolve, reject) => {
             chrome.runtime.sendMessage({ action: 'FETCH_TYPE_MAPPINGS' }, (response) => {
-                if (response?.success) {
-                    this.typeToId = {};
-                    this.typeToDisplay = {};
-                    for (const [typeName, info] of Object.entries(response.mapping)) {
-                        this.typeToId[typeName] = info.station_id;
-                        this.typeToDisplay[typeName] = info.display_name || typeName;
-                    }
-                    this._typeMappingReady = true;
-                    resolve();
-                } else reject(new Error(response?.error || 'Không thể cập nhật type mapping'));
+                if (response?.success) { this._applyTypeMapping(response.mapping); resolve(); }
+                else reject(new Error(response?.error || 'Không thể cập nhật type mapping'));
             });
         });
     }

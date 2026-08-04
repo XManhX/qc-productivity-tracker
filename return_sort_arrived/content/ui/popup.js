@@ -81,7 +81,7 @@ const STYLES = `
 .btn-icon.active { background: rgba(255,255,255,0.4); }
 .body {
   padding: 24px; display: flex; flex-direction: column; gap: 16px;
-  overflow-y: auto; max-height: 70vh;
+  overflow-x: hidden; overflow-y: auto; max-height: 70vh;
   align-items: center; position: relative;
 }
 .minimized .body { display: none; }
@@ -266,7 +266,7 @@ export class UIManager {
     this._clampPosition();
     this._setupDrag();
     this._bindEvents();
-    this._switchView('arrival'); // mặc định arrival
+    this._switchView('arrival');
   }
 
   _clampPosition() {
@@ -329,6 +329,20 @@ export class UIManager {
       header.addEventListener('mousedown', startDrag);
     }
     this._dragStartHandler = startDrag;
+  }
+
+  resetCard() {
+    this._updateCard({
+      id: null,
+      type: null,
+      return_tn: null,
+      count: 0,
+      threshold: 30,
+      isFull: false,
+      closed: false,
+      unknownId: false,
+      animate: false
+    });
   }
 
   _bindEvents() {
@@ -492,7 +506,7 @@ export class UIManager {
     if (this.shadowRoot && this._viewMode === 'arrival') this._updateTop5();
   }
 
-  _updateCard({ id, type, return_tn, count, threshold, isFull, error, unknownId, closed, animate }) {
+  _updateCard({ id, type, return_tn, count, threshold, isFull, error, unknownId, closed, animate, processing }) {
     if (!this.shadowRoot) return;
     const idBox = this.shadowRoot.getElementById('id-box');
     const typeEl = this.shadowRoot.getElementById('type-el');
@@ -505,6 +519,7 @@ export class UIManager {
     const errorInfo = this.shadowRoot.getElementById('error-info');
     const undoBtn = this.shadowRoot.getElementById('btn-undo');
 
+    // Ẩn tất cả trước khi render
     if (idBox) { idBox.style.display = 'none'; idBox.classList.remove('unknown'); }
     if (typeEl) typeEl.style.display = 'none';
     if (returnTnEl) returnTnEl.style.display = 'none';
@@ -514,41 +529,116 @@ export class UIManager {
     if (errorInfo) errorInfo.style.display = 'none';
 
     const isUnknown = unknownId || (error && !id);
-    const canOperate = !closed && !error && count > 0 && id && !isUnknown;
+    // Chỉ cho phép thao tác khi không có lỗi, không processing, không closed và có đủ thông tin
+    const canOperate = !processing && !closed && !error && count > 0 && id && !isUnknown;
 
+    // Nút hủy (góc trên phải)
     if (undoBtn) {
-      undoBtn.style.display = canOperate ? 'flex' : 'none';
-      if (canOperate) {
-        undoBtn.onclick = () => {
+      const canUndo = (canOperate || (error && id && count > 0));
+      undoBtn.style.display = canUndo ? 'flex' : 'none';
+      if (canUndo) {
+        undoBtn.disabled = false; // luôn bắt đầu ở trạng thái sẵn sàng
+        undoBtn.onclick = (e) => {
+          if (undoBtn.disabled) return; // chặn click đúp
+          undoBtn.disabled = true;
           if (confirm(`Hủy Return TN ${return_tn} khỏi ID ${id}?`)) {
             this.state.removeScan(return_tn, id, type);
+          } else {
+            undoBtn.disabled = false; // cho phép hủy lại nếu người dùng Cancel
           }
         };
       }
     }
 
+    // ---- Xác định màu nền của card dựa trên trạng thái ----
+    if (card) {
+      if (processing) {
+        card.style.background = '#f5f5f5';
+      } else if (error) {
+        card.style.background = error.reason === 'Sai tuyến' ? '#fff3cd' : '#f8d7da';
+      } else if (isUnknown) {
+        card.style.background = '#fff7ed';
+      } else if (isFull) {
+        card.style.background = '#f0fdf4';
+      } else {
+        card.style.background = '#f8fafc';
+      }
+    }
+
+    // ---- Xử lý chế độ ERROR ----
     if (error) {
       if (idBox) {
         if (isUnknown) {
-          idBox.style.background = ''; idBox.style.color = '';
-          idBox.textContent = '?'; idBox.classList.add('unknown');
+          idBox.style.background = '';
+          idBox.style.color = '';
+          idBox.textContent = '?';
+          idBox.classList.add('unknown');
           idBox.style.display = 'inline-block';
         } else {
           const bgColor = ID_COLORS[id] || '#607D8B';
           const textColor = getTextColor(bgColor);
-          idBox.style.background = bgColor; idBox.style.color = textColor;
-          idBox.textContent = id; idBox.style.display = 'inline-block';
+          idBox.style.background = bgColor;
+          idBox.style.color = textColor;
+          idBox.textContent = id;
+          idBox.style.display = 'inline-block';
         }
       }
-      if (card) card.style.background = error.reason === 'Sai tuyến' ? '#fff3cd' : '#f8d7da';
-      if (type && typeEl) { typeEl.textContent = type; typeEl.style.display = 'block'; }
-      if (return_tn && returnTnEl) { returnTnEl.textContent = return_tn; returnTnEl.style.display = 'block'; }
+      if (type && typeEl) {
+        typeEl.textContent = type;
+        typeEl.style.display = 'block';
+      }
+      if (return_tn && returnTnEl) {
+        returnTnEl.textContent = return_tn;
+        returnTnEl.style.display = 'block';
+      }
       if (errorInfo) {
         errorInfo.style.display = 'block';
         errorInfo.innerHTML = `
-          <div style="font-size:24px; font-weight:700; color:${error.reason === 'Sai tuyến' ? '#856404' : '#721c24'}; margin-bottom:8px;">${error.reason}</div>
-          <div style="font-size:16px; color:#555;">${error.detail || ''}</div>
-        `;
+                <div style="font-size:24px; font-weight:700; color:${error.reason === 'Sai tuyến' ? '#856404' : '#721c24'}; margin-bottom:8px;">${error.reason}</div>
+                <div style="font-size:16px; color:#555;">${error.detail || ''}</div>
+            `;
+      }
+      // Nếu có lỗi nhưng vẫn có thể hủy, nút hủy đã được hiển thị ở trên
+      if (card && animate) {
+        card.classList.add('animate');
+        card.addEventListener('animationend', () => card.classList.remove('animate'), { once: true });
+      }
+      return;
+    }
+
+    // ---- Xử lý chế độ PROCESSING (đang chờ kết quả) ----
+    if (processing) {
+      if (idBox) {
+        if (isUnknown) {
+          idBox.style.background = '';
+          idBox.style.color = '';
+          idBox.textContent = '?';
+          idBox.classList.add('unknown');
+          idBox.style.display = 'inline-block';
+        } else {
+          const bgColor = ID_COLORS[id] || '#607D8B';
+          const textColor = getTextColor(bgColor);
+          idBox.style.background = bgColor;
+          idBox.style.color = textColor;
+          idBox.textContent = id;
+          idBox.style.display = 'inline-block';
+        }
+      }
+      if (typeEl) {
+        typeEl.textContent = type || '--';
+        typeEl.style.display = 'block';
+      }
+      if (returnTnEl) {
+        returnTnEl.textContent = return_tn || '----';
+        returnTnEl.style.display = 'block';
+      }
+      if (progressBar) progressBar.style.display = 'none';
+      if (countEl) countEl.style.display = 'none';
+      if (errorInfo) {
+        errorInfo.style.display = 'block';
+        errorInfo.innerHTML = `
+                <div style="font-size:20px; font-weight:600; color:#666;">⏳ Đang xử lý...</div>
+            `;
       }
       if (card && animate) {
         card.classList.add('animate');
@@ -557,34 +647,46 @@ export class UIManager {
       return;
     }
 
+    // ---- Xử lý chế độ NORMAL (thành công hoặc trạng thái bình thường) ----
     if (idBox) idBox.style.display = 'inline-block';
     if (typeEl) typeEl.style.display = 'block';
     if (returnTnEl) returnTnEl.style.display = 'block';
     if (progressBar) progressBar.style.display = 'block';
     if (countEl) countEl.style.display = 'block';
 
+    // ID box
     if (idBox) {
       if (isUnknown) {
-        idBox.style.background = ''; idBox.style.color = '';
-        idBox.textContent = '?'; idBox.classList.add('unknown');
+        idBox.style.background = '';
+        idBox.style.color = '';
+        idBox.textContent = '?';
+        idBox.classList.add('unknown');
       } else {
         const bgColor = ID_COLORS[id] || '#607D8B';
         const textColor = getTextColor(bgColor);
-        idBox.style.background = bgColor; idBox.style.color = textColor;
+        idBox.style.background = bgColor;
+        idBox.style.color = textColor;
         idBox.textContent = id;
       }
     }
-    if (card) card.style.background = isUnknown ? '#fff7ed' : (isFull ? '#f0fdf4' : '#f8fafc');
+
+    // Type & Return TN
     if (typeEl) typeEl.textContent = type || '--';
     if (returnTnEl) returnTnEl.textContent = return_tn || '----';
 
+    // Progress bar
     const percent = (count !== undefined && threshold) ? Math.min(100, Math.round((count / threshold) * 100)) : 0;
     if (progressFill) {
       progressFill.style.width = percent + '%';
       progressFill.style.background = (id && !isUnknown && ID_COLORS[id]) ? ID_COLORS[id] : '#cbd5e1';
     }
-    if (countEl) countEl.textContent = count !== undefined ? `${count}/${threshold || 30}` : `0/30`;
 
+    // Count text
+    if (countEl) {
+      countEl.textContent = count !== undefined ? `${count}/${threshold || 30}` : `0/30`;
+    }
+
+    // Buttons
     if (canOperate && btnContainer) {
       if (isFull) {
         btnContainer.innerHTML = `<button class="btn btn-close" id="btn-close">Xác nhận đóng kiện (đầy)</button>`;
@@ -601,6 +703,7 @@ export class UIManager {
       btnContainer.innerHTML = '';
     }
 
+    // Animation
     if (card) {
       if (animate) {
         card.classList.add('animate');
@@ -611,7 +714,8 @@ export class UIManager {
     }
   }
 
-  showDetected(return_tn, type, id, session) {
+  // Khi status === 'processing', hiển thị màu xám
+  showDetected(return_tn, type, id, session, status = 'detected') {
     this.currentId = id || '';
     this._updateCard({
       id: id || null, type: type || null, return_tn,
@@ -620,7 +724,8 @@ export class UIManager {
       isFull: session?.status === 'full',
       closed: session?.status === 'closed',
       unknownId: !id,
-      animate: true
+      animate: true,
+      processing: status === 'processing'
     });
   }
 

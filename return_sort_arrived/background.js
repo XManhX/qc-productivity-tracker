@@ -37,7 +37,6 @@ async function fetchTypeMappings() {
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const json = await res.json();
     typeToIdMap = json;
-    // Lưu vào storage để content script có thể lấy trực tiếp
     await chrome.storage.local.set({ typeMapping: json, typeMappingUpdated: Date.now() });
     console.log('[BG] Type mappings updated:', Object.keys(typeToIdMap).length);
   } catch (e) {
@@ -45,7 +44,7 @@ async function fetchTypeMappings() {
   }
 }
 
-// Realtime subscription – chỉ kích hoạt khi có thay đổi
+// Realtime subscription
 supabaseClient
   .channel('id_sessions_changes')
   .on('postgres_changes', { event: '*', schema: 'public', table: 'id_sessions' }, (payload) => {
@@ -60,7 +59,6 @@ async function broadcastSessions() {
   const { data, error } = await supabaseClient.rpc('get_active_sessions');
   if (error || !data) return;
 
-  // Lưu vào storage để content script có thể đọc trực tiếp
   chrome.storage.local.set({ activeSessions: data }).catch(() => { });
 
   const tabs = await chrome.tabs.query({ url: '*://wms.ssc.shopee.vn/*' });
@@ -131,6 +129,27 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return true;
   }
 
+  if (msg.action === 'GET_ACTIVE_SCAN_EVENTS') {
+    (async () => {
+      const page = msg.page || 1;
+      const limit = msg.limit || 20;
+      const { data, error } = await supabaseClient.rpc('get_active_scan_events', {
+        p_page: page,
+        p_limit: limit
+      });
+      sendResponse({ events: data || [] });
+    })();
+    return true;
+  }
+
+  if (msg.action === 'GET_ACTIVE_EVENTS_COUNT') {
+    (async () => {
+      const { data, error } = await supabaseClient.rpc('count_active_scan_events');
+      sendResponse({ count: error ? 0 : data });
+    })();
+    return true;
+  }
+
   if (msg.action === 'FETCH_MASTER_DATA') {
     fetchMasterData()
       .then(() => sendResponse({ success: true, masterData: masterDataMap }))
@@ -146,7 +165,6 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   }
 });
 
-// Giữ service worker sống
 chrome.runtime.onConnect.addListener((port) => {
   if (port.name === 'as-keepalive') {
     console.log('[BG] Persistent port connected');

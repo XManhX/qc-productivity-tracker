@@ -1,4 +1,5 @@
-// content/content.js
+// content/content.js – hoàn chỉnh, an toàn, hiển thị ngay
+// --- Helpers ---
 function isExtensionContextValid() {
     try { return !!(chrome.runtime && chrome.runtime.id); }
     catch (e) { return false; }
@@ -23,6 +24,7 @@ function safeRuntimeConnect(name) {
     catch (e) { return null; }
 }
 
+// --- Keep-Alive ---
 let keepAlivePort = null;
 let keepAliveTimer = null;
 let keepAliveAttempts = 0;
@@ -57,8 +59,10 @@ function connectKeepAlive() {
 if (document.readyState === 'complete') connectKeepAlive();
 else window.addEventListener('load', connectKeepAlive);
 
+// --- Main ---
 (async () => {
     try {
+        // Inject scripts
         const interceptorUrl = safeGetURL('content/interceptor.js');
         if (interceptorUrl) {
             const script = document.createElement('script');
@@ -75,44 +79,51 @@ else window.addEventListener('load', connectKeepAlive);
             (document.head || document.documentElement).appendChild(script);
         }
 
+        // Import modules
         const { StateManager } = await import(chrome.runtime.getURL('content/stateManager.js'));
         const { UIManager } = await import(chrome.runtime.getURL('content/ui/popup.js'));
-        const { DashboardUI } = await import(chrome.runtime.getURL('content/ui/dashboard.js'));
 
+        const stored = await new Promise((resolve) => safeStorageGet(['masterData'], resolve));
+        const masterData = stored?.masterData || {};
+
+        // Lấy email
+        let email = 'unknown@shopee.com';
+        try {
+            email = localStorage.getItem('useremail');
+            if (!email && document.body) {
+                const match = document.body.innerText.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
+                if (match) email = match[0];
+                localStorage.setItem('useremail', email);
+            }
+        } catch (e) { }
+
+        const stateManager = new StateManager(masterData, email);
+
+        // Lắng nghe sự kiện
+        document.addEventListener('as-return-tn-arrived', (e) => stateManager.handleArrived(e.detail.returnTn));
+
+        // Khởi tạo UI ngay lập tức
+        function initUI() {
+            new UIManager(stateManager);
+        }
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', initUI);
+        } else {
+            initUI();
+        }
+
+        // Lấy master data từ storage và cập nhật
         safeStorageGet(['masterData'], (stored) => {
-            const masterData = stored?.masterData || {};
-            let email = 'unknown@shopee.com';
-            try {
-                email = localStorage.getItem('useremail');
-                if (!email && document.body) {
-                    const match = document.body.innerText.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
-                    if (match) email = match[0];
-                    localStorage.setItem('useremail', email);
-                }
-            } catch (e) { }
-
-            const stateManager = new StateManager(masterData, email);
-
-            document.addEventListener('as-return-tn-arrived', (e) => {
-                stateManager.handleArrived(e.detail.return_tn);
-            });
-
-            function initUI() {
-                new UIManager(stateManager);
-                new DashboardUI(stateManager);
-            }
-            if (document.readyState === 'loading') {
-                document.addEventListener('DOMContentLoaded', initUI);
-            } else {
-                initUI();
-            }
-
-            if (isExtensionContextValid()) {
-                chrome.storage.onChanged.addListener((changes) => {
-                    if (changes.masterData) stateManager.updateMasterData(changes.masterData.newValue);
-                });
+            if (stored?.masterData) {
+                stateManager.updateMasterData(stored.masterData);
             }
         });
+
+        if (isExtensionContextValid()) {
+            chrome.storage.onChanged.addListener((changes) => {
+                if (changes.masterData) stateManager.updateMasterData(changes.masterData.newValue);
+            });
+        }
     } catch (e) {
         console.error('[Content] Initialization error:', e);
     }

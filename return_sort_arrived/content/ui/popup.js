@@ -1,5 +1,6 @@
-// content/ui/popup.js – Popup chính (Arrival) - thêm click top 5 để xem chi tiết
+// content/ui/popup.js – Popup chính Arrival, tích hợp Dashboard
 import { printLabel } from '../printer.js';
+import { DashboardUI } from './dashboard.js';
 
 const ID_COLORS = {
   '1': '#E74C3C', '2': '#3498DB', '3': '#2ECC71', '4': '#F39C12',
@@ -19,6 +20,7 @@ const STYLES = `
   z-index: 999999; overflow: hidden;
   display: flex; flex-direction: column;
   top: 50px; left: 50px;
+  transition: height 0.3s ease;
 }
 .popup.minimized {
   width: 56px; height: 56px; border-radius: 50%; cursor: pointer;
@@ -51,7 +53,7 @@ const STYLES = `
   border-radius: 14px; padding: 6px 8px; width: 88px;
   display: flex; flex-direction: column; align-items: center; gap: 1px;
   flex-shrink: 0; transition: filter 0.2s, box-shadow 0.2s; color: white; font-weight: 700;
-  cursor: pointer; /* thêm con trỏ chỉ tay */
+  cursor: pointer;
 }
 .badge-card.placeholder {
   background: rgba(255,255,255,0.1); color: rgba(255,255,255,0.4);
@@ -69,16 +71,18 @@ const STYLES = `
 .badge-count { font-size: 12px; }
 .badge-bar { width: 100%; height: 5px; background: rgba(255,255,255,0.3); border-radius: 3px; overflow: hidden; }
 .badge-fill { height: 100%; background: #fff; border-radius: 3px; transition: width 0.4s ease; }
-.actions { display: flex; gap: 8px; margin-left: 8px; }
+.actions { display: flex; flex-direction: column; gap: 8px; margin-left: 8px; align-items: center; }
 .btn-icon {
   background: rgba(255,255,255,0.2); border: none; color: white;
   width: 34px; height: 34px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
   cursor: pointer; transition: background 0.2s; font-size: 16px;
 }
 .btn-icon:hover { background: rgba(255,255,255,0.35); }
+.btn-icon.active { background: rgba(255,255,255,0.4); }
 .body {
   padding: 24px; display: flex; flex-direction: column; gap: 16px;
-  overflow: visible; align-items: center; position: relative;
+  overflow-y: auto; max-height: 70vh;
+  align-items: center; position: relative;
 }
 .minimized .body { display: none; }
 .minimized .header-left { display: none; }
@@ -143,6 +147,12 @@ const STYLES = `
 .btn-close-early:hover { background: #1976D2; }
 .btn-warning { background: #f97316; color: white; }
 .btn-warning:hover { background: #ea580c; }
+.dashboard-container {
+  width: 100%; display: none; flex-direction: column; gap: 8px;
+}
+.dashboard-container.visible {
+  display: flex;
+}
 .toast-msg {
   position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
   background: #1e293b; color: white; padding: 8px 20px; border-radius: 10px;
@@ -163,26 +173,30 @@ export class UIManager {
     this.popup = null;
     this.minimized = false;
     this.currentId = '';
+    this._viewMode = 'arrival'; // 'arrival' | 'dashboard'
+    this._dashboardInstance = null; // sẽ khởi tạo khi chuyển sang dashboard lần đầu
     this._currentUrl = window.location.href;
     this._init();
     document.addEventListener('url-change', (e) => this._onUrlChange(e.detail.url));
   }
 
   _onUrlChange(newUrl) {
-    if (newUrl !== this._currentUrl) {
-      this._currentUrl = newUrl;
-      this._updateVisibility();
-    }
+    if (!this.host) return;
+    this._currentUrl = newUrl;
+    this._updateVisibility();
   }
 
   _isArrivingPage() {
-    return this._currentUrl.includes('/v2/returninbound/arrving');
+    return window.location.href.includes('/v2/returninbound/arrving');
   }
 
   _updateVisibility() {
     if (!this.host) return;
-    this.host.style.display = this._isArrivingPage() ? '' : 'none';
-    if (this._isArrivingPage()) this._updateTop5();
+    const isArriving = this._isArrivingPage();
+    this.host.style.display = isArriving ? '' : 'none';
+    if (isArriving && this._viewMode === 'arrival') {
+      this._updateTop5();
+    }
   }
 
   _init() {
@@ -190,9 +204,13 @@ export class UIManager {
       document.addEventListener('DOMContentLoaded', () => this._init());
       return;
     }
+    this._createHost({ left: 50, top: 50 });
     chrome.storage.local.get('popupPosition', (result) => {
-      const savedPos = result.popupPosition || { left: 50, top: 50 };
-      this._createHost(savedPos);
+      if (result.popupPosition) {
+        this.popup.style.left = result.popupPosition.left + 'px';
+        this.popup.style.top = result.popupPosition.top + 'px';
+        this._clampPosition();
+      }
     });
   }
 
@@ -217,18 +235,18 @@ export class UIManager {
           <div class="top-row" id="top-row"></div>
         </div>
         <div class="actions">
-          <button class="btn-icon" id="btn-minimize" title="Thu nhỏ">–</button>
+        <button class="btn-icon" id="btn-minimize" title="Thu nhỏ">–</button>
+        <button class="btn-icon" id="btn-toggle-dashboard" title="Quản lý TO">📊</button>
         </div>
       </div>
       <div class="body" id="body">
-
         <div class="state-card" id="state-card">
           <div class="top-left-actions">
             <button class="btn-icon-action" id="btn-refresh-master" data-tooltip="Cập nhật Master Data">🔄</button>
             <button class="btn-icon-action" id="btn-refresh-mapping" data-tooltip="Cập nhật Type Mapping">🗂️</button>
           </div>
           <div class="top-right-actions">
-            <button class="btn-icon-action" id="btn-undo" style="display:none;" data-tooltip="Hủy RV này">🗑️</button>
+            <button class="btn-icon-action" id="btn-undo" style="display:none;" data-tooltip="Hủy Return TN này">🗑️</button>
           </div>
           <div id="id-box" class="id-big" style="background:#cbd5e1; color:#fff; min-width: 80px;">?</div>
           <div class="type-text" id="type-el">--</div>
@@ -238,6 +256,7 @@ export class UIManager {
           <div id="button-container"></div>
           <div id="error-info" style="display:none;"></div>
         </div>
+        <div class="dashboard-container" id="dashboard-container"></div>
       </div>
     `;
     this.shadowRoot.appendChild(this.popup);
@@ -247,7 +266,7 @@ export class UIManager {
     this._clampPosition();
     this._setupDrag();
     this._bindEvents();
-    this._updateTop5();
+    this._switchView('arrival'); // mặc định arrival
   }
 
   _clampPosition() {
@@ -295,7 +314,7 @@ export class UIManager {
     };
 
     const startDrag = (e) => {
-      if (e.target.closest('#btn-minimize')) return;
+      if (e.target.closest('#btn-minimize') || e.target.closest('#btn-toggle-dashboard')) return;
       startX = e.clientX; startY = e.clientY;
       const rect = this.popup.getBoundingClientRect();
       initialLeft = rect.left; initialTop = rect.top;
@@ -318,6 +337,13 @@ export class UIManager {
       this.toggleMinimize();
     });
 
+    const toggleBtn = this.shadowRoot.getElementById('btn-toggle-dashboard');
+    toggleBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this._toggleView();
+    });
+
+    // Nút refresh Master Data
     const refreshMaster = this.shadowRoot.getElementById('btn-refresh-master');
     refreshMaster.addEventListener('click', async () => {
       refreshMaster.disabled = true;
@@ -333,6 +359,7 @@ export class UIManager {
       }
     });
 
+    // Nút refresh Type Mapping
     const refreshMapping = this.shadowRoot.getElementById('btn-refresh-mapping');
     refreshMapping.addEventListener('click', async () => {
       refreshMapping.disabled = true;
@@ -347,6 +374,41 @@ export class UIManager {
         refreshMapping.innerHTML = '🗂️';
       }
     });
+  }
+
+  _toggleView() {
+    if (this._viewMode === 'arrival') {
+      this._switchView('dashboard');
+    } else {
+      this._switchView('arrival');
+    }
+  }
+
+  _switchView(mode) {
+    this._viewMode = mode;
+    const stateCard = this.shadowRoot.getElementById('state-card');
+    const dashboardContainer = this.shadowRoot.getElementById('dashboard-container');
+    const toggleBtn = this.shadowRoot.getElementById('btn-toggle-dashboard');
+
+    if (mode === 'arrival') {
+      stateCard.style.display = 'flex';
+      dashboardContainer.classList.remove('visible');
+      toggleBtn.classList.remove('active');
+      // Cập nhật top5
+      this._updateTop5();
+    } else {
+      stateCard.style.display = 'none';
+      dashboardContainer.classList.add('visible');
+      toggleBtn.classList.add('active');
+      // Khởi tạo dashboard nếu chưa có
+      if (!this._dashboardInstance) {
+        this._dashboardInstance = DashboardUI.attachTo(dashboardContainer, this.state);
+      }
+      // Làm mới dữ liệu dashboard
+      if (this._dashboardInstance) {
+        this._dashboardInstance.refresh();
+      }
+    }
   }
 
   toggleMinimize() {
@@ -368,7 +430,9 @@ export class UIManager {
       if (!isNaN(savedTop)) this.popup.style.top = savedTop + 'px';
       this.popup.classList.remove('minimized');
       header.removeAttribute('data-current-id');
-      this._updateTop5();
+      if (this._viewMode === 'arrival') {
+        this._updateTop5();
+      }
     }
 
     if (this._dragStartHandler) {
@@ -415,7 +479,6 @@ export class UIManager {
     }
     topRow.innerHTML = html;
 
-    // Gắn sự kiện click cho các badge thực (không phải placeholder)
     topRow.querySelectorAll('.badge-card:not(.placeholder)').forEach(badge => {
       badge.addEventListener('click', (e) => {
         const id = badge.dataset.id;
@@ -426,7 +489,7 @@ export class UIManager {
 
   updateTop5(sessions) {
     this.state.sessions = sessions;
-    if (this.shadowRoot) this._updateTop5();
+    if (this.shadowRoot && this._viewMode === 'arrival') this._updateTop5();
   }
 
   _updateCard({ id, type, return_tn, count, threshold, isFull, error, unknownId, closed, animate }) {
@@ -454,44 +517,32 @@ export class UIManager {
     const canOperate = !closed && !error && count > 0 && id && !isUnknown;
 
     if (undoBtn) {
+      undoBtn.style.display = canOperate ? 'flex' : 'none';
       if (canOperate) {
-        undoBtn.style.display = 'flex';
         undoBtn.onclick = () => {
           if (confirm(`Hủy Return TN ${return_tn} khỏi ID ${id}?`)) {
             this.state.removeScan(return_tn, id, type);
           }
         };
-      } else {
-        undoBtn.style.display = 'none';
       }
     }
 
     if (error) {
       if (idBox) {
         if (isUnknown) {
-          idBox.style.background = '';
-          idBox.style.color = '';
-          idBox.textContent = '?';
-          idBox.classList.add('unknown');
+          idBox.style.background = ''; idBox.style.color = '';
+          idBox.textContent = '?'; idBox.classList.add('unknown');
           idBox.style.display = 'inline-block';
         } else {
           const bgColor = ID_COLORS[id] || '#607D8B';
           const textColor = getTextColor(bgColor);
-          idBox.style.background = bgColor;
-          idBox.style.color = textColor;
-          idBox.textContent = id;
-          idBox.style.display = 'inline-block';
+          idBox.style.background = bgColor; idBox.style.color = textColor;
+          idBox.textContent = id; idBox.style.display = 'inline-block';
         }
       }
       if (card) card.style.background = error.reason === 'Sai tuyến' ? '#fff3cd' : '#f8d7da';
-      if (type && typeEl) {
-        typeEl.textContent = type;
-        typeEl.style.display = 'block';
-      }
-      if (return_tn && returnTnEl) {
-        returnTnEl.textContent = return_tn;
-        returnTnEl.style.display = 'block';
-      }
+      if (type && typeEl) { typeEl.textContent = type; typeEl.style.display = 'block'; }
+      if (return_tn && returnTnEl) { returnTnEl.textContent = return_tn; returnTnEl.style.display = 'block'; }
       if (errorInfo) {
         errorInfo.style.display = 'block';
         errorInfo.innerHTML = `
@@ -499,11 +550,9 @@ export class UIManager {
           <div style="font-size:16px; color:#555;">${error.detail || ''}</div>
         `;
       }
-      if (card) {
-        if (animate) {
-          card.classList.add('animate');
-          card.addEventListener('animationend', () => card.classList.remove('animate'), { once: true });
-        }
+      if (card && animate) {
+        card.classList.add('animate');
+        card.addEventListener('animationend', () => card.classList.remove('animate'), { once: true });
       }
       return;
     }
@@ -516,15 +565,12 @@ export class UIManager {
 
     if (idBox) {
       if (isUnknown) {
-        idBox.style.background = '';
-        idBox.style.color = '';
-        idBox.textContent = '?';
-        idBox.classList.add('unknown');
+        idBox.style.background = ''; idBox.style.color = '';
+        idBox.textContent = '?'; idBox.classList.add('unknown');
       } else {
         const bgColor = ID_COLORS[id] || '#607D8B';
         const textColor = getTextColor(bgColor);
-        idBox.style.background = bgColor;
-        idBox.style.color = textColor;
+        idBox.style.background = bgColor; idBox.style.color = textColor;
         idBox.textContent = id;
       }
     }
@@ -537,10 +583,7 @@ export class UIManager {
       progressFill.style.width = percent + '%';
       progressFill.style.background = (id && !isUnknown && ID_COLORS[id]) ? ID_COLORS[id] : '#cbd5e1';
     }
-
-    if (countEl) {
-      countEl.textContent = count !== undefined ? `${count}/${threshold || 30}` : `0/30`;
-    }
+    if (countEl) countEl.textContent = count !== undefined ? `${count}/${threshold || 30}` : `0/30`;
 
     if (canOperate && btnContainer) {
       if (isFull) {

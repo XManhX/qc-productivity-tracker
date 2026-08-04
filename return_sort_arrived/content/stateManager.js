@@ -13,16 +13,13 @@ export class StateManager {
         this._typeMappingPromise = null;
 
         this._initTypeMapping();
+        this._initSessions();
 
         chrome.runtime.onMessage.addListener((msg) => {
             if (msg.action === 'UPDATE_SESSIONS') {
                 console.log('[StateManager] Received UPDATE_SESSIONS:', msg.sessions.length);
                 this._onSessionsUpdate(msg.sessions);
             }
-        });
-
-        chrome.runtime.sendMessage({ action: 'GET_SESSIONS' }, (response) => {
-            if (response?.sessions) this._onSessionsUpdate(response.sessions);
         });
     }
 
@@ -33,16 +30,44 @@ export class StateManager {
 
     _initTypeMapping() {
         this._typeMappingPromise = new Promise((resolve) => {
-            // Ưu tiên lấy từ storage.local (nhanh, không cần message)
+            // 1. Đọc từ storage trước
             chrome.storage.local.get(['typeMapping'], (result) => {
                 if (result?.typeMapping) {
                     this._applyTypeMapping(result.typeMapping);
                     resolve();
                     return;
                 }
-                // Nếu chưa có, gửi message (có retry)
+                // 2. Nếu storage rỗng, gửi message (có retry)
                 this._requestTypeMapping(resolve, 0);
             });
+        });
+    }
+
+    _initSessions() {
+        // 1. Đọc từ storage trước
+        chrome.storage.local.get(['activeSessions'], (result) => {
+            if (result?.activeSessions && Array.isArray(result.activeSessions)) {
+                console.log('[StateManager] Loaded sessions from storage:', result.activeSessions.length);
+                this._onSessionsUpdate(result.activeSessions);
+                return;
+            }
+            // 2. Nếu storage rỗng, gửi message (có retry)
+            this._requestSessions(0);
+        });
+    }
+
+    _requestSessions(attempt) {
+        chrome.runtime.sendMessage({ action: 'GET_SESSIONS' }, (response) => {
+            if (chrome.runtime.lastError) {
+                console.warn('[StateManager] GET_SESSIONS failed:', chrome.runtime.lastError.message);
+                if (attempt < 3) {
+                    setTimeout(() => this._requestSessions(attempt + 1), 2000);
+                }
+                return;
+            }
+            if (response?.sessions) {
+                this._onSessionsUpdate(response.sessions);
+            }
         });
     }
 
@@ -94,10 +119,20 @@ export class StateManager {
 
     async _callApi(endpoint, body) {
         return new Promise((resolve, reject) => {
+            if (!chrome.runtime?.id) {
+                reject(new Error('Extension context không hợp lệ'));
+                return;
+            }
             chrome.runtime.sendMessage({ action: 'API_CALL', endpoint, body }, (res) => {
-                if (chrome.runtime.lastError) reject(new Error(chrome.runtime.lastError.message));
-                else if (!res.success) reject(new Error(res.error));
-                else resolve(res.data);
+                if (chrome.runtime.lastError) {
+                    reject(new Error(chrome.runtime.lastError.message));
+                    return;
+                }
+                if (!res?.success) {
+                    reject(new Error(res?.error || 'Lỗi không xác định'));
+                    return;
+                }
+                resolve(res.data);
             });
         });
     }

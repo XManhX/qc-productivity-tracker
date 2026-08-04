@@ -13,7 +13,7 @@
   },
   "content_scripts": [
     {
-      "matches": ["https://wms.ssc.shopee.vn/v2/returninbound/arrving*"],
+      "matches": ["https://wms.ssc.shopee.vn/*"],
       "js": ["content/content.js"],
       "run_at": "document_idle"
     }

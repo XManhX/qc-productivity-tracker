@@ -1,4 +1,4 @@
-// content/ui/dashboard.js – realtime thuần, không polling
+// content/ui/dashboard.js – Dashboard nhúng vào popup chính
 import { printLabel } from '../printer.js';
 
 const ID_COLORS = {
@@ -13,41 +13,12 @@ function getTextColor(bg) {
 
 const DASH_STYLES = `
 :host { all: initial; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; }
-.popup {
-  position: fixed; top: 100px; right: 20px; width: 480px; background: #fff;
-  border-radius: 20px; box-shadow: 0 20px 60px rgba(0,0,0,0.2);
-  z-index: 999998; overflow: hidden;
-  display: flex; flex-direction: column;
-}
-.popup.minimized {
-  width: 48px; height: 48px; border-radius: 50%; cursor: pointer;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-  right: 20px; bottom: 80px; left: auto; top: auto;
-}
-.header {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 14px 16px; background: #1E293B; color: white; cursor: move;
-}
-.minimized .header {
-  padding: 0; justify-content: center; width: 48px; height: 48px; border-radius: 50%;
-  cursor: pointer; background: #1E293B; position: relative; overflow: hidden;
-}
-.minimized .header > * { display: none !important; }
-.minimized .header::after {
-  content: '📊'; display: block; font-size: 24px; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-}
-.minimized .tabs, .minimized .body { display: none; }
-.btn-icon {
-  background: rgba(255,255,255,0.2); border: none; color: white;
-  width: 34px; height: 34px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
-  cursor: pointer; transition: background 0.2s; font-size: 16px;
-}
-.btn-icon:hover { background: rgba(255,255,255,0.35); }
+.dashboard { display: flex; flex-direction: column; gap: 8px; }
 .tabs {
-  display: flex; border-bottom: 1px solid #e2e8f0; background: #f8fafc;
+  display: flex; border-radius: 8px 8px 0 0; border-bottom: 1px solid #e2e8f0; background: #f8fafc;
 }
 .tab {
-  flex: 1; text-align: center; padding: 12px 8px; font-size: 13px; font-weight: 600;
+  flex: 1; text-align: center; padding: 10px 6px; font-size: 13px; font-weight: 600;
   cursor: pointer; color: #64748b; position: relative; transition: all 0.2s;
   border-bottom: 3px solid transparent;
 }
@@ -57,8 +28,7 @@ const DASH_STYLES = `
   margin-left: 4px; font-weight: 700;
 }
 .tab.active .tab-badge { background: #3b82f6; color: white; }
-.body { padding: 12px; overflow-y: auto; max-height: 55vh; }
-.search-row { display: flex; gap: 8px; margin-bottom: 10px; }
+.search-row { display: flex; gap: 8px; margin-bottom: 6px; }
 .search-input {
   flex: 1; padding: 8px 12px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 14px;
 }
@@ -69,7 +39,7 @@ const DASH_STYLES = `
 .btn-close-all { background: #ef4444; color: white; }
 .btn-close-all:hover { background: #dc2626; }
 .card {
-  background: #f8fafc; border-radius: 12px; padding: 12px; margin-bottom: 8px;
+  background: #f8fafc; border-radius: 12px; padding: 10px; margin-bottom: 6px;
   animation: fadeIn 0.3s ease; border-left: 4px solid #cbd5e1;
 }
 .card.status-open { border-left-color: #22c55e; }
@@ -84,7 +54,7 @@ const DASH_STYLES = `
 .type { font-size: 14px; font-weight: 600; color: #1e293b; }
 .count { font-size: 14px; font-weight: 700; color: #475569; }
 .time { font-size: 11px; color: #94a3b8; margin-top: 2px; }
-.progress-row { margin-top: 8px; display: flex; align-items: center; gap: 8px; }
+.progress-row { margin-top: 6px; display: flex; align-items: center; gap: 8px; }
 .progress-bar { flex: 1; height: 8px; background: #e2e8f0; border-radius: 4px; overflow: hidden; }
 .progress-fill { height: 100%; border-radius: 4px; transition: width 0.4s ease; }
 .progress-text { font-size: 12px; font-weight: 600; color: #64748b; min-width: 40px; text-align: right; }
@@ -98,19 +68,17 @@ const DASH_STYLES = `
 .btn-reprint:hover { background: #2563eb; }
 .no-data {
   display: flex; flex-direction: column; align-items: center; justify-content: center;
-  padding: 30px; color: #94a3b8;
+  padding: 20px; color: #94a3b8;
 }
-.no-data-icon { font-size: 40px; margin-bottom: 8px; }
+.no-data-icon { font-size: 36px; margin-bottom: 6px; }
 .no-data-text { font-size: 14px; }
 `;
 
 export class DashboardUI {
-  constructor(stateManager) {
+  constructor(stateManager, container) {
     this.state = stateManager;
-    this.host = null;
+    this.container = container; // phần tử DOM để gắn dashboard
     this.shadowRoot = null;
-    this.popup = null;
-    this.minimized = false;
     this._activeTab = 'open';
     this._searchTerm = '';
     this._sessions = [];
@@ -118,88 +86,43 @@ export class DashboardUI {
     this._closedPage = 1;
     this._hasMoreClosed = true;
     this._closedCount = 0;
-    this._currentUrl = window.location.href;
-    this._init();
-    document.addEventListener('url-change', (e) => this._onUrlChange(e.detail.url));
+    this._build();
     stateManager.addListener((sessions) => this._onSessionsUpdate(sessions));
-  }
-
-  _init() {
-    if (!document.body) {
-      document.addEventListener('DOMContentLoaded', () => this._init());
-      return;
-    }
-    this._createHost();
     this._loadPrintedLabels();
     this._fetchClosedCount();
   }
 
-  destroy() {
-    if (this.host && this.host.parentNode) {
-      this.host.parentNode.removeChild(this.host);
-    }
+  static attachTo(container, stateManager) {
+    return new DashboardUI(stateManager, container);
   }
 
-  _onUrlChange(newUrl) {
-    if (newUrl !== this._currentUrl) {
-      this._currentUrl = newUrl;
-      this._updateVisibility();
-    }
-  }
-
-  _isArrivingPage() {
-    return this._currentUrl.includes('/v2/returninbound/arrving');
-  }
-
-  _updateVisibility() {
-    if (!this.host) return;
-    this.host.style.display = this._isArrivingPage() ? '' : 'none';
-  }
-
-  _createHost() {
-    this.host = document.createElement('div');
-    this.host.id = 'as-dashboard-host';
-    this.shadowRoot = this.host.attachShadow({ mode: 'open' });
-
+  _build() {
+    this.shadowRoot = this.container.attachShadow({ mode: 'open' });
     const style = document.createElement('style');
     style.textContent = DASH_STYLES;
     this.shadowRoot.appendChild(style);
 
-    this.popup = document.createElement('div');
-    this.popup.className = 'popup';
-    this.popup.innerHTML = `
-      <div class="header" id="dash-header">
-        <span>📊 Quản lý TO</span>
-        <button class="btn-icon" id="dash-minimize">–</button>
-      </div>
+    const dashboard = document.createElement('div');
+    dashboard.className = 'dashboard';
+    dashboard.innerHTML = `
       <div class="tabs">
         <div class="tab active" data-tab="open">Đang mở <span class="tab-badge" id="badge-open">0</span></div>
         <div class="tab" data-tab="closed">Đã đóng <span class="tab-badge" id="badge-closed">0</span></div>
         <div class="tab" data-tab="reprint">In lại <span class="tab-badge" id="badge-reprint">0</span></div>
       </div>
-      <div class="body">
-        <div class="search-row">
-          <input class="search-input" placeholder="🔍 Lọc theo ID..." id="search-box" />
-          <button class="btn-action btn-close-all" id="btn-close-all" style="display:none;">Đóng tất cả</button>
-        </div>
-        <div id="content-area"></div>
+      <div class="search-row">
+        <input class="search-input" placeholder="🔍 Lọc theo ID..." id="search-box" />
+        <button class="btn-action btn-close-all" id="btn-close-all" style="display:none;">Đóng tất cả</button>
       </div>
+      <div id="content-area"></div>
     `;
-    this.shadowRoot.appendChild(this.popup);
-    document.body.appendChild(this.host);
+    this.shadowRoot.appendChild(dashboard);
 
-    this._setupDrag();
     this._bindEvents();
     this._renderAll();
   }
 
   _bindEvents() {
-    const minimizeBtn = this.shadowRoot.getElementById('dash-minimize');
-    minimizeBtn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      this._toggleMinimize();
-    });
-
     this.shadowRoot.getElementById('search-box').addEventListener('input', (e) => {
       this._searchTerm = e.target.value.toLowerCase();
       this._renderAll();
@@ -226,100 +149,6 @@ export class DashboardUI {
     });
   }
 
-  _toggleMinimize() {
-    this.minimized = !this.minimized;
-    const header = this.shadowRoot.getElementById('dash-header');
-
-    if (this.minimized) {
-      const rect = this.popup.getBoundingClientRect();
-      this.popup.dataset.savedLeft = rect.left;
-      this.popup.dataset.savedTop = rect.top;
-      this.popup.classList.add('minimized');
-      this.popup.style.left = '';
-      this.popup.style.top = '';
-    } else {
-      const arrivalHost = document.getElementById('as-popup-host');
-      if (arrivalHost && arrivalHost.style.display !== 'none') {
-        const arrivalPopup = arrivalHost.shadowRoot?.querySelector('.popup');
-        if (arrivalPopup && !arrivalPopup.classList.contains('minimized')) {
-          const arrivalRect = arrivalPopup.getBoundingClientRect();
-          const newLeft = arrivalRect.right + 20;
-          const newTop = arrivalRect.top;
-          const dashWidth = 480;
-          const maxLeft = window.innerWidth - dashWidth;
-          this.popup.style.left = Math.min(newLeft, maxLeft) + 'px';
-          this.popup.style.top = Math.max(0, newTop) + 'px';
-          this.popup.dataset.savedLeft = this.popup.style.left;
-          this.popup.dataset.savedTop = this.popup.style.top;
-        } else {
-          this._restoreSavedPosition();
-        }
-      } else {
-        this._restoreSavedPosition();
-      }
-      this.popup.classList.remove('minimized');
-      this._renderAll();
-    }
-
-    if (this._dragStartHandler) {
-      if (this.minimized) {
-        header.removeEventListener('mousedown', this._dragStartHandler);
-        this.popup.addEventListener('mousedown', this._dragStartHandler);
-      } else {
-        this.popup.removeEventListener('mousedown', this._dragStartHandler);
-        header.addEventListener('mousedown', this._dragStartHandler);
-      }
-    }
-  }
-
-  _restoreSavedPosition() {
-    const savedLeft = parseFloat(this.popup.dataset.savedLeft);
-    const savedTop = parseFloat(this.popup.dataset.savedTop);
-    if (!isNaN(savedLeft)) this.popup.style.left = savedLeft + 'px';
-    if (!isNaN(savedTop)) this.popup.style.top = savedTop + 'px';
-  }
-
-  _setupDrag() {
-    const header = this.shadowRoot.getElementById('dash-header');
-    if (!header) return;
-    let startX, startY, initialLeft, initialTop, moved = false;
-
-    const onMouseMove = (e) => {
-      moved = true;
-      const dx = e.clientX - startX, dy = e.clientY - startY;
-      let newLeft = initialLeft + dx, newTop = initialTop + dy;
-      const rect = this.popup.getBoundingClientRect();
-      newLeft = Math.max(0, Math.min(newLeft, window.innerWidth - rect.width));
-      newTop = Math.max(0, Math.min(newTop, window.innerHeight - rect.height));
-      this.popup.style.left = newLeft + 'px';
-      this.popup.style.top = newTop + 'px';
-    };
-
-    const onMouseUp = () => {
-      document.removeEventListener('mousemove', onMouseMove);
-      document.removeEventListener('mouseup', onMouseUp);
-      if (!moved && this.minimized) this._toggleMinimize();
-      moved = false;
-    };
-
-    const startDrag = (e) => {
-      if (e.target.closest('#dash-minimize')) return;
-      startX = e.clientX; startY = e.clientY;
-      const rect = this.popup.getBoundingClientRect();
-      initialLeft = rect.left; initialTop = rect.top;
-      moved = false;
-      document.addEventListener('mousemove', onMouseMove);
-      document.addEventListener('mouseup', onMouseUp);
-    };
-
-    if (this.minimized) {
-      this.popup.addEventListener('mousedown', startDrag);
-    } else {
-      header.addEventListener('mousedown', startDrag);
-    }
-    this._dragStartHandler = startDrag;
-  }
-
   _updateTabStyles() {
     this.shadowRoot.querySelectorAll('.tab').forEach(tab => {
       tab.classList.toggle('active', tab.dataset.tab === this._activeTab);
@@ -330,13 +159,14 @@ export class DashboardUI {
 
   _onSessionsUpdate(sessions) {
     this._sessions = sessions;
-    this._fetchClosedCount(); // cập nhật badge Đã đóng
+    this._fetchClosedCount();
     this._renderAll();
   }
 
   async _loadPrintedLabels() {
     const { printedLabels } = await chrome.storage.local.get('printedLabels');
     this._printedLabels = printedLabels || [];
+    this._renderAll();
   }
 
   async _fetchClosedCount() {
@@ -537,5 +367,12 @@ export class DashboardUI {
         this._attachCardEvents();
       });
     }
+  }
+
+  // Hàm refresh để gọi từ bên ngoài khi chuyển tab
+  refresh() {
+    this._loadPrintedLabels();
+    this._fetchClosedCount();
+    this._renderAll();
   }
 }

@@ -60,11 +60,14 @@ async function broadcastSessions() {
   const { data, error } = await supabaseClient.rpc('get_active_sessions');
   if (error || !data) return;
 
+  // Lưu vào storage để content script có thể đọc trực tiếp
+  chrome.storage.local.set({ activeSessions: data }).catch(() => { });
+
   const tabs = await chrome.tabs.query({ url: '*://wms.ssc.shopee.vn/*' });
   for (const tab of tabs) {
     if (tab.id) {
       chrome.tabs.sendMessage(tab.id, { action: 'UPDATE_SESSIONS', sessions: data })
-        .catch(() => { /* tab không tồn tại hoặc không nhận được */ });
+        .catch(() => { });
     }
   }
 }

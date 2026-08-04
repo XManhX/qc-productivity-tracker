@@ -127,7 +127,7 @@ export class DashboardUI {
       <div class="tabs">
         <div class="tab active" data-tab="open">Đang mở <span class="tab-badge" id="badge-open">0</span></div>
         <div class="tab" data-tab="closed">Đã đóng <span class="tab-badge" id="badge-closed">0</span></div>
-        <div class="tab" data-tab="active-events">Đơn đang active <span class="tab-badge" id="badge-active-events">0</span></div>
+        <div class="tab" data-tab="active-events">Đơn active <span class="tab-badge" id="badge-active-events">0</span></div>
         <div class="tab" data-tab="reprint">In lại <span class="tab-badge" id="badge-reprint">0</span></div>
       </div>
       <div class="search-row">
@@ -470,7 +470,7 @@ export class DashboardUI {
       });
     });
 
-    // Nút Hủy trong tab "Đơn đang active"
+    // Nút Hủy trong tab "Đơn active"
     contentArea.querySelectorAll('.btn-close[data-action="cancel-event"]').forEach(btn => {
       btn.addEventListener('click', async (e) => {
         e.stopPropagation();
@@ -562,7 +562,7 @@ export class DashboardUI {
       });
     }
 
-    // Nút "Tải thêm" cho tab "Đơn đang active"
+    // Nút "Tải thêm" cho tab "Đơn active"
     const loadMoreActiveBtn = this.shadowRoot.getElementById('load-more-active-events');
     if (loadMoreActiveBtn) {
       loadMoreActiveBtn.addEventListener('click', async () => {

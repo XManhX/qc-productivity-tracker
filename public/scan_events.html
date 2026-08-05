@@ -192,6 +192,12 @@
           <input type="date" id="date-to" />
         </div>
         <div class="filter-group">
+          <label>Loại sự kiện</label>
+          <select id="event-type">
+            <option value="">Tất cả</option>
+          </select>
+        </div>
+        <div class="filter-group">
           <label>Loại hàng (type_group)</label>
           <select id="type-group">
             <option value="">Tất cả</option>
@@ -247,7 +253,6 @@
     </div>
 
     <script>
-      // Đảm bảo thư viện đã được load
       (function () {
         if (!window.supabase) {
           alert(
@@ -266,6 +271,7 @@
 
         const dateFromEl = document.getElementById("date-from");
         const dateToEl = document.getElementById("date-to");
+        const eventTypeEl = document.getElementById("event-type");
         const typeGroupEl = document.getElementById("type-group");
         const stationIdEl = document.getElementById("station-id");
         const searchBtn = document.getElementById("search-btn");
@@ -282,37 +288,53 @@
           return d.toLocaleString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" });
         }
 
-        function getDefaultDates() {
+        function getTodayDateStr() {
           const today = new Date(new Date().getTime() + 7 * 60 * 60 * 1000);
-          const start = new Date(today);
-          start.setDate(today.getDate() - 30);
-          return {
-            from: start.toISOString().split("T")[0],
-            to: today.toISOString().split("T")[0],
-          };
+          return today.toISOString().split("T")[0];
         }
 
-        async function loadTypeGroups() {
-          const { data, error } = await supabaseClient
+        function getDefaultDates() {
+          const todayStr = getTodayDateStr();
+          return { from: todayStr, to: todayStr };
+        }
+
+        // Load distinct event_types and type_groups for dropdowns
+        async function loadFilterOptions() {
+          // event_types
+          const { data: eventData, error: eventError } = await supabaseClient
+            .from("scan_events")
+            .select("event_type")
+            .order("event_type", { ascending: true });
+
+          if (!eventError && eventData) {
+            const types = [
+              ...new Set(eventData.map((d) => d.event_type).filter(Boolean)),
+            ];
+            eventTypeEl.innerHTML =
+              '<option value="">Tất cả</option>' +
+              types.map((t) => `<option value="${t}">${t}</option>`).join("");
+          }
+
+          // type_groups
+          const { data: typeData, error: typeError } = await supabaseClient
             .from("scan_events")
             .select("type_group")
             .order("type_group", { ascending: true });
 
-          if (error) {
-            console.error("Error loading type groups:", error);
-            return;
+          if (!typeError && typeData) {
+            const types = [
+              ...new Set(typeData.map((d) => d.type_group).filter(Boolean)),
+            ];
+            typeGroupEl.innerHTML =
+              '<option value="">Tất cả</option>' +
+              types.map((t) => `<option value="${t}">${t}</option>`).join("");
           }
-          const types = [
-            ...new Set(data.map((d) => d.type_group).filter(Boolean)),
-          ];
-          typeGroupEl.innerHTML =
-            '<option value="">Tất cả</option>' +
-            types.map((t) => `<option value="${t}">${t}</option>`).join("");
         }
 
         async function fetchData() {
           const dateFrom = dateFromEl.value;
           const dateTo = dateToEl.value;
+          const eventType = eventTypeEl.value;
           const typeGroup = typeGroupEl.value;
           const stationId = stationIdEl.value.trim();
 
@@ -328,6 +350,9 @@
             const nextDay = new Date(dateTo + "T00:00:00+07:00");
             nextDay.setDate(nextDay.getDate() + 1);
             query = query.lt("created_at", nextDay.toISOString());
+          }
+          if (eventType) {
+            query = query.eq("event_type", eventType);
           }
           if (typeGroup) {
             query = query.eq("type_group", typeGroup);
@@ -437,6 +462,7 @@
           const defaults = getDefaultDates();
           dateFromEl.value = defaults.from;
           dateToEl.value = defaults.to;
+          eventTypeEl.value = "";
           typeGroupEl.value = "";
           stationIdEl.value = "";
           currentRows = [];
@@ -444,11 +470,11 @@
         }
 
         async function init() {
-          const defaults = getDefaultDates();
-          dateFromEl.value = defaults.from;
-          dateToEl.value = defaults.to;
+          const todayStr = getTodayDateStr();
+          dateFromEl.value = todayStr;
+          dateToEl.value = todayStr;
 
-          await loadTypeGroups();
+          await loadFilterOptions();
 
           searchBtn.addEventListener("click", handleSearch);
           resetBtn.addEventListener("click", resetFilters);

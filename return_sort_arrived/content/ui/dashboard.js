@@ -23,10 +23,12 @@ const STATION_COLORS = {
 };
 
 const getLuminance = (hex) => {
-  const [r, g, b] = hex.match(/\w\w/g).map((c) => {
+  // fallback nếu hex không hợp lệ
+  if (!hex || typeof hex !== 'string') return 0;
+  const [r, g, b] = hex.match(/\w\w/g)?.map((c) => {
     const v = parseInt(c, 16) / 255;
     return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
-  });
+  }) || [0, 0, 0];
   return 0.2126 * r + 0.7152 * g + 0.0722 * b;
 };
 
@@ -34,15 +36,19 @@ const contrastRatio = (l1, l2) =>
   (Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05);
 
 const getTextColor = (bgHex) => {
-  const lum = getLuminance(bgHex);
-  return contrastRatio(lum, 0) >= 4.5 ? "#000000" : "#FFFFFF";
+  try {
+    const lum = getLuminance(bgHex);
+    return contrastRatio(lum, 0) >= 4.5 ? "#000000" : "#FFFFFF";
+  } catch (e) {
+    return "#000000";
+  }
 };
 
 const DASH_STYLES = `
 :host { all: initial; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; }
 .dashboard { display: flex; flex-direction: column; gap: 8px; }
 .tabs {
-  display: flex; border-radius:12px; border-bottom: 1px solid #e2e8f0; background: #f8fafc;
+  display: flex; border-radius:12px 12px 0 0; border-bottom: 1px solid #e2e8f0; background: #f8fafc;
 }
 .tab {
   flex: 1; text-align: center; padding: 10px 6px; font-size: 12px; font-weight: 600;
@@ -227,7 +233,6 @@ export class DashboardUI {
     this._sessions = sessions;
     this._fetchClosedCount();
     this._fetchActiveEventsCount();
-    // Khi có realtime, reset về trang 1 cho tab đã đóng và active events
     if (this._activeTab === "closed") {
       this._closedPage = 1;
       this._hasMoreClosed = true;
@@ -270,6 +275,8 @@ export class DashboardUI {
   _renderAll() {
     this._updateBadges();
     const contentArea = this.shadowRoot.getElementById("content-area");
+    console.log('Số card trong DOM:', contentArea.querySelectorAll('.card').length);
+
     if (!contentArea) return;
 
     switch (this._activeTab) {
@@ -322,36 +329,47 @@ export class DashboardUI {
     const openSessions = sessions.filter(
       (s) => s.status === "open" || s.status === "full",
     );
+    console.log('📊 Dashboard _sessions:', sessions.length, '→ Open/Full:', openSessions.length);
+
     const filtered = this._filter(openSessions);
     if (filtered.length === 0)
       return '<div class="no-data"><div class="no-data-icon">📭</div><div class="no-data-text">Không có ID nào đang mở</div></div>';
-    return filtered.map((s) => this._renderCard(s)).join("");
+
+    // Dùng try-catch để bắt lỗi render từng card
+    try {
+      return filtered.map((s) => this._renderCard(s)).join("");
+    } catch (e) {
+      console.error("Lỗi khi render danh sách mở:", e);
+      return '<div class="no-data">⚠️ Lỗi hiển thị. Vui lòng thử lại.</div>';
+    }
   }
 
   async _renderClosedTabAsync() {
     const sessions = await this._fetchClosedSessions(this._closedPage);
     const filtered = this._filter(sessions);
 
-    // Trang đầu không có dữ liệu
     if (filtered.length === 0 && this._closedPage === 1) {
       this._hasMoreClosed = false;
       return '<div class="no-data"><div class="no-data-icon">📦</div><div class="no-data-text">Không có TO nào đã đóng</div></div>';
     }
 
-    // Trang > 1 mà không có dữ liệu → đã hết
     if (filtered.length === 0 && this._closedPage > 1) {
       this._hasMoreClosed = false;
       return '<div class="end-of-list">Đã tải hết</div>';
     }
 
-    let html = filtered.map((s) => this._renderCard(s)).join("");
+    let html;
+    try {
+      html = filtered.map((s) => this._renderCard(s)).join("");
+    } catch (e) {
+      console.error("Lỗi render tab đã đóng:", e);
+      return '<div class="no-data">⚠️ Lỗi hiển thị.</div>';
+    }
 
-    // Nếu số bản ghi trả về ít hơn limit → đánh dấu hết
     if (sessions.length < 20) {
       this._hasMoreClosed = false;
     }
 
-    // Hiển thị nút "Tải thêm" hoặc "Đã tải hết"
     if (this._hasMoreClosed) {
       html +=
         '<button id="load-more-closed" class="btn-action" style="width:100%; margin-top:8px;">Tải thêm</button>';
@@ -380,7 +398,12 @@ export class DashboardUI {
     const filtered = this._filter(this._printedLabels);
     if (filtered.length === 0)
       return '<div class="no-data"><div class="no-data-icon">🖨️</div><div class="no-data-text">Chưa có tem nào được in</div></div>';
-    return filtered.map((l) => this._renderCardFromLabel(l)).join("");
+    try {
+      return filtered.map((l) => this._renderCardFromLabel(l)).join("");
+    } catch (e) {
+      console.error("Lỗi render tab in lại:", e);
+      return '<div class="no-data">⚠️ Lỗi hiển thị.</div>';
+    }
   }
 
   async _renderActiveEventsTabAsync() {
@@ -390,19 +413,23 @@ export class DashboardUI {
     );
     const filtered = this._filter(events);
 
-    // Trang đầu không có dữ liệu
     if (filtered.length === 0 && this._activeEventsPage === 1) {
       this._hasMoreActiveEvents = false;
       return '<div class="no-data"><div class="no-data-icon">📋</div><div class="no-data-text">Không có đơn nào đang active</div></div>';
     }
 
-    // Trang > 1 mà không có dữ liệu → đã hết
     if (filtered.length === 0 && this._activeEventsPage > 1) {
       this._hasMoreActiveEvents = false;
       return '<div class="end-of-list">Đã tải hết</div>';
     }
 
-    let html = filtered.map((e) => this._renderActiveEventCard(e)).join("");
+    let html;
+    try {
+      html = filtered.map((e) => this._renderActiveEventCard(e)).join("");
+    } catch (e) {
+      console.error("Lỗi render tab đơn active:", e);
+      return '<div class="no-data">⚠️ Lỗi hiển thị.</div>';
+    }
 
     if (events.length < 20) {
       this._hasMoreActiveEvents = false;
@@ -445,23 +472,27 @@ export class DashboardUI {
   }
 
   _renderCard(session) {
-    const displayType = this.state.getDisplayName(session.type_group) || session.type_group || "";
-    const status = session.status;
+    // Phòng vệ: đảm bảo mọi giá trị đều có fallback an toàn
+    const id = session.id || "?";
+    const typeGroup = session.type_group || "";
+    const displayType = this.state.getDisplayName(typeGroup) || typeGroup;
+    const status = session.status || "open";
     const threshold = session.threshold || 30;
-    const count = session.item_count;
-    const percent = Math.min(100, Math.round((count / threshold) * 100));
+    const count = session.item_count || 0;
+    const percent = Math.min(100, Math.round((count / (threshold || 1)) * 100));
     const statusClass = status === "full" ? "status-full" : status === "open" ? "status-open" : "status-closed";
-    const color = STATION_COLORS[session.id] || "#94a3b8";
+    const color = STATION_COLORS[id] || "#94a3b8";
     const textColor = getTextColor(color);
     const timeStr = session.session_start
       ? new Date(session.session_start).toLocaleTimeString("vi-VN")
       : "";
+    const toNumber = session.to_number || "";
 
     return `
-      <div class="card ${statusClass}" data-id="${session.id}" data-type="${displayType}">
+      <div class="card ${statusClass}" data-id="${id}" data-type="${displayType}">
         <div class="card-row">
           <div class="card-left">
-            <div class="id-badge" style="background:${color}; color:${textColor};">${session.id}</div>
+            <div class="id-badge" style="background:${color}; color:${textColor};">${id}</div>
             <div>
               <div class="type">${displayType}</div>
               ${timeStr ? `<div class="time">${timeStr}</div>` : ""}
@@ -469,10 +500,10 @@ export class DashboardUI {
           </div>
           <div class="card-actions">
             ${(status === "open" || status === "full") && count > 0
-        ? `<button class="btn btn-close" data-action="close" data-id="${session.id}" data-type="${displayType}">Đóng</button>`
+        ? `<button class="btn btn-close" data-action="close" data-id="${id}" data-type="${displayType}">Đóng</button>`
         : ""}
             ${status === "closed"
-        ? `<button class="btn btn-reprint" data-action="reprint-closed" data-id="${session.id}" data-type="${displayType}" data-to="${session.to_number || ""}" data-date="${timeStr}" data-number="${session.to_number ? session.to_number.split("-").pop() : ""}" data-qty="${count}">In lại</button>`
+        ? `<button class="btn btn-reprint" data-action="reprint-closed" data-id="${id}" data-type="${displayType}" data-to="${toNumber}" data-date="${timeStr}" data-number="${toNumber.split("-").pop() || ""}" data-qty="${count}">In lại</button>`
         : ""}
           </div>
         </div>
@@ -487,22 +518,22 @@ export class DashboardUI {
   }
 
   _renderCardFromLabel(label) {
-    // label.type đã là display_name khi lưu từ printAndClose, không cần đổi
     const displayType = label.type || "";
-    const color = STATION_COLORS[label.id] || "#3b82f6";
+    const id = label.id || "?";
+    const color = STATION_COLORS[id] || "#3b82f6";
     const textColor = getTextColor(color);
     return `
-      <div class="card status-closed" data-id="${label.id}" data-type="${displayType}">
+      <div class="card status-closed" data-id="${id}" data-type="${displayType}">
         <div class="card-row">
           <div class="card-left">
-            <div class="id-badge" style="background:${color}; color:${textColor};">${label.id || "?"}</div>
+            <div class="id-badge" style="background:${color}; color:${textColor};">${id}</div>
             <div>
               <div class="type">${displayType}</div>
               <div class="time">${label.dateStr || ""}</div>
             </div>
           </div>
           <div class="card-actions">
-            <button class="btn btn-reprint" data-action="reprint-label" data-to="${label.toNumber}" data-type="${displayType}" data-id="${label.id}" data-date="${label.dateStr}" data-number="${label.number}" data-email="${label.email}" data-qty="${label.itemCount}">In lại</button>
+            <button class="btn btn-reprint" data-action="reprint-label" data-to="${label.toNumber}" data-type="${displayType}" data-id="${id}" data-date="${label.dateStr}" data-number="${label.number}" data-email="${label.email}" data-qty="${label.itemCount}">In lại</button>
           </div>
         </div>
         <div class="progress-row">
@@ -514,9 +545,10 @@ export class DashboardUI {
 
   _attachCardEvents() {
     const contentArea = this.shadowRoot.getElementById("content-area");
+    console.log('Số card trong DOM:', contentArea.querySelectorAll('.card').length);
+
     if (!contentArea) return;
 
-    // Nút Đóng kiện trong tab "Đang mở"
     contentArea
       .querySelectorAll('.btn-close[data-action="close"]')
       .forEach((btn) => {
@@ -537,7 +569,6 @@ export class DashboardUI {
         });
       });
 
-    // Nút Hủy trong tab "Đơn active"
     contentArea
       .querySelectorAll('.btn-close[data-action="cancel-event"]')
       .forEach((btn) => {
@@ -567,7 +598,6 @@ export class DashboardUI {
         });
       });
 
-    // Nút In lại trong tab "Đã đóng"
     contentArea
       .querySelectorAll('.btn-reprint[data-action="reprint-closed"]')
       .forEach((btn) => {
@@ -598,7 +628,6 @@ export class DashboardUI {
         });
       });
 
-    // Nút In lại trong tab "In lại"
     contentArea
       .querySelectorAll('.btn-reprint[data-action="reprint-label"]')
       .forEach((btn) => {
@@ -621,7 +650,6 @@ export class DashboardUI {
         });
       });
 
-    // Nút "Tải thêm" cho tab "Đã đóng"
     const loadMoreClosedBtn =
       this.shadowRoot.getElementById("load-more-closed");
     if (loadMoreClosedBtn) {
@@ -645,7 +673,6 @@ export class DashboardUI {
       });
     }
 
-    // Nút "Tải thêm" cho tab "Đơn active"
     const loadMoreActiveBtn = this.shadowRoot.getElementById(
       "load-more-active-events",
     );

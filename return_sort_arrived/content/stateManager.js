@@ -44,9 +44,10 @@ export class StateManager {
   _initSessions() {
     chrome.storage.local.get(["activeSessions"], (result) => {
       if (result?.activeSessions && Array.isArray(result.activeSessions)) {
+        console.log('[StateManager] Dùng sessions từ storage:', result.activeSessions.length);
         this._onSessionsUpdate(result.activeSessions);
-        return;
       }
+      // Luôn request sessions mới nhất
       this._requestSessions(0);
     });
   }
@@ -256,7 +257,7 @@ export class StateManager {
           speechSynthesis.speak(
             new SpeechSynthesisUtterance(`ID ${id} đã đầy`),
           );
-        } catch (e) {}
+        } catch (e) { }
       }
     } else {
       this.ui.showScanError({
@@ -318,7 +319,7 @@ export class StateManager {
   async markPrinted(id) {
     try {
       await this._callApi("mark_printed", { id });
-    } catch (e) {}
+    } catch (e) { }
   }
 
   showSessionDetail(id) {

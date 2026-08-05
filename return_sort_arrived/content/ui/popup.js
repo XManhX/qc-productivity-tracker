@@ -558,7 +558,7 @@ export class UIManager {
   }
 
   updateTop5(sessions) {
-    this.state.sessions = sessions;
+    // this.state.sessions = sessions;
     if (this.shadowRoot && this._viewMode === "arrival") this._updateTop5();
   }
 

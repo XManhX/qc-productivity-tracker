@@ -6,7 +6,6 @@
     <title>Scan Events – Trích xuất dữ liệu quét hàng</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
-      /* Toàn bộ CSS giữ nguyên như phiên bản trước, bổ sung multi-select chuyên nghiệp */
       :root {
         --color-primary: #2563eb;
         --color-primary-hover: #1d4ed8;
@@ -257,7 +256,6 @@
         opacity: 1;
         visibility: visible;
       }
-      /* Các thành phần khác giữ nguyên */
       .btn {
         padding: 0.5rem 1.25rem;
         border: none;
@@ -424,8 +422,10 @@
         <div class="filter-group">
           <label>Loại hàng</label>
           <div class="multi-select" id="type-group-multi">
+            <!-- THÊM ID cho trigger -->
             <div
               class="multi-select-trigger"
+              id="type-group-trigger"
               tabindex="0"
               role="button"
               aria-haspopup="listbox"
@@ -518,6 +518,7 @@
           SUPABASE_ANON_KEY,
         );
 
+        // DOM elements (sử dụng optional chaining để tránh lỗi null)
         const dateEl = document.getElementById("filter-date");
         const multiSelect = document.getElementById("type-group-multi");
         const trigger = document.getElementById("type-group-trigger");
@@ -534,6 +535,12 @@
         const resultCount = document.getElementById("result-count");
         const loadingOverlay = document.getElementById("loading-overlay");
         const columnSelector = document.getElementById("column-selector");
+
+        // Kiểm tra các phần tử bắt buộc
+        if (!trigger || !dropdown || !valuesContainer) {
+          console.error("Multi-select elements missing");
+          return;
+        }
 
         let currentRows = [];
         let allTypeGroups = [];
@@ -561,6 +568,7 @@
 
         // Multi-select functions
         function updateUI() {
+          if (!valuesContainer) return;
           if (
             selectedTypeGroups.size === 0 ||
             selectedTypeGroups.size === allTypeGroups.length
@@ -582,6 +590,7 @@
         }
 
         function renderDropdownOptions() {
+          if (!dropdown) return;
           const existingOptions =
             dropdown.querySelectorAll(".multi-select-item");
           existingOptions.forEach((opt) => opt.remove());
@@ -601,7 +610,7 @@
             cb.tabIndex = -1;
             row.appendChild(cb);
             row.appendChild(document.createTextNode(tg));
-            row.addEventListener("click", (e) => {
+            row.addEventListener("click", () => {
               if (selectedTypeGroups.has(tg)) {
                 selectedTypeGroups.delete(tg);
               } else {
@@ -619,24 +628,32 @@
         }
 
         function openDropdown() {
-          multiSelect.classList.add("open");
-          trigger.setAttribute("aria-expanded", "true");
-          const options = getOptionElements();
-          if (options.length > 0) setFocusedOption(options[0]);
+          if (multiSelect) {
+            multiSelect.classList.add("open");
+            trigger.setAttribute("aria-expanded", "true");
+            const options = getOptionElements();
+            if (options.length > 0) setFocusedOption(options[0]);
+          }
         }
         function closeDropdown() {
-          multiSelect.classList.remove("open");
-          trigger.setAttribute("aria-expanded", "false");
-          getOptionElements().forEach((opt) => opt.classList.remove("focused"));
-          trigger.focus();
+          if (multiSelect) {
+            multiSelect.classList.remove("open");
+            trigger.setAttribute("aria-expanded", "false");
+            getOptionElements().forEach((opt) =>
+              opt.classList.remove("focused"),
+            );
+            trigger.focus();
+          }
         }
         function toggleDropdown() {
-          multiSelect.classList.contains("open")
+          multiSelect?.classList.contains("open")
             ? closeDropdown()
             : openDropdown();
         }
         function getOptionElements() {
-          return [...dropdown.querySelectorAll(".multi-select-item")];
+          return dropdown
+            ? [...dropdown.querySelectorAll(".multi-select-item")]
+            : [];
         }
         function setFocusedOption(option) {
           if (!option) return;
@@ -657,7 +674,7 @@
           setFocusedOption(options[nextIndex]);
         }
         function handleKeyboard(e) {
-          const isOpen = multiSelect.classList.contains("open");
+          const isOpen = multiSelect?.classList.contains("open");
           if (e.key === "Escape") {
             if (isOpen) {
               e.preventDefault();
@@ -682,52 +699,66 @@
             moveFocus(-1);
           } else if (e.key === "Enter" || e.key === " ") {
             e.preventDefault();
-            const focused = dropdown.querySelector(
+            const focused = dropdown?.querySelector(
               ".multi-select-item.focused",
             );
             if (focused) focused.click();
           }
         }
 
-        trigger.addEventListener("keydown", handleKeyboard);
-        dropdown.addEventListener("keydown", (e) => {
-          if (
-            ["Escape", "ArrowDown", "ArrowUp", "Enter", " "].includes(e.key)
-          ) {
-            e.preventDefault();
-            e.stopPropagation();
-            handleKeyboard(e);
-          }
-        });
+        if (trigger) {
+          trigger.addEventListener("keydown", handleKeyboard);
+          trigger.addEventListener("focus", () =>
+            multiSelect?.classList.add("focused"),
+          );
+          trigger.addEventListener("blur", () => {
+            setTimeout(() => {
+              if (!multiSelect?.contains(document.activeElement))
+                multiSelect?.classList.remove("focused");
+            }, 0);
+          });
+        }
+        if (dropdown) {
+          dropdown.addEventListener("keydown", (e) => {
+            if (
+              ["Escape", "ArrowDown", "ArrowUp", "Enter", " "].includes(e.key)
+            ) {
+              e.preventDefault();
+              e.stopPropagation();
+              handleKeyboard(e);
+            }
+          });
+          dropdown.addEventListener("click", (e) => e.stopPropagation());
+        }
         document.addEventListener("click", (e) => {
           if (
+            multiSelect &&
             !multiSelect.contains(e.target) &&
             multiSelect.classList.contains("open")
           )
             closeDropdown();
         });
-        trigger.addEventListener("click", (e) => {
+        trigger?.addEventListener("click", (e) => {
           e.stopPropagation();
           toggleDropdown();
         });
-        dropdown.addEventListener("click", (e) => e.stopPropagation());
 
-        selectAllBtn.addEventListener("click", (e) => {
+        selectAllBtn?.addEventListener("click", (e) => {
           e.stopPropagation();
           selectedTypeGroups = new Set(allTypeGroups);
           updateUI();
-          dropdown.querySelectorAll("input[type=checkbox]").forEach((cb) => {
+          dropdown?.querySelectorAll("input[type=checkbox]").forEach((cb) => {
             cb.checked = true;
           });
           getOptionElements().forEach((opt) =>
             opt.setAttribute("aria-selected", "true"),
           );
         });
-        deselectAllBtn.addEventListener("click", (e) => {
+        deselectAllBtn?.addEventListener("click", (e) => {
           e.stopPropagation();
           selectedTypeGroups.clear();
           updateUI();
-          dropdown.querySelectorAll("input[type=checkbox]").forEach((cb) => {
+          dropdown?.querySelectorAll("input[type=checkbox]").forEach((cb) => {
             cb.checked = false;
           });
           getOptionElements().forEach((opt) =>
@@ -735,18 +766,8 @@
           );
         });
 
-        trigger.addEventListener("focus", () =>
-          multiSelect.classList.add("focused"),
-        );
-        trigger.addEventListener("blur", () => {
-          setTimeout(() => {
-            if (!multiSelect.contains(document.activeElement))
-              multiSelect.classList.remove("focused");
-          }, 0);
-        });
-
-        // Column selector
         function renderColumnSelector() {
+          if (!columnSelector) return;
           columnSelector.innerHTML = '<span class="label">Cột sao chép:</span>';
           columnDefs.forEach((col) => {
             const chip = document.createElement("span");
@@ -785,7 +806,7 @@
             renderDropdownOptions();
             updateUI();
           }
-          if (eventRes.data) {
+          if (eventRes.data && eventTypeEl) {
             const events = [
               ...new Set(
                 eventRes.data.map((d) => d.event_type).filter(Boolean),
@@ -798,9 +819,9 @@
         }
 
         function buildQuery() {
-          const date = dateEl.value;
-          const station = stationIdEl.value.trim();
-          const evType = eventTypeEl.value;
+          const date = dateEl?.value;
+          const station = stationIdEl?.value.trim();
+          const evType = eventTypeEl?.value;
           const typeArr = [...selectedTypeGroups];
           let q = supabaseClient
             .from("scan_events")
@@ -825,10 +846,11 @@
 
         function renderTable(rows) {
           currentRows = rows;
+          if (!tableBody) return;
           if (!rows.length) {
             tableBody.innerHTML = `<tr><td colspan="9" style="text-align:center; padding:3rem; color:var(--color-text-muted);">Không tìm thấy dữ liệu phù hợp.</td></tr>`;
-            copyBtn.disabled = true;
-            resultCount.textContent = "";
+            if (copyBtn) copyBtn.disabled = true;
+            if (resultCount) resultCount.textContent = "";
             return;
           }
           tableBody.innerHTML = rows
@@ -842,20 +864,22 @@
           </tr>`,
             )
             .join("");
-          copyBtn.disabled = false;
-          resultCount.textContent = `Tìm thấy ${rows.length} bản ghi.`;
+          if (copyBtn) copyBtn.disabled = false;
+          if (resultCount)
+            resultCount.textContent = `Tìm thấy ${rows.length} bản ghi.`;
         }
 
         async function handleSearch() {
-          loadingOverlay.style.display = "flex";
+          if (loadingOverlay) loadingOverlay.style.display = "flex";
           try {
             renderTable(await fetchData());
           } catch (err) {
-            tableBody.innerHTML = `<tr><td colspan="9" style="text-align:center; padding:2rem; color:#ef4444;">Lỗi: ${err.message}</td></tr>`;
-            copyBtn.disabled = true;
-            resultCount.textContent = "";
+            if (tableBody)
+              tableBody.innerHTML = `<tr><td colspan="9" style="text-align:center; padding:2rem; color:#ef4444;">Lỗi: ${err.message}</td></tr>`;
+            if (copyBtn) copyBtn.disabled = true;
+            if (resultCount) resultCount.textContent = "";
           } finally {
-            loadingOverlay.style.display = "none";
+            if (loadingOverlay) loadingOverlay.style.display = "none";
           }
         }
 
@@ -882,10 +906,12 @@
             .writeText(header + "\n" + rows.join("\n"))
             .then(() => {
               showToast("✅ Đã sao chép!");
-              copyBtn.disabled = true;
-              setTimeout(() => {
-                copyBtn.disabled = false;
-              }, 2000);
+              if (copyBtn) {
+                copyBtn.disabled = true;
+                setTimeout(() => {
+                  if (copyBtn) copyBtn.disabled = false;
+                }, 2000);
+              }
             })
             .catch(() => alert("Sao chép thất bại."));
         }
@@ -899,11 +925,11 @@
         }
 
         function resetFilters() {
-          dateEl.value = todayStr();
-          stationIdEl.value = "";
-          eventTypeEl.value = "";
+          if (dateEl) dateEl.value = todayStr();
+          if (stationIdEl) stationIdEl.value = "";
+          if (eventTypeEl) eventTypeEl.value = "";
           selectedTypeGroups = new Set(["45k-NA", "450k-NA-COM"]);
-          dropdown.querySelectorAll("input[type=checkbox]").forEach((cb) => {
+          dropdown?.querySelectorAll("input[type=checkbox]").forEach((cb) => {
             cb.checked = selectedTypeGroups.has(cb.value);
           });
           getOptionElements().forEach((opt) =>
@@ -920,16 +946,16 @@
         }
 
         function initEvents() {
-          searchBtn.addEventListener("click", handleSearch);
-          resetBtn.addEventListener("click", resetFilters);
-          copyBtn.addEventListener("click", copySelectedColumns);
-          stationIdEl.addEventListener("keypress", (e) => {
+          searchBtn?.addEventListener("click", handleSearch);
+          resetBtn?.addEventListener("click", resetFilters);
+          copyBtn?.addEventListener("click", copySelectedColumns);
+          stationIdEl?.addEventListener("keypress", (e) => {
             if (e.key === "Enter") handleSearch();
           });
         }
 
         async function init() {
-          dateEl.value = todayStr();
+          if (dateEl) dateEl.value = todayStr();
           selectedColumns = new Set(["return_tn"]);
           renderColumnSelector();
           await loadFilterOptions();

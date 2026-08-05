@@ -712,7 +712,7 @@
           allTypeGroups.forEach((tg) => {
             const li = document.createElement("li");
             li.className = "item";
-            if (["45k-NA", "450k-NA-COM"].includes(tg))
+            if (["45K-NA", "450K-NA-COM"].includes(tg))
               li.classList.add("checked");
             li.innerHTML = `<span class="checkbox-custom"></span><span class="item-text">${tg}</span>`;
             li.addEventListener("click", () => {

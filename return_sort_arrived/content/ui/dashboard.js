@@ -411,8 +411,7 @@ export class DashboardUI {
   }
 
   _renderActiveEventCard(event) {
-    // event.type_group đã là display_name
-    const displayType = event.type_group || "";
+    const displayType = event.type_group || ""; // đã là display_name
     const color = STATION_COLORS[event.station_id] || "#94a3b8";
     const textColor = getTextColor(color);
     const timeStr = event.created_at
@@ -439,8 +438,7 @@ export class DashboardUI {
   }
 
   _renderCard(session) {
-    // session.type_group đã là display_name, dùng trực tiếp
-    const displayType = session.type_group || "";
+    const displayType = session.type_group || ""; // đã là display_name
     const status = session.status;
     const threshold = session.threshold || 30;
     const count = session.item_count;
@@ -483,7 +481,7 @@ export class DashboardUI {
   }
 
   _renderCardFromLabel(label) {
-    const displayType = label.type || "";
+    const displayType = label.displayType || ""; // label lưu là displayType
     const color = STATION_COLORS[label.id] || "#3b82f6";
     const textColor = getTextColor(color);
     return `
@@ -518,12 +516,12 @@ export class DashboardUI {
           e.stopPropagation();
           if (btn.disabled) return;
           const id = btn.dataset.id;
-          const type = btn.dataset.type; // đã là display_name
+          const displayType = btn.dataset.type; // display_name
           if (confirm(`Đóng kiện ID ${id}?`)) {
             btn.disabled = true;
             const originalHTML = btn.innerHTML;
             btn.innerHTML = '<span class="spinner"></span>';
-            this.state.closeSession(id, type).finally(() => {
+            this.state.closeSession(id, displayType).finally(() => {
               btn.disabled = false;
               btn.innerHTML = originalHTML;
             });
@@ -539,13 +537,13 @@ export class DashboardUI {
           if (btn.disabled) return;
           const stationId = btn.dataset.station;
           const returnTn = btn.dataset.return;
-          const typeGroup = btn.dataset.type;
+          const displayType = btn.dataset.type;
           if (confirm(`Hủy đơn ${returnTn} khỏi ID ${stationId}?`)) {
             btn.disabled = true;
             const originalHTML = btn.innerHTML;
             btn.innerHTML = '<span class="spinner"></span>';
             try {
-              await this.state.removeScan(returnTn, stationId, typeGroup);
+              await this.state.removeScan(returnTn, stationId, displayType);
               await this._fetchActiveEventsCount();
               if (this._activeTab === "active-events") {
                 this._activeEventsPage = 1;
@@ -566,14 +564,14 @@ export class DashboardUI {
         btn.addEventListener("click", async (e) => {
           e.stopPropagation();
           if (btn.disabled) return;
-          const { to, type, id, date, number, qty } = btn.dataset;
+          const { to, type: displayType, id, date, number, qty } = btn.dataset;
           btn.disabled = true;
           const originalHTML = btn.innerHTML;
           btn.innerHTML = '<span class="spinner"></span>';
           try {
             await printLabel(
               to,
-              type,
+              displayType,
               id,
               date,
               number,
@@ -596,12 +594,12 @@ export class DashboardUI {
         btn.addEventListener("click", async (e) => {
           e.stopPropagation();
           if (btn.disabled) return;
-          const { to, type, id, date, number, email, qty } = btn.dataset;
+          const { to, type: displayType, id, date, number, email, qty } = btn.dataset;
           btn.disabled = true;
           const originalHTML = btn.innerHTML;
           btn.innerHTML = '<span class="spinner"></span>';
           try {
-            await printLabel(to, type, id, date, number, email, parseInt(qty));
+            await printLabel(to, displayType, id, date, number, email, parseInt(qty));
             if (id) this.state.markPrinted(id);
           } catch (err) {
             console.error("Reprint failed:", err);

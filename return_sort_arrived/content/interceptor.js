@@ -6,12 +6,14 @@
 
   let pendingSheetId = null;
 
+  // ==== Dispatch ngay khi request được gửi ====
   function notifyDetected(sheetId) {
     document.dispatchEvent(
       new CustomEvent("as-return-tn-detected", { detail: { sheetId } }),
     );
   }
 
+  // ==== Dispatch khi có response ====
   function notifyArrived(returnNo, sheetId) {
     document.dispatchEvent(
       new CustomEvent("as-return-tn-arrived", {
@@ -28,6 +30,7 @@
     );
   }
 
+  // ==== URL change detection (React Router) ====
   function notifyUrlChange(url) {
     document.dispatchEvent(new CustomEvent("url-change", { detail: { url } }));
   }
@@ -51,6 +54,7 @@
 
   notifyUrlChange(window.location.href);
 
+  // ==== Tự động click Complete (giữ nguyên) ====
   function findCompleteButton() {
     const buttons = document.querySelectorAll("button");
     for (const btn of buttons) {
@@ -88,10 +92,12 @@
     });
   }
 
+  // ==== Intercept fetch ====
   const origFetch = window.fetch;
   window.fetch = async function (...args) {
     const url = typeof args[0] === "string" ? args[0] : args[0]?.url;
 
+    // Khi request scan_sheet_id được gửi → lấy sheet_id từ payload
     if (url && url.includes("scan_sheet_id")) {
       try {
         const body = args[0]?.body;
@@ -99,7 +105,7 @@
           const parsed = JSON.parse(body);
           pendingSheetId = parsed.sheet_id || null;
           if (pendingSheetId) {
-            notifyDetected(pendingSheetId);
+            notifyDetected(pendingSheetId); // dispatch NGAY LẬP TỨC
           }
         }
       } catch (e) { }
@@ -107,6 +113,7 @@
 
     const response = await origFetch.apply(this, args);
 
+    // Khi có response
     if (url && url.includes("scan_sheet_id")) {
       const clone = response.clone();
       clone
@@ -115,8 +122,8 @@
           if (data.retcode === 0 && data.data?.list?.length) {
             const returnNo = data.data.list[0].return_no;
             if (returnNo) {
-              notifyArrived(returnNo, pendingSheetId);
-              await waitAndClickComplete();
+              notifyArrived(returnNo, pendingSheetId); // gửi kèm sheetId
+              await waitAndClickComplete(); // auto‑click Complete
             }
           } else {
             notifyError(pendingSheetId || "", data.retcode, data.message || "");
@@ -129,6 +136,7 @@
     return response;
   };
 
+  // ==== Intercept XMLHttpRequest ====
   const OrigXHR = window.XMLHttpRequest;
   window.XMLHttpRequest = function () {
     const xhr = new OrigXHR();
@@ -142,6 +150,7 @@
     };
 
     xhr.send = function (...args) {
+      // Khi request scan_sheet_id được gửi → lấy sheet_id
       if (requestURL && requestURL.includes("scan_sheet_id")) {
         try {
           const body = args[0];

@@ -201,7 +201,7 @@ export class StateManager {
     if (!id) {
       this.ui.showScanError({
         return_tn: sheetId,
-        type: displayType,
+        displayType: displayType,   // truyền displayType
         id: null,
         reason: "Lỗi ánh xạ",
         detail: `Type "${displayType}" chưa được gán ID`,
@@ -212,7 +212,7 @@ export class StateManager {
     const incrementPromise = this._callApi("increment", {
       id,
       return_tn: sheetId,
-      type_group: displayType,   // gửi display_name thay vì type_name
+      type_group: displayType,   // gửi display_name
       email: this.email,
     })
       .then(async (data) => {
@@ -263,7 +263,7 @@ export class StateManager {
     } else {
       this.ui.showScanError({
         return_tn: sheetId,
-        type: displayType,
+        displayType: displayType,
         id,
         reason: "Lỗi",
         detail: incResult.error,
@@ -273,7 +273,7 @@ export class StateManager {
 
   // ============ CÁC PHƯƠNG CÒN LẠI ============
 
-  async removeScan(return_tn, id, type) {
+  async removeScan(return_tn, id, displayType) {
     if (!this.ui) return;
     try {
       const data = await this._callApi("decrement", { id, return_tn });
@@ -291,8 +291,8 @@ export class StateManager {
         : null;
 
       if (newCount > 0 && lastReturnTn) {
-        const displayType = updatedSession.type_group; // đã là display_name
-        this.ui.showSuccess(lastReturnTn, displayType, id, {
+        const displayTypeFromSession = updatedSession.type_group; // đã là display_name
+        this.ui.showSuccess(lastReturnTn, displayTypeFromSession, id, {
           item_count: newCount,
           status: updatedSession.status,
         });

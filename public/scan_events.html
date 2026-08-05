@@ -656,6 +656,11 @@
           <label>ID Trạm</label>
           <input type="text" id="station-id" placeholder="Ví dụ: 3A" />
         </div>
+        <!-- THÊM FILTER RETURN TN -->
+        <div class="filter-group">
+          <label>Return TN</label>
+          <input type="text" id="return-tn" placeholder="Tìm Return TN..." />
+        </div>
         <div class="filter-group">
           <label>Event Type</label>
           <select id="event-type">
@@ -789,6 +794,7 @@
         const selectAllBtn = document.getElementById("select-all");
         const deselectAllBtn = document.getElementById("deselect-all");
         const stationIdEl = document.getElementById("station-id");
+        const returnTnEl = document.getElementById("return-tn"); // THÊM
         const eventTypeEl = document.getElementById("event-type");
         const searchBtn = document.getElementById("search-btn");
         const copyBtn = document.getElementById("copy-btn");
@@ -944,6 +950,7 @@
 
         function buildQuery() {
           const station = stationIdEl.value.trim();
+          const returnTn = returnTnEl.value.trim(); // LẤY GIÁ TRỊ RETURN TN
           const evType = eventTypeEl.value;
           const typeArr = getSelectedTypeGroups();
           const { start, end } = getDateRange();
@@ -957,6 +964,7 @@
           if (typeArr.length > 0 && typeArr.length < allTypeGroups.length)
             q = q.in("type_group", typeArr);
           if (station) q = q.eq("station_id", station);
+          if (returnTn) q = q.ilike("return_tn", `%${returnTn}%`); // TÌM KIẾM CHỨA
           if (evType) q = q.eq("event_type", evType);
           return q;
         }
@@ -1139,6 +1147,7 @@
             .data("daterangepicker")
             .setEndDate(moment().endOf("day"));
           stationIdEl.value = "";
+          returnTnEl.value = ""; // XÓA RETURN TN
           eventTypeEl.value = "open";
           typeList.querySelectorAll(".item").forEach((item) => {
             const text = item.querySelector(".item-text").textContent;
@@ -1160,6 +1169,9 @@
           copyBtn.addEventListener("click", copyCurrentPage);
           copyAllBtn.addEventListener("click", copyAllPages);
           stationIdEl.addEventListener("keypress", (e) => {
+            if (e.key === "Enter") handleSearch();
+          });
+          returnTnEl.addEventListener("keypress", (e) => {
             if (e.key === "Enter") handleSearch();
           });
           prevPageBtn.addEventListener("click", async () => {

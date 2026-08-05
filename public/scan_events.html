@@ -5,6 +5,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Scan Events – Trích xuất dữ liệu quét hàng</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <!-- Slim Select CSS + JS -->
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/slim-select@2.8.2/dist/slimselect.min.css"
+    />
+    <script src="https://cdn.jsdelivr.net/npm/slim-select@2.8.2/dist/slimselect.min.js"></script>
     <style>
       :root {
         --color-primary: #2563eb;
@@ -105,157 +111,36 @@
         box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.2);
       }
 
-      /* Multi-select chuyên nghiệp */
-      .multi-select {
-        position: relative;
-        min-width: 220px;
-      }
-      .multi-select-trigger {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 0.5rem;
-        padding: 0.5rem 0.75rem;
-        border: 1px solid var(--color-border);
+      /* Tùy chỉnh Slim Select cho đồng bộ giao diện */
+      .ss-main {
         border-radius: var(--radius-md);
-        background: white;
-        cursor: pointer;
-        font-size: 0.875rem;
-        user-select: none;
-        transition:
-          border-color 0.2s,
-          box-shadow 0.2s;
-        min-height: 38px;
+        border-color: var(--color-border);
       }
-      .multi-select-trigger:focus {
-        outline: none;
+      .ss-main .ss-multi-selected .ss-values .ss-value {
+        background: var(--color-primary);
+        color: white;
+        border-radius: 12px;
+        font-size: 0.75rem;
       }
-      .multi-select.focused .multi-select-trigger,
-      .multi-select-trigger:focus-visible {
+      .ss-main .ss-multi-selected .ss-values .ss-value .ss-value-delete {
+        background: none;
+        color: rgba(255, 255, 255, 0.8);
+      }
+      .ss-main:focus {
         border-color: var(--color-primary);
         box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.2);
       }
-      .multi-select-values {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 0.25rem;
-        overflow: hidden;
-        max-width: 160px;
-      }
-      .multi-select-badge {
-        background: var(--color-primary);
-        color: white;
-        font-size: 0.7rem;
-        padding: 0.1rem 0.5rem;
-        border-radius: 12px;
-        white-space: nowrap;
-        font-weight: 500;
-      }
-      .multi-select-placeholder {
-        color: var(--color-text-muted);
-      }
-      .multi-select-arrow {
-        font-size: 0.7rem;
-        transition: transform var(--transition-fast);
-      }
-      .multi-select.open .multi-select-arrow {
-        transform: rotate(180deg);
-      }
-      .multi-select-dropdown {
-        position: absolute;
-        top: calc(100% + 4px);
-        left: 0;
-        right: 0;
-        background: white;
-        border: 1px solid var(--color-border);
+      .ss-content {
         border-radius: var(--radius-md);
-        box-shadow: var(--shadow-md);
-        z-index: 100;
-        max-height: 280px;
-        overflow-y: auto;
-        opacity: 0;
-        visibility: hidden;
-        transform: translateY(-4px);
-        transition:
-          opacity 0.15s ease,
-          transform 0.15s ease,
-          visibility 0.15s;
-        pointer-events: none;
+        border-color: var(--color-border);
       }
-      .multi-select.open .multi-select-dropdown {
-        opacity: 1;
-        visibility: visible;
-        transform: translateY(0);
-        pointer-events: auto;
-      }
-      .dropdown-actions {
-        display: flex;
-        justify-content: space-between;
-        padding: 0.5rem 0.75rem;
-        border-bottom: 1px solid var(--color-border);
-        background: #f8fafc;
-        position: sticky;
-        top: 0;
-        z-index: 2;
-      }
-      .dropdown-actions button {
-        background: none;
-        border: none;
-        color: var(--color-primary);
-        font-size: 0.8rem;
-        font-weight: 500;
-        cursor: pointer;
-        padding: 0.15rem 0;
-      }
-      .dropdown-actions button:hover {
-        text-decoration: underline;
-      }
-      .multi-select-item {
-        padding: 0.5rem 0.75rem;
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-        cursor: pointer;
-        font-size: 0.875rem;
-        transition: background 0.1s;
-        outline: none;
-      }
-      .multi-select-item:hover {
+      .ss-content .ss-list .ss-option:hover {
         background: #f1f5f9;
       }
-      .multi-select-item.focused {
+      .ss-content .ss-list .ss-option.ss-highlighted {
         background: #eef2ff;
       }
-      .multi-select-item input[type="checkbox"] {
-        accent-color: var(--color-primary);
-        pointer-events: none;
-      }
-      .has-tooltip {
-        position: relative;
-        cursor: help;
-      }
-      .has-tooltip::after {
-        content: attr(data-tooltip);
-        position: absolute;
-        bottom: calc(100% + 6px);
-        left: 50%;
-        transform: translateX(-50%);
-        background: #1e293b;
-        color: white;
-        padding: 0.25rem 0.5rem;
-        border-radius: 4px;
-        font-size: 0.7rem;
-        white-space: nowrap;
-        opacity: 0;
-        visibility: hidden;
-        transition: opacity 0.2s;
-        pointer-events: none;
-        z-index: 200;
-      }
-      .has-tooltip:hover::after {
-        opacity: 1;
-        visibility: visible;
-      }
+
       .btn {
         padding: 0.5rem 1.25rem;
         border: none;
@@ -419,28 +304,9 @@
           <label>Ngày</label>
           <input type="date" id="filter-date" />
         </div>
-        <div class="filter-group">
+        <div class="filter-group" style="min-width: 250px">
           <label>Loại hàng</label>
-          <div class="multi-select" id="type-group-multi">
-            <!-- THÊM ID cho trigger -->
-            <div
-              class="multi-select-trigger"
-              id="type-group-trigger"
-              tabindex="0"
-              role="button"
-              aria-haspopup="listbox"
-              aria-expanded="false"
-            >
-              <div class="multi-select-values" id="type-group-values"></div>
-              <span class="multi-select-arrow">▼</span>
-            </div>
-            <div class="multi-select-dropdown" id="type-group-dropdown">
-              <div class="dropdown-actions">
-                <button type="button" id="select-all-btn">Chọn tất cả</button>
-                <button type="button" id="deselect-all-btn">Bỏ chọn</button>
-              </div>
-            </div>
-          </div>
+          <select id="type-group-select" multiple></select>
         </div>
         <div class="filter-group">
           <label>ID Trạm</label>
@@ -518,14 +384,9 @@
           SUPABASE_ANON_KEY,
         );
 
-        // DOM elements (sử dụng optional chaining để tránh lỗi null)
+        // DOM elements
         const dateEl = document.getElementById("filter-date");
-        const multiSelect = document.getElementById("type-group-multi");
-        const trigger = document.getElementById("type-group-trigger");
-        const valuesContainer = document.getElementById("type-group-values");
-        const dropdown = document.getElementById("type-group-dropdown");
-        const selectAllBtn = document.getElementById("select-all-btn");
-        const deselectAllBtn = document.getElementById("deselect-all-btn");
+        const typeGroupSelect = document.getElementById("type-group-select");
         const stationIdEl = document.getElementById("station-id");
         const eventTypeEl = document.getElementById("event-type");
         const searchBtn = document.getElementById("search-btn");
@@ -536,15 +397,9 @@
         const loadingOverlay = document.getElementById("loading-overlay");
         const columnSelector = document.getElementById("column-selector");
 
-        // Kiểm tra các phần tử bắt buộc
-        if (!trigger || !dropdown || !valuesContainer) {
-          console.error("Multi-select elements missing");
-          return;
-        }
-
         let currentRows = [];
         let allTypeGroups = [];
-        let selectedTypeGroups = new Set();
+        let slimInstance = null;
         let selectedColumns = new Set();
 
         const columnDefs = [
@@ -566,206 +421,31 @@
             .toISOString()
             .slice(0, 10);
 
-        // Multi-select functions
-        function updateUI() {
-          if (!valuesContainer) return;
-          if (
-            selectedTypeGroups.size === 0 ||
-            selectedTypeGroups.size === allTypeGroups.length
-          ) {
-            valuesContainer.innerHTML =
-              '<span class="multi-select-placeholder">Tất cả</span>';
-          } else {
-            const arr = [...selectedTypeGroups];
-            let html = arr
-              .slice(0, 2)
-              .map((v) => `<span class="multi-select-badge">${v}</span>`)
-              .join("");
-            if (arr.length > 2) {
-              const tooltipText = arr.slice(2).join(", ");
-              html += `<span class="multi-select-badge has-tooltip" data-tooltip="${tooltipText}">+${arr.length - 2}</span>`;
-            }
-            valuesContainer.innerHTML = html;
-          }
-        }
-
-        function renderDropdownOptions() {
-          if (!dropdown) return;
-          const existingOptions =
-            dropdown.querySelectorAll(".multi-select-item");
-          existingOptions.forEach((opt) => opt.remove());
+        // Khởi tạo Slim Select với dữ liệu
+        function initSlimSelect() {
+          typeGroupSelect.innerHTML = "";
           allTypeGroups.forEach((tg) => {
-            const row = document.createElement("div");
-            row.className = "multi-select-item";
-            row.setAttribute("role", "option");
-            row.setAttribute(
-              "aria-selected",
-              selectedTypeGroups.has(tg).toString(),
-            );
-            row.tabIndex = -1;
-            const cb = document.createElement("input");
-            cb.type = "checkbox";
-            cb.value = tg;
-            cb.checked = selectedTypeGroups.has(tg);
-            cb.tabIndex = -1;
-            row.appendChild(cb);
-            row.appendChild(document.createTextNode(tg));
-            row.addEventListener("click", () => {
-              if (selectedTypeGroups.has(tg)) {
-                selectedTypeGroups.delete(tg);
-              } else {
-                selectedTypeGroups.add(tg);
-              }
-              updateUI();
-              cb.checked = selectedTypeGroups.has(tg);
-              row.setAttribute(
-                "aria-selected",
-                selectedTypeGroups.has(tg).toString(),
-              );
-            });
-            dropdown.appendChild(row);
+            const opt = document.createElement("option");
+            opt.value = tg;
+            opt.textContent = tg;
+            typeGroupSelect.appendChild(opt);
           });
+          // Nếu đã có instance cũ thì hủy
+          if (slimInstance) slimInstance.destroy();
+          slimInstance = new SlimSelect({
+            select: typeGroupSelect,
+            settings: {
+              placeholderText: "Tất cả",
+              searchPlaceholder: "Tìm loại hàng...",
+              allowDeselect: true,
+              closeOnSelect: false,
+            },
+          });
+          // Đặt giá trị mặc định
+          slimInstance.set(["45k-NA", "450k-NA-COM"]);
         }
 
-        function openDropdown() {
-          if (multiSelect) {
-            multiSelect.classList.add("open");
-            trigger.setAttribute("aria-expanded", "true");
-            const options = getOptionElements();
-            if (options.length > 0) setFocusedOption(options[0]);
-          }
-        }
-        function closeDropdown() {
-          if (multiSelect) {
-            multiSelect.classList.remove("open");
-            trigger.setAttribute("aria-expanded", "false");
-            getOptionElements().forEach((opt) =>
-              opt.classList.remove("focused"),
-            );
-            trigger.focus();
-          }
-        }
-        function toggleDropdown() {
-          multiSelect?.classList.contains("open")
-            ? closeDropdown()
-            : openDropdown();
-        }
-        function getOptionElements() {
-          return dropdown
-            ? [...dropdown.querySelectorAll(".multi-select-item")]
-            : [];
-        }
-        function setFocusedOption(option) {
-          if (!option) return;
-          getOptionElements().forEach((opt) => opt.classList.remove("focused"));
-          option.classList.add("focused");
-          option.focus({ preventScroll: true });
-          option.scrollIntoView({ block: "nearest" });
-        }
-        function moveFocus(direction) {
-          const options = getOptionElements();
-          if (options.length === 0) return;
-          const currentIndex = options.findIndex((opt) =>
-            opt.classList.contains("focused"),
-          );
-          let nextIndex = currentIndex + direction;
-          if (nextIndex < 0) nextIndex = options.length - 1;
-          if (nextIndex >= options.length) nextIndex = 0;
-          setFocusedOption(options[nextIndex]);
-        }
-        function handleKeyboard(e) {
-          const isOpen = multiSelect?.classList.contains("open");
-          if (e.key === "Escape") {
-            if (isOpen) {
-              e.preventDefault();
-              closeDropdown();
-            }
-            return;
-          }
-          if (
-            !isOpen &&
-            (e.key === "Enter" || e.key === " " || e.key === "ArrowDown")
-          ) {
-            e.preventDefault();
-            openDropdown();
-            return;
-          }
-          if (!isOpen) return;
-          if (e.key === "ArrowDown") {
-            e.preventDefault();
-            moveFocus(1);
-          } else if (e.key === "ArrowUp") {
-            e.preventDefault();
-            moveFocus(-1);
-          } else if (e.key === "Enter" || e.key === " ") {
-            e.preventDefault();
-            const focused = dropdown?.querySelector(
-              ".multi-select-item.focused",
-            );
-            if (focused) focused.click();
-          }
-        }
-
-        if (trigger) {
-          trigger.addEventListener("keydown", handleKeyboard);
-          trigger.addEventListener("focus", () =>
-            multiSelect?.classList.add("focused"),
-          );
-          trigger.addEventListener("blur", () => {
-            setTimeout(() => {
-              if (!multiSelect?.contains(document.activeElement))
-                multiSelect?.classList.remove("focused");
-            }, 0);
-          });
-        }
-        if (dropdown) {
-          dropdown.addEventListener("keydown", (e) => {
-            if (
-              ["Escape", "ArrowDown", "ArrowUp", "Enter", " "].includes(e.key)
-            ) {
-              e.preventDefault();
-              e.stopPropagation();
-              handleKeyboard(e);
-            }
-          });
-          dropdown.addEventListener("click", (e) => e.stopPropagation());
-        }
-        document.addEventListener("click", (e) => {
-          if (
-            multiSelect &&
-            !multiSelect.contains(e.target) &&
-            multiSelect.classList.contains("open")
-          )
-            closeDropdown();
-        });
-        trigger?.addEventListener("click", (e) => {
-          e.stopPropagation();
-          toggleDropdown();
-        });
-
-        selectAllBtn?.addEventListener("click", (e) => {
-          e.stopPropagation();
-          selectedTypeGroups = new Set(allTypeGroups);
-          updateUI();
-          dropdown?.querySelectorAll("input[type=checkbox]").forEach((cb) => {
-            cb.checked = true;
-          });
-          getOptionElements().forEach((opt) =>
-            opt.setAttribute("aria-selected", "true"),
-          );
-        });
-        deselectAllBtn?.addEventListener("click", (e) => {
-          e.stopPropagation();
-          selectedTypeGroups.clear();
-          updateUI();
-          dropdown?.querySelectorAll("input[type=checkbox]").forEach((cb) => {
-            cb.checked = false;
-          });
-          getOptionElements().forEach((opt) =>
-            opt.setAttribute("aria-selected", "false"),
-          );
-        });
-
+        // Render cột sao chép
         function renderColumnSelector() {
           if (!columnSelector) return;
           columnSelector.innerHTML = '<span class="label">Cột sao chép:</span>';
@@ -802,9 +482,7 @@
             allTypeGroups = [
               ...new Set(typeRes.data.map((d) => d.type_group).filter(Boolean)),
             ];
-            selectedTypeGroups = new Set(["45k-NA", "450k-NA-COM"]);
-            renderDropdownOptions();
-            updateUI();
+            initSlimSelect();
           }
           if (eventRes.data && eventTypeEl) {
             const events = [
@@ -815,6 +493,8 @@
             eventTypeEl.innerHTML =
               '<option value="">Tất cả</option>' +
               events.map((e) => `<option value="${e}">${e}</option>`).join("");
+            // Mặc định chọn "open" nếu tồn tại
+            if (events.includes("open")) eventTypeEl.value = "open";
           }
         }
 
@@ -822,7 +502,9 @@
           const date = dateEl?.value;
           const station = stationIdEl?.value.trim();
           const evType = eventTypeEl?.value;
-          const typeArr = [...selectedTypeGroups];
+          const selected = slimInstance?.getSelected() || [];
+          const typeArr = selected.map((s) => s.value);
+
           let q = supabaseClient
             .from("scan_events")
             .select("*", { count: "exact" })
@@ -927,20 +609,8 @@
         function resetFilters() {
           if (dateEl) dateEl.value = todayStr();
           if (stationIdEl) stationIdEl.value = "";
-          if (eventTypeEl) eventTypeEl.value = "";
-          selectedTypeGroups = new Set(["45k-NA", "450k-NA-COM"]);
-          dropdown?.querySelectorAll("input[type=checkbox]").forEach((cb) => {
-            cb.checked = selectedTypeGroups.has(cb.value);
-          });
-          getOptionElements().forEach((opt) =>
-            opt.setAttribute(
-              "aria-selected",
-              selectedTypeGroups
-                .has(opt.querySelector("input").value)
-                .toString(),
-            ),
-          );
-          updateUI();
+          if (eventTypeEl) eventTypeEl.value = "open";
+          if (slimInstance) slimInstance.set(["45k-NA", "450k-NA-COM"]);
           currentRows = [];
           renderTable([]);
         }

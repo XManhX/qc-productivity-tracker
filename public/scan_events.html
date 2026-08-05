@@ -3,35 +3,49 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Scan Events Filter & Copy</title>
+    <title>Scan Events – Trích xuất dữ liệu quét hàng</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
+      :root {
+        --color-primary: #2563eb;
+        --color-primary-hover: #1d4ed8;
+        --color-success: #10b981;
+        --color-success-hover: #059669;
+        --color-bg: #f1f5f9;
+        --color-surface: #ffffff;
+        --color-border: #e2e8f0;
+        --color-text: #1e293b;
+        --color-text-secondary: #64748b;
+        --color-text-muted: #94a3b8;
+        --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+        --shadow-md:
+          0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
+        --radius-lg: 1rem;
+        --radius-md: 0.5rem;
+        --font-sans: "Inter", system-ui, -apple-system, sans-serif;
+      }
       * {
         margin: 0;
         padding: 0;
         box-sizing: border-box;
-        font-family:
-          -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
-          "Helvetica Neue", Arial, sans-serif;
       }
       body {
-        background: #f8fafc;
-        color: #1e293b;
+        font-family: var(--font-sans);
+        background: var(--color-bg);
+        color: var(--color-text);
         padding: 2rem;
         min-height: 100vh;
       }
-      .container {
-        max-width: 1400px;
+      .app-container {
+        max-width: 1440px;
         margin: 0 auto;
-        background: white;
-        border-radius: 1.5rem;
-        box-shadow:
-          0 4px 6px -1px rgba(0, 0, 0, 0.1),
-          0 2px 4px -2px rgba(0, 0, 0, 0.1);
+        background: var(--color-surface);
+        border-radius: var(--radius-lg);
+        box-shadow: var(--shadow-md);
         overflow: hidden;
       }
-      .header {
-        background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+      .app-header {
+        background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
         color: white;
         padding: 1.5rem 2rem;
         display: flex;
@@ -40,17 +54,20 @@
         flex-wrap: wrap;
         gap: 1rem;
       }
-      .header h1 {
+      .app-header h1 {
         font-size: 1.75rem;
         font-weight: 700;
         display: flex;
         align-items: center;
         gap: 0.75rem;
       }
-      .filters {
+      .app-header p {
+        color: #94a3b8;
+      }
+      .filters-card {
+        background: var(--color-bg);
+        border-bottom: 1px solid var(--color-border);
         padding: 1.5rem 2rem;
-        background: #f1f5f9;
-        border-bottom: 1px solid #e2e8f0;
         display: flex;
         flex-wrap: wrap;
         gap: 1rem;
@@ -66,52 +83,76 @@
         font-weight: 600;
         text-transform: uppercase;
         letter-spacing: 0.05em;
-        color: #64748b;
+        color: var(--color-text-secondary);
       }
       .filter-group input,
       .filter-group select {
         padding: 0.5rem 0.75rem;
-        border: 1px solid #cbd5e1;
-        border-radius: 0.5rem;
+        border: 1px solid var(--color-border);
+        border-radius: var(--radius-md);
         font-size: 0.875rem;
         background: white;
-        min-width: 160px;
+        min-width: 150px;
+        transition: border-color 0.2s;
       }
-      /* Multi-select custom */
+      .filter-group input:focus,
+      .filter-group select:focus {
+        outline: none;
+        border-color: var(--color-primary);
+        box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.2);
+      }
       .multi-select {
         position: relative;
         min-width: 200px;
       }
-      .multi-select-display {
+      .multi-select-trigger {
         padding: 0.5rem 0.75rem;
-        border: 1px solid #cbd5e1;
-        border-radius: 0.5rem;
+        border: 1px solid var(--color-border);
+        border-radius: var(--radius-md);
         background: white;
         cursor: pointer;
         font-size: 0.875rem;
         display: flex;
         align-items: center;
         justify-content: space-between;
+        gap: 0.5rem;
         user-select: none;
-        min-height: 38px;
+        transition: border-color 0.2s;
       }
-      .multi-select-display .placeholder {
-        color: #94a3b8;
+      .multi-select-trigger:hover {
+        border-color: #94a3b8;
+      }
+      .multi-select-values {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.25rem;
+        max-width: 160px;
+        overflow: hidden;
+      }
+      .multi-select-badge {
+        background: var(--color-primary);
+        color: white;
+        font-size: 0.7rem;
+        padding: 0.1rem 0.5rem;
+        border-radius: 12px;
+        white-space: nowrap;
+      }
+      .multi-select-placeholder {
+        color: var(--color-text-muted);
       }
       .multi-select-dropdown {
         position: absolute;
-        top: 100%;
+        top: calc(100% + 4px);
         left: 0;
         right: 0;
         background: white;
-        border: 1px solid #cbd5e1;
-        border-radius: 0.5rem;
-        margin-top: 4px;
+        border: 1px solid var(--color-border);
+        border-radius: var(--radius-md);
+        box-shadow: var(--shadow-md);
         z-index: 100;
-        display: none;
-        max-height: 200px;
+        max-height: 240px;
         overflow-y: auto;
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        display: none;
       }
       .multi-select-dropdown.open {
         display: block;
@@ -122,17 +163,19 @@
         align-items: center;
         gap: 0.5rem;
         cursor: pointer;
+        font-size: 0.875rem;
+        transition: background 0.1s;
       }
       .multi-select-item:hover {
-        background: #f1f5f9;
+        background: #f8fafc;
       }
       .multi-select-item input[type="checkbox"] {
-        accent-color: #3b82f6;
+        accent-color: var(--color-primary);
       }
       .btn {
         padding: 0.5rem 1.25rem;
         border: none;
-        border-radius: 0.5rem;
+        border-radius: var(--radius-md);
         font-weight: 600;
         font-size: 0.875rem;
         cursor: pointer;
@@ -143,11 +186,11 @@
         white-space: nowrap;
       }
       .btn-primary {
-        background: #3b82f6;
+        background: var(--color-primary);
         color: white;
       }
       .btn-primary:hover {
-        background: #2563eb;
+        background: var(--color-primary-hover);
       }
       .btn-secondary {
         background: #e2e8f0;
@@ -157,43 +200,54 @@
         background: #cbd5e1;
       }
       .btn-success {
-        background: #10b981;
+        background: var(--color-success);
         color: white;
       }
       .btn-success:hover {
-        background: #059669;
+        background: var(--color-success-hover);
       }
       .btn:disabled {
         opacity: 0.6;
         cursor: not-allowed;
       }
-      /* Column selector */
-      .column-selector {
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-        flex-wrap: wrap;
+      .column-selector-bar {
         padding: 0.75rem 2rem;
         background: #f8fafc;
-        border-bottom: 1px solid #e2e8f0;
-      }
-      .column-selector span {
-        font-size: 0.8rem;
-        font-weight: 600;
-        color: #475569;
-        margin-right: 0.5rem;
-      }
-      .column-option {
+        border-bottom: 1px solid var(--color-border);
         display: flex;
         align-items: center;
-        gap: 0.25rem;
-        font-size: 0.8rem;
-        color: #334155;
-        cursor: pointer;
+        flex-wrap: wrap;
+        gap: 0.75rem;
       }
-      .table-container {
-        overflow-x: auto;
+      .column-selector-bar .label {
+        font-size: 0.8rem;
+        font-weight: 600;
+        color: var(--color-text-secondary);
+      }
+      .column-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.25rem;
+        padding: 0.25rem 0.75rem;
+        background: white;
+        border: 1px solid var(--color-border);
+        border-radius: 20px;
+        font-size: 0.8rem;
+        cursor: pointer;
+        transition: all 0.2s;
+        user-select: none;
+      }
+      .column-chip.active {
+        background: var(--color-primary);
+        color: white;
+        border-color: var(--color-primary);
+      }
+      .column-chip:hover:not(.active) {
+        border-color: #94a3b8;
+      }
+      .table-wrapper {
         padding: 1.5rem 2rem;
+        overflow-x: auto;
       }
       table {
         width: 100%;
@@ -205,8 +259,8 @@
         padding: 0.75rem 1rem;
         text-align: left;
         font-weight: 600;
-        color: #475569;
-        border-bottom: 2px solid #e2e8f0;
+        color: var(--color-text-secondary);
+        border-bottom: 2px solid var(--color-border);
         white-space: nowrap;
       }
       td {
@@ -218,49 +272,65 @@
       tr:hover td {
         background: #f8fafc;
       }
-      .result-bar {
+      .status-bar {
         padding: 1rem 2rem;
         background: #f8fafc;
-        border-top: 1px solid #e2e8f0;
+        border-top: 1px solid var(--color-border);
         display: flex;
         align-items: center;
         justify-content: space-between;
         flex-wrap: wrap;
         gap: 1rem;
       }
-      .copy-info {
-        font-size: 0.875rem;
-        color: #475569;
-      }
       .loading-overlay {
         position: absolute;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        background: rgba(255, 255, 255, 0.8);
+        inset: 0;
+        background: rgba(255, 255, 255, 0.7);
+        backdrop-filter: blur(2px);
         display: flex;
         align-items: center;
         justify-content: center;
-        font-size: 1.25rem;
-        color: #64748b;
-        backdrop-filter: blur(2px);
-        z-index: 10;
+        z-index: 20;
+        font-weight: 500;
+        color: var(--color-text-secondary);
       }
       .relative {
         position: relative;
       }
+      .toast {
+        position: fixed;
+        bottom: 20px;
+        left: 50%;
+        transform: translateX(-50%);
+        background: #1e293b;
+        color: white;
+        padding: 0.75rem 1.5rem;
+        border-radius: 30px;
+        font-size: 0.875rem;
+        box-shadow: var(--shadow-md);
+        z-index: 9999;
+        animation: slideUp 0.3s ease;
+      }
+      @keyframes slideUp {
+        from {
+          opacity: 0;
+          transform: translateX(-50%) translateY(10px);
+        }
+        to {
+          opacity: 1;
+          transform: translateX(-50%) translateY(0);
+        }
+      }
     </style>
   </head>
   <body>
-    <div class="container" id="app">
-      <div class="header">
-        <h1><span>📋</span> Scan Events Data</h1>
-        <span style="color: #94a3b8">Trích xuất dữ liệu quét hàng</span>
+    <div class="app-container" id="app">
+      <div class="app-header">
+        <h1>📋 Scan Events</h1>
+        <p>Trích xuất dữ liệu quét hàng – lọc thông minh, copy linh hoạt</p>
       </div>
 
-      <!-- Filters -->
-      <div class="filters">
+      <div class="filters-card">
         <div class="filter-group">
           <label>Ngày</label>
           <input type="date" id="filter-date" />
@@ -268,8 +338,8 @@
         <div class="filter-group">
           <label>Loại hàng</label>
           <div class="multi-select" id="type-group-multi">
-            <div class="multi-select-display" id="type-group-display">
-              <span class="placeholder">Tất cả</span>
+            <div class="multi-select-trigger" id="type-group-trigger">
+              <div class="multi-select-values" id="type-group-values"></div>
               <span style="font-size: 0.7rem">▼</span>
             </div>
             <div class="multi-select-dropdown" id="type-group-dropdown"></div>
@@ -287,24 +357,18 @@
         </div>
         <button class="btn btn-primary" id="search-btn">🔍 Tìm kiếm</button>
         <button class="btn btn-success" id="copy-btn" disabled>
-          📋 Sao chép toàn bộ
+          📋 Sao chép
         </button>
         <button class="btn btn-secondary" id="reset-btn">↺ Đặt lại</button>
       </div>
 
-      <!-- Column selection for copy -->
-      <div class="column-selector" id="column-selector">
-        <span>Chọn cột copy:</span>
-        <!-- Checkboxes will be injected by JS -->
+      <div class="column-selector-bar" id="column-selector">
+        <span class="label">Cột sao chép:</span>
       </div>
 
-      <!-- Table -->
-      <div class="relative">
-        <div id="loading" style="display: none" class="loading-overlay">
-          Đang tải dữ liệu...
-        </div>
-        <div class="table-container">
-          <table id="data-table">
+      <div class="relative" id="table-area">
+        <div class="table-wrapper">
+          <table>
             <thead>
               <tr>
                 <th>ID</th>
@@ -322,65 +386,62 @@
               <tr>
                 <td
                   colspan="9"
-                  style="text-align: center; padding: 2rem; color: #94a3b8"
+                  style="
+                    text-align: center;
+                    padding: 3rem;
+                    color: var(--color-text-muted);
+                  "
                 >
-                  Chưa có dữ liệu. Vui lòng chọn bộ lọc và nhấn Tìm kiếm.
+                  Chưa có dữ liệu. Nhấn <strong>Tìm kiếm</strong> để bắt đầu.
                 </td>
               </tr>
             </tbody>
           </table>
         </div>
+        <div id="loading-overlay" class="loading-overlay" style="display: none">
+          ⏳ Đang tải dữ liệu...
+        </div>
       </div>
 
-      <div class="result-bar">
-        <span class="copy-info" id="result-count"></span>
-        <span class="copy-info" style="color: #94a3b8"
-          >Mẹo: Chọn cột cần copy, nhấn "Sao chép", sau đó Ctrl+V vào Google
-          Sheets</span
+      <div class="status-bar">
+        <span id="result-count" class="copy-info"></span>
+        <span style="color: var(--color-text-muted); font-size: 0.875rem"
+          >Mẹo: Ctrl+V trực tiếp vào Google Sheets</span
         >
       </div>
     </div>
 
     <script>
-      (function () {
-        if (!window.supabase) {
-          alert(
-            "Không tải được thư viện Supabase. Vui lòng kiểm tra kết nối mạng.",
-          );
-          return;
-        }
-
+      (() => {
         const SUPABASE_URL = "https://gjnfyjmrrpxmnufikjgo.supabase.co";
         const SUPABASE_ANON_KEY =
           "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdqbmZ5am1ycnB4bW51ZmlramdvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODU1NDg1MTIsImV4cCI6MjEwMTEyNDUxMn0.TKEFJNI4_r_c1frKroSLAUhbE8YW4ofdLwQPrwSbsT4";
-        const supabaseClient = window.supabase.createClient(
+        const supabaseClient = supabase.createClient(
           SUPABASE_URL,
           SUPABASE_ANON_KEY,
         );
 
-        // DOM elements
         const dateEl = document.getElementById("filter-date");
-        const typeGroupMulti = document.getElementById("type-group-multi");
-        const typeGroupDisplay = document.getElementById("type-group-display");
+        const typeGroupTrigger = document.getElementById("type-group-trigger");
+        const typeGroupValues = document.getElementById("type-group-values");
         const typeGroupDropdown = document.getElementById(
           "type-group-dropdown",
         );
         const stationIdEl = document.getElementById("station-id");
         const eventTypeEl = document.getElementById("event-type");
         const searchBtn = document.getElementById("search-btn");
-        const resetBtn = document.getElementById("reset-btn");
         const copyBtn = document.getElementById("copy-btn");
+        const resetBtn = document.getElementById("reset-btn");
         const tableBody = document.getElementById("table-body");
         const resultCount = document.getElementById("result-count");
-        const loadingEl = document.getElementById("loading");
+        const loadingOverlay = document.getElementById("loading-overlay");
         const columnSelector = document.getElementById("column-selector");
 
-        // State
         let currentRows = [];
-        let allTypeGroups = []; // fetched from DB
-        let selectedTypeGroups = new Set(); // currently selected
+        let allTypeGroups = [];
+        let selectedTypeGroups = new Set();
+        let selectedColumns = new Set();
 
-        // Columns definition (order must match table <th>)
         const columnDefs = [
           { key: "id", label: "ID" },
           { key: "event_type", label: "Event Type" },
@@ -393,105 +454,111 @@
           { key: "created_at", label: "Created At" },
         ];
 
-        // Column checkboxes state (all selected by default)
-        let selectedColumns = new Set(columnDefs.map((c) => c.key));
+        const formatDate = (d) =>
+          new Date(d).toLocaleString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" });
+        const todayStr = () =>
+          new Date(new Date().getTime() + 7 * 3600 * 1000)
+            .toISOString()
+            .slice(0, 10);
 
-        // ---- Helpers ----
-        function formatCreatedAt(dateStr) {
-          const d = new Date(dateStr);
-          return d.toLocaleString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" });
-        }
-
-        function getTodayVNStr() {
-          const now = new Date(new Date().getTime() + 7 * 60 * 60 * 1000);
-          return now.toISOString().split("T")[0];
-        }
-
-        // ---- Multi-select logic ----
-        function updateTypeGroupDisplay() {
-          const displaySpan =
-            typeGroupDisplay.querySelector("span:first-child");
+        function updateTypeGroupUI() {
           if (
             selectedTypeGroups.size === 0 ||
             selectedTypeGroups.size === allTypeGroups.length
           ) {
-            displaySpan.textContent = "Tất cả";
-            displaySpan.classList.add("placeholder");
-          } else if (selectedTypeGroups.size <= 2) {
-            displaySpan.textContent = [...selectedTypeGroups].join(", ");
-            displaySpan.classList.remove("placeholder");
+            typeGroupValues.innerHTML =
+              '<span class="multi-select-placeholder">Tất cả</span>';
           } else {
-            displaySpan.textContent = `Đã chọn ${selectedTypeGroups.size} loại`;
-            displaySpan.classList.remove("placeholder");
+            const arr = [...selectedTypeGroups];
+            let html = arr
+              .slice(0, 2)
+              .map((v) => `<span class="multi-select-badge">${v}</span>`)
+              .join("");
+            if (arr.length > 2)
+              html += `<span class="multi-select-badge">+${arr.length - 2}</span>`;
+            typeGroupValues.innerHTML = html;
           }
+        }
+
+        function renderTypeGroupDropdown() {
+          typeGroupDropdown.innerHTML = "";
+          allTypeGroups.forEach((tg) => {
+            const row = document.createElement("div");
+            row.className = "multi-select-item";
+            const cb = document.createElement("input");
+            cb.type = "checkbox";
+            cb.value = tg;
+            cb.checked = selectedTypeGroups.has(tg);
+            row.appendChild(cb);
+            row.appendChild(document.createTextNode(tg));
+            row.addEventListener("click", (e) => {
+              if (e.target !== cb) {
+                cb.checked = !cb.checked;
+              }
+              cb.dispatchEvent(new Event("change"));
+            });
+            cb.addEventListener("change", () => {
+              cb.checked
+                ? selectedTypeGroups.add(tg)
+                : selectedTypeGroups.delete(tg);
+              updateTypeGroupUI();
+            });
+            typeGroupDropdown.appendChild(row);
+          });
         }
 
         function toggleDropdown(e) {
           e.stopPropagation();
           typeGroupDropdown.classList.toggle("open");
         }
-
         function closeDropdown() {
           typeGroupDropdown.classList.remove("open");
         }
 
-        // Render checkboxes in dropdown
-        function renderTypeGroupOptions() {
-          typeGroupDropdown.innerHTML = "";
-          allTypeGroups.forEach((tg) => {
-            const div = document.createElement("div");
-            div.className = "multi-select-item";
-            const cb = document.createElement("input");
-            cb.type = "checkbox";
-            cb.value = tg;
-            cb.checked = selectedTypeGroups.has(tg);
-            cb.addEventListener("change", (e) => {
-              if (e.target.checked) {
-                selectedTypeGroups.add(tg);
+        function renderColumnSelector() {
+          columnSelector.innerHTML = '<span class="label">Cột sao chép:</span>';
+          columnDefs.forEach((col) => {
+            const chip = document.createElement("span");
+            chip.className =
+              "column-chip" + (selectedColumns.has(col.key) ? " active" : "");
+            chip.textContent = col.label;
+            chip.addEventListener("click", () => {
+              if (selectedColumns.has(col.key)) {
+                selectedColumns.delete(col.key);
+                chip.classList.remove("active");
               } else {
-                selectedTypeGroups.delete(tg);
-              }
-              updateTypeGroupDisplay();
-            });
-            const label = document.createElement("span");
-            label.textContent = tg;
-            div.appendChild(cb);
-            div.appendChild(label);
-            // Toggle on click anywhere in the row, but not interfere with checkbox
-            div.addEventListener("click", (ev) => {
-              if (ev.target !== cb) {
-                cb.checked = !cb.checked;
-                cb.dispatchEvent(new Event("change"));
+                selectedColumns.add(col.key);
+                chip.classList.add("active");
               }
             });
-            typeGroupDropdown.appendChild(div);
+            columnSelector.appendChild(chip);
           });
         }
 
-        // Load type groups from DB and setup multi-select
         async function loadFilterOptions() {
-          // type_group distinct
-          const { data: typeData } = await supabaseClient
-            .from("scan_events")
-            .select("type_group")
-            .order("type_group", { ascending: true });
-          if (typeData) {
+          const [typeRes, eventRes] = await Promise.all([
+            supabaseClient
+              .from("scan_events")
+              .select("type_group")
+              .order("type_group"),
+            supabaseClient
+              .from("scan_events")
+              .select("event_type")
+              .order("event_type"),
+          ]);
+          if (typeRes.data) {
             allTypeGroups = [
-              ...new Set(typeData.map((d) => d.type_group).filter(Boolean)),
+              ...new Set(typeRes.data.map((d) => d.type_group).filter(Boolean)),
             ];
-            // By default select all
             selectedTypeGroups = new Set(allTypeGroups);
-            renderTypeGroupOptions();
-            updateTypeGroupDisplay();
+            renderTypeGroupDropdown();
+            updateTypeGroupUI();
           }
-          // event_type distinct
-          const { data: eventData } = await supabaseClient
-            .from("scan_events")
-            .select("event_type")
-            .order("event_type", { ascending: true });
-          if (eventData) {
+          if (eventRes.data) {
             const events = [
-              ...new Set(eventData.map((d) => d.event_type).filter(Boolean)),
+              ...new Set(
+                eventRes.data.map((d) => d.event_type).filter(Boolean),
+              ),
             ];
             eventTypeEl.innerHTML =
               '<option value="">Tất cả</option>' +
@@ -499,201 +566,147 @@
           }
         }
 
-        // ---- Column selector rendering ----
-        function renderColumnSelector() {
-          columnSelector.innerHTML = "<span>Chọn cột copy:</span>";
-          columnDefs.forEach((col) => {
-            const label = document.createElement("label");
-            label.className = "column-option";
-            const cb = document.createElement("input");
-            cb.type = "checkbox";
-            cb.value = col.key;
-            cb.checked = selectedColumns.has(col.key);
-            cb.addEventListener("change", (e) => {
-              if (e.target.checked) {
-                selectedColumns.add(col.key);
-              } else {
-                selectedColumns.delete(col.key);
-              }
-            });
-            label.appendChild(cb);
-            label.appendChild(document.createTextNode(" " + col.label));
-            columnSelector.appendChild(label);
-          });
-        }
+        function buildQuery() {
+          const date = dateEl.value;
+          const station = stationIdEl.value.trim();
+          const evType = eventTypeEl.value;
+          const typeArr = [...selectedTypeGroups];
 
-        // ---- Data fetching ----
-        async function fetchData() {
-          const selectedDate = dateEl.value;
-          const stationId = stationIdEl.value.trim();
-          const eventType = eventTypeEl.value;
-          let typeGroupsArray = [...selectedTypeGroups];
-
-          let query = supabaseClient
+          let q = supabaseClient
             .from("scan_events")
             .select("*", { count: "exact" })
             .order("created_at", { ascending: false });
-
-          if (selectedDate) {
-            const startOfDay = `${selectedDate}T00:00:00+07:00`;
-            const endOfDay = `${selectedDate}T23:59:59+07:00`;
-            query = query
-              .gte("created_at", startOfDay)
-              .lte("created_at", endOfDay);
+          if (date) {
+            q = q
+              .gte("created_at", `${date}T00:00:00+07:00`)
+              .lte("created_at", `${date}T23:59:59+07:00`);
           }
-
-          // Multi-select: only if not all selected
-          if (
-            typeGroupsArray.length > 0 &&
-            typeGroupsArray.length < allTypeGroups.length
-          ) {
-            query = query.in("type_group", typeGroupsArray);
+          if (typeArr.length > 0 && typeArr.length < allTypeGroups.length) {
+            q = q.in("type_group", typeArr);
           }
-          if (stationId) query = query.eq("station_id", stationId);
-          if (eventType) query = query.eq("event_type", eventType);
+          if (station) q = q.eq("station_id", station);
+          if (evType) q = q.eq("event_type", evType);
+          return q.limit(1000);
+        }
 
-          query = query.limit(1000);
-          return await query;
+        async function fetchData() {
+          const { data, error } = await buildQuery();
+          if (error) throw error;
+          return data || [];
         }
 
         function renderTable(rows) {
-          currentRows = rows || [];
-          if (!currentRows.length) {
-            tableBody.innerHTML = `<tr><td colspan="9" style="text-align:center; padding:2rem; color:#94a3b8;">Không tìm thấy dữ liệu phù hợp.</td></tr>`;
+          currentRows = rows;
+          if (!rows.length) {
+            tableBody.innerHTML = `<tr><td colspan="9" style="text-align:center; padding:3rem; color:var(--color-text-muted);">Không tìm thấy dữ liệu phù hợp.</td></tr>`;
             copyBtn.disabled = true;
             resultCount.textContent = "";
             return;
           }
-
-          tableBody.innerHTML = currentRows
+          tableBody.innerHTML = rows
             .map(
-              (row) => `
-                    <tr>
-                        <td>${row.id}</td>
-                        <td>${row.event_type || ""}</td>
-                        <td>${row.email || ""}</td>
-                        <td>${row.station_id || ""}</td>
-                        <td>${row.type_group || ""}</td>
-                        <td>${row.return_tn || ""}</td>
-                        <td>${row.to_number || ""}</td>
-                        <td>${row.item_count ?? ""}</td>
-                        <td>${formatCreatedAt(row.created_at)}</td>
-                    </tr>
-                `,
+              (r) => `
+          <tr>
+            <td>${r.id}</td><td>${r.event_type || ""}</td><td>${r.email || ""}</td>
+            <td>${r.station_id || ""}</td><td>${r.type_group || ""}</td>
+            <td>${r.return_tn || ""}</td><td>${r.to_number || ""}</td>
+            <td>${r.item_count ?? ""}</td><td>${formatDate(r.created_at)}</td>
+          </tr>`,
             )
             .join("");
-
           copyBtn.disabled = false;
-          resultCount.textContent = `Tìm thấy ${currentRows.length} bản ghi.`;
+          resultCount.textContent = `Tìm thấy ${rows.length} bản ghi.`;
         }
 
         async function handleSearch() {
-          loadingEl.style.display = "flex";
+          loadingOverlay.style.display = "flex";
           try {
-            const { data, error } = await fetchData();
-            if (error) throw error;
-            renderTable(data);
+            renderTable(await fetchData());
           } catch (err) {
-            alert("Lỗi khi tải dữ liệu: " + err.message);
             tableBody.innerHTML = `<tr><td colspan="9" style="text-align:center; padding:2rem; color:#ef4444;">Lỗi: ${err.message}</td></tr>`;
             copyBtn.disabled = true;
             resultCount.textContent = "";
           } finally {
-            loadingEl.style.display = "none";
+            loadingOverlay.style.display = "none";
           }
         }
 
-        // ---- Copy logic with selected columns ----
-        function copyToClipboard() {
+        function copySelectedColumns() {
           if (!currentRows.length) return;
-
-          // Filter column definitions to only selected ones
-          const selectedDefs = columnDefs.filter((c) =>
+          const colsToCopy = columnDefs.filter((c) =>
             selectedColumns.has(c.key),
           );
-          if (selectedDefs.length === 0) {
+          if (!colsToCopy.length) {
             alert("Vui lòng chọn ít nhất một cột để sao chép.");
             return;
           }
-
-          // Header
-          const header = selectedDefs.map((c) => c.label).join("\t");
-          // Rows
-          const rows = currentRows.map((row) => {
-            return selectedDefs
+          const header = colsToCopy.map((c) => c.label).join("\t");
+          const rows = currentRows.map((row) =>
+            colsToCopy
               .map((col) => {
                 let val = row[col.key];
-                if (col.key === "created_at") val = formatCreatedAt(val);
+                if (col.key === "created_at") val = formatDate(val);
                 return val ?? "";
               })
-              .join("\t");
-          });
+              .join("\t"),
+          );
           const text = header + "\n" + rows.join("\n");
-
           navigator.clipboard
             .writeText(text)
             .then(() => {
-              const originalHTML = copyBtn.innerHTML;
-              copyBtn.innerHTML = "✅ Đã sao chép!";
+              showToast("✅ Đã sao chép vào clipboard!");
               copyBtn.disabled = true;
               setTimeout(() => {
-                copyBtn.innerHTML = originalHTML;
                 copyBtn.disabled = false;
               }, 2000);
             })
-            .catch((err) => {
-              alert("Không thể sao chép: " + err);
-            });
+            .catch(() => alert("Sao chép thất bại."));
+        }
+
+        function showToast(msg) {
+          const toast = document.createElement("div");
+          toast.className = "toast";
+          toast.textContent = msg;
+          document.body.appendChild(toast);
+          setTimeout(() => toast.remove(), 2500);
         }
 
         function resetFilters() {
-          dateEl.value = getTodayVNStr();
+          dateEl.value = todayStr();
           stationIdEl.value = "";
           eventTypeEl.value = "";
-          // Reset type groups to all selected
           selectedTypeGroups = new Set(allTypeGroups);
-          // Update checkboxes in dropdown
-          const checkboxes = typeGroupDropdown.querySelectorAll(
-            "input[type=checkbox]",
-          );
-          checkboxes.forEach((cb) => {
+          [
+            ...typeGroupDropdown.querySelectorAll("input[type=checkbox]"),
+          ].forEach((cb) => {
             cb.checked = true;
           });
-          updateTypeGroupDisplay();
+          updateTypeGroupUI();
           currentRows = [];
           renderTable([]);
         }
 
-        // ---- Event listeners ----
-        function bindEvents() {
-          // Multi-select display click
-          typeGroupDisplay.addEventListener("click", toggleDropdown);
-          // Close dropdown when clicking outside
+        function initEvents() {
+          typeGroupTrigger.addEventListener("click", toggleDropdown);
           document.addEventListener("click", (e) => {
-            if (!typeGroupMulti.contains(e.target)) {
-              closeDropdown();
-            }
+            if (!e.target.closest("#type-group-multi")) closeDropdown();
           });
-
           searchBtn.addEventListener("click", handleSearch);
           resetBtn.addEventListener("click", resetFilters);
-          copyBtn.addEventListener("click", copyToClipboard);
-
+          copyBtn.addEventListener("click", copySelectedColumns);
           stationIdEl.addEventListener("keypress", (e) => {
             if (e.key === "Enter") handleSearch();
           });
         }
 
-        // Init
         async function init() {
-          dateEl.value = getTodayVNStr();
-          renderColumnSelector(); // show column checkboxes
-          await loadFilterOptions(); // load type groups & event types
-          bindEvents();
-          // Default search
+          dateEl.value = todayStr();
+          selectedColumns = new Set(columnDefs.map((c) => c.key));
+          renderColumnSelector();
+          await loadFilterOptions();
+          initEvents();
           handleSearch();
         }
-
         init();
       })();
     </script>

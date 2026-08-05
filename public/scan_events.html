@@ -591,12 +591,14 @@
         }
 
         function renderTypeItems(filter = "") {
+          // Xóa item cũ
           const existingItems = typeList.querySelectorAll(".item");
           existingItems.forEach((el) => el.remove());
+
           allTypeGroups.forEach((tg) => {
             const li = document.createElement("li");
             li.className = "item";
-            // Set checked nếu trong selected mặc định
+            // Mặc định check nếu nằm trong danh sách ưu tiên
             if (["45k-NA", "450k-NA-COM"].includes(tg))
               li.classList.add("checked");
             li.innerHTML = `<span class="checkbox-custom"></span><span class="item-text">${tg}</span>`;
@@ -689,22 +691,32 @@
         }
 
         async function loadFilterOptions() {
+          // Lấy type_name từ bảng type_mappings
+          const typeMappingPromise = supabaseClient
+            .from("type_mappings")
+            .select("type_name")
+            .order("type_name");
+
+          // Lấy event_type từ scan_events
+          const eventTypePromise = supabaseClient
+            .from("scan_events")
+            .select("event_type")
+            .order("event_type");
+
           const [typeRes, eventRes] = await Promise.all([
-            supabaseClient
-              .from("scan_events")
-              .select("type_group")
-              .order("type_group"),
-            supabaseClient
-              .from("scan_events")
-              .select("event_type")
-              .order("event_type"),
+            typeMappingPromise,
+            eventTypePromise,
           ]);
+
           if (typeRes.data) {
             allTypeGroups = [
-              ...new Set(typeRes.data.map((d) => d.type_group).filter(Boolean)),
+              ...new Set(typeRes.data.map((d) => d.type_name).filter(Boolean)),
             ];
             renderTypeItems();
+          } else {
+            console.error("Failed to load type mappings:", typeRes.error);
           }
+
           if (eventRes.data && eventTypeEl) {
             const events = [
               ...new Set(

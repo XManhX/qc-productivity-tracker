@@ -44,7 +44,6 @@ export class StateManager {
   _initSessions() {
     chrome.storage.local.get(["activeSessions"], (result) => {
       if (result?.activeSessions && Array.isArray(result.activeSessions)) {
-        console.log('[StateManager] Dùng sessions từ storage:', result.activeSessions.length);
         this._onSessionsUpdate(result.activeSessions);
       }
       // Luôn request sessions mới nhất

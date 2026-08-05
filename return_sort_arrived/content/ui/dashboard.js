@@ -204,8 +204,8 @@ export class DashboardUI {
           btn.disabled = true;
           btn.innerHTML = '<span class="spinner"></span> Đang đóng...';
           Promise.all(
-            openSessions.map((s) =>
-              this.state.closeSession(s.id, s.type_group), // type_group đã là display_name
+            openSessions.map(
+              (s) => this.state.closeSession(s.id, s.type_group), // type_group đã là display_name
             ),
           ).finally(() => {
             btn.disabled = false;
@@ -260,9 +260,22 @@ export class DashboardUI {
 
   _filter(items) {
     if (!this._searchTerm) return items;
+    const term = this._searchTerm.toLowerCase();
     return items.filter((item) => {
-      const id = item.id || item.station_id || "";
-      return id.toLowerCase().includes(this._searchTerm);
+      // Các trường có thể chứa thông tin cần tìm
+      const searchableFields = [
+        item.id, // station_id với session (string "A","B",...)
+        item.station_id, // station_id với event (string "A","B",...)
+        item.type_group, // tên hiển thị (session/event)
+        item.return_tn, // mã vận đơn (active event)
+        item.displayType, // tên hiển thị (printed label)
+        item.toNumber, // TO number (printed label / closed session)
+        item.number, // số cuối TO (printed label)
+      ];
+      // Chỉ cần một field khớp là đủ
+      return searchableFields.some(
+        (field) => field != null && String(field).toLowerCase().includes(term),
+      );
     });
   }
 
@@ -443,7 +456,12 @@ export class DashboardUI {
     const threshold = session.threshold || 30;
     const count = session.item_count;
     const percent = Math.min(100, Math.round((count / threshold) * 100));
-    const statusClass = status === "full" ? "status-full" : status === "open" ? "status-open" : "status-closed";
+    const statusClass =
+      status === "full"
+        ? "status-full"
+        : status === "open"
+          ? "status-open"
+          : "status-closed";
     const color = STATION_COLORS[session.id] || "#94a3b8";
     const textColor = getTextColor(color);
     const timeStr = session.session_start
@@ -462,12 +480,16 @@ export class DashboardUI {
             </div>
           </div>
           <div class="card-actions">
-            ${(status === "open" || status === "full") && count > 0
-        ? `<button class="btn btn-close" data-action="close" data-id="${session.id}" data-type="${displayType}">Đóng</button>`
-        : ""}
-            ${status === "closed"
-        ? `<button class="btn btn-reprint" data-action="reprint-closed" data-id="${session.id}" data-type="${displayType}" data-to="${toNumber}" data-date="${timeStr}" data-number="${toNumber.split("-").pop() || ""}" data-qty="${count}">In lại</button>`
-        : ""}
+            ${
+              (status === "open" || status === "full") && count > 0
+                ? `<button class="btn btn-close" data-action="close" data-id="${session.id}" data-type="${displayType}">Đóng</button>`
+                : ""
+            }
+            ${
+              status === "closed"
+                ? `<button class="btn btn-reprint" data-action="reprint-closed" data-id="${session.id}" data-type="${displayType}" data-to="${toNumber}" data-date="${timeStr}" data-number="${toNumber.split("-").pop() || ""}" data-qty="${count}">In lại</button>`
+                : ""
+            }
           </div>
         </div>
         <div class="progress-row">
@@ -594,12 +616,28 @@ export class DashboardUI {
         btn.addEventListener("click", async (e) => {
           e.stopPropagation();
           if (btn.disabled) return;
-          const { to, type: displayType, id, date, number, email, qty } = btn.dataset;
+          const {
+            to,
+            type: displayType,
+            id,
+            date,
+            number,
+            email,
+            qty,
+          } = btn.dataset;
           btn.disabled = true;
           const originalHTML = btn.innerHTML;
           btn.innerHTML = '<span class="spinner"></span>';
           try {
-            await printLabel(to, displayType, id, date, number, email, parseInt(qty));
+            await printLabel(
+              to,
+              displayType,
+              id,
+              date,
+              number,
+              email,
+              parseInt(qty),
+            );
             if (id) this.state.markPrinted(id);
           } catch (err) {
             console.error("Reprint failed:", err);

@@ -1,13 +1,13 @@
 // content/stateManager.js – backend ưu tiên, chờ cả hai luồng, hỗ trợ fetch active scan events
 export class StateManager {
   constructor(masterData, email) {
-    this.masterData = masterData;
+    this.masterData = masterData; // map return_tn → type_name (gốc)
     this.email = email;
     this.apiBase = "https://return-sort-arrived.vercel.app/api/scan";
     this.ui = null;
     this.sessions = [];
-    this.typeToId = {};
-    this.typeToDisplay = {};
+    this.typeToId = {};          // type_name → station_id
+    this.typeToDisplay = {};     // type_name → display_name
     this._listeners = [];
     this._typeMappingReady = false;
     this._typeMappingPromise = null;
@@ -46,7 +46,6 @@ export class StateManager {
       if (result?.activeSessions && Array.isArray(result.activeSessions)) {
         this._onSessionsUpdate(result.activeSessions);
       }
-      // Luôn request sessions mới nhất
       this._requestSessions(0);
     });
   }
@@ -105,13 +104,16 @@ export class StateManager {
     await this._typeMappingPromise;
   }
 
-  getId(type) {
-    return this.typeToId[type] || null;
+  getId(typeName) {
+    return this.typeToId[typeName] || null;
   }
-  getDisplayName(type) {
-    return this.typeToDisplay[type] || type;
+
+  getDisplayName(typeName) {
+    return this.typeToDisplay[typeName] || typeName;
   }
-  getType(returnTn) {
+
+  // Trả về type_name gốc từ master data
+  getTypeName(returnTn) {
     if (!returnTn) return null;
     return this.masterData[returnTn.toUpperCase().replace(/\s+/g, "")] || null;
   }
@@ -181,11 +183,11 @@ export class StateManager {
       return null;
     }
 
-    const type = this.getType(sheetId);
-    const id = type ? this.getId(type) : null;
-    const displayType = type ? this.getDisplayName(type) : null;
+    const typeName = this.getTypeName(sheetId);          // type_name gốc
+    const displayType = typeName ? this.getDisplayName(typeName) : null; // display_name
+    const id = typeName ? this.getId(typeName) : null;
 
-    if (type) {
+    if (typeName) {
       const session = id ? this.sessions.find((s) => s.id === id) : null;
       this.ui.showDetected(sheetId, displayType, id, session, "processing");
       const utterance = new SpeechSynthesisUtterance(id || "không xác định");
@@ -210,7 +212,7 @@ export class StateManager {
     const incrementPromise = this._callApi("increment", {
       id,
       return_tn: sheetId,
-      type,
+      type_group: displayType,   // gửi display_name thay vì type_name
       email: this.email,
     })
       .then(async (data) => {
@@ -289,7 +291,7 @@ export class StateManager {
         : null;
 
       if (newCount > 0 && lastReturnTn) {
-        const displayType = this.getDisplayName(updatedSession.type_group);
+        const displayType = updatedSession.type_group; // đã là display_name
         this.ui.showSuccess(lastReturnTn, displayType, id, {
           item_count: newCount,
           status: updatedSession.status,
@@ -302,13 +304,13 @@ export class StateManager {
     }
   }
 
-  async closeSession(id, type) {
+  async closeSession(id, displayType) {
     try {
       const data = await this._callApi("close", { id, email: this.email });
       const freshSessions = await this._fetchSessions();
       this._onSessionsUpdate(freshSessions);
       if (data.success)
-        this.ui.printAndClose(id, type, data.to_number, data.item_count);
+        this.ui.printAndClose(id, displayType, data.to_number, data.item_count);
       else this.ui.showError(data.error);
     } catch (e) {
       this.ui.showError("Lỗi kết nối");
@@ -325,7 +327,7 @@ export class StateManager {
     if (!this.ui) return;
     const session = this.sessions.find((s) => s.id === id);
     if (session) {
-      const displayType = this.getDisplayName(session.type_group);
+      const displayType = session.type_group; // đã là display_name
       const returnTn = session.last_return_tn || `ID ${id}`;
       this.ui.showDetected(returnTn, displayType, id, session);
     }

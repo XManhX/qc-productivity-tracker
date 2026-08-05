@@ -205,7 +205,7 @@ export class DashboardUI {
           btn.innerHTML = '<span class="spinner"></span> Đang đóng...';
           Promise.all(
             openSessions.map((s) =>
-              this.state.closeSession(s.id, s.type_group),
+              this.state.closeSession(s.id, s.type_group), // type_group đã là display_name
             ),
           ).finally(() => {
             btn.disabled = false;
@@ -227,7 +227,6 @@ export class DashboardUI {
     this._sessions = sessions;
     this._fetchClosedCount();
     this._fetchActiveEventsCount();
-    // Khi có realtime, reset về trang 1 cho tab đã đóng và active events
     if (this._activeTab === "closed") {
       this._closedPage = 1;
       this._hasMoreClosed = true;
@@ -332,13 +331,11 @@ export class DashboardUI {
     const sessions = await this._fetchClosedSessions(this._closedPage);
     const filtered = this._filter(sessions);
 
-    // Trang đầu không có dữ liệu
     if (filtered.length === 0 && this._closedPage === 1) {
       this._hasMoreClosed = false;
       return '<div class="no-data"><div class="no-data-icon">📦</div><div class="no-data-text">Không có TO nào đã đóng</div></div>';
     }
 
-    // Trang > 1 mà không có dữ liệu → đã hết
     if (filtered.length === 0 && this._closedPage > 1) {
       this._hasMoreClosed = false;
       return '<div class="end-of-list">Đã tải hết</div>';
@@ -346,12 +343,10 @@ export class DashboardUI {
 
     let html = filtered.map((s) => this._renderCard(s)).join("");
 
-    // Nếu số bản ghi trả về ít hơn limit → đánh dấu hết
     if (sessions.length < 20) {
       this._hasMoreClosed = false;
     }
 
-    // Hiển thị nút "Tải thêm" hoặc "Đã tải hết"
     if (this._hasMoreClosed) {
       html +=
         '<button id="load-more-closed" class="btn-action" style="width:100%; margin-top:8px;">Tải thêm</button>';
@@ -390,13 +385,11 @@ export class DashboardUI {
     );
     const filtered = this._filter(events);
 
-    // Trang đầu không có dữ liệu
     if (filtered.length === 0 && this._activeEventsPage === 1) {
       this._hasMoreActiveEvents = false;
       return '<div class="no-data"><div class="no-data-icon">📋</div><div class="no-data-text">Không có đơn nào đang active</div></div>';
     }
 
-    // Trang > 1 mà không có dữ liệu → đã hết
     if (filtered.length === 0 && this._activeEventsPage > 1) {
       this._hasMoreActiveEvents = false;
       return '<div class="end-of-list">Đã tải hết</div>';
@@ -418,7 +411,8 @@ export class DashboardUI {
   }
 
   _renderActiveEventCard(event) {
-    const displayType = this.state.getDisplayName(event.type_group) || event.type_group || "";
+    // event.type_group đã là display_name
+    const displayType = event.type_group || "";
     const color = STATION_COLORS[event.station_id] || "#94a3b8";
     const textColor = getTextColor(color);
     const timeStr = event.created_at
@@ -445,7 +439,8 @@ export class DashboardUI {
   }
 
   _renderCard(session) {
-    const displayType = this.state.getDisplayName(session.type_group) || session.type_group || "";
+    // session.type_group đã là display_name, dùng trực tiếp
+    const displayType = session.type_group || "";
     const status = session.status;
     const threshold = session.threshold || 30;
     const count = session.item_count;
@@ -488,7 +483,6 @@ export class DashboardUI {
   }
 
   _renderCardFromLabel(label) {
-    // label.type đã là display_name khi lưu từ printAndClose, không cần đổi
     const displayType = label.type || "";
     const color = STATION_COLORS[label.id] || "#3b82f6";
     const textColor = getTextColor(color);
@@ -517,7 +511,6 @@ export class DashboardUI {
     const contentArea = this.shadowRoot.getElementById("content-area");
     if (!contentArea) return;
 
-    // Nút Đóng kiện trong tab "Đang mở"
     contentArea
       .querySelectorAll('.btn-close[data-action="close"]')
       .forEach((btn) => {
@@ -525,7 +518,7 @@ export class DashboardUI {
           e.stopPropagation();
           if (btn.disabled) return;
           const id = btn.dataset.id;
-          const type = btn.dataset.type;
+          const type = btn.dataset.type; // đã là display_name
           if (confirm(`Đóng kiện ID ${id}?`)) {
             btn.disabled = true;
             const originalHTML = btn.innerHTML;
@@ -538,7 +531,6 @@ export class DashboardUI {
         });
       });
 
-    // Nút Hủy trong tab "Đơn active"
     contentArea
       .querySelectorAll('.btn-close[data-action="cancel-event"]')
       .forEach((btn) => {
@@ -568,7 +560,6 @@ export class DashboardUI {
         });
       });
 
-    // Nút In lại trong tab "Đã đóng"
     contentArea
       .querySelectorAll('.btn-reprint[data-action="reprint-closed"]')
       .forEach((btn) => {
@@ -599,7 +590,6 @@ export class DashboardUI {
         });
       });
 
-    // Nút In lại trong tab "In lại"
     contentArea
       .querySelectorAll('.btn-reprint[data-action="reprint-label"]')
       .forEach((btn) => {
@@ -622,7 +612,6 @@ export class DashboardUI {
         });
       });
 
-    // Nút "Tải thêm" cho tab "Đã đóng"
     const loadMoreClosedBtn =
       this.shadowRoot.getElementById("load-more-closed");
     if (loadMoreClosedBtn) {
@@ -646,7 +635,6 @@ export class DashboardUI {
       });
     }
 
-    // Nút "Tải thêm" cho tab "Đơn active"
     const loadMoreActiveBtn = this.shadowRoot.getElementById(
       "load-more-active-events",
     );

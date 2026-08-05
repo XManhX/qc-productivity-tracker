@@ -74,14 +74,14 @@ async function broadcastSessions() {
   const { data, error } = await supabaseClient.rpc("get_active_sessions");
   if (error || !data) return;
 
-  chrome.storage.local.set({ activeSessions: data }).catch(() => {});
+  chrome.storage.local.set({ activeSessions: data }).catch(() => { });
 
   const tabs = await chrome.tabs.query({ url: "*://wms.ssc.shopee.vn/*" });
   for (const tab of tabs) {
     if (tab.id) {
       chrome.tabs
         .sendMessage(tab.id, { action: "UPDATE_SESSIONS", sessions: data })
-        .catch(() => {});
+        .catch(() => { });
     }
   }
 }

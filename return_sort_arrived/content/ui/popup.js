@@ -400,7 +400,6 @@ export class UIManager {
       this._toggleView();
     });
 
-    // Nút refresh Master Data
     const refreshMaster = this.shadowRoot.getElementById("btn-refresh-master");
     refreshMaster.addEventListener("click", async () => {
       if (refreshMaster.disabled) return;
@@ -418,7 +417,6 @@ export class UIManager {
       }
     });
 
-    // Nút refresh Type Mapping
     const refreshMapping = this.shadowRoot.getElementById(
       "btn-refresh-mapping",
     );
@@ -529,12 +527,11 @@ export class UIManager {
         const percent = Math.min(100, Math.round((count / threshold) * 100));
         const bgColor = STATION_COLORS[s.id] || "#607D8B";
         const textColor = getTextColor(bgColor);
-        const displayType =
-          this.state.getDisplayName(s.type_group) ||
-          (s.type_group || "").substring(0, 12);
-        html += `<div class="badge-card" style="background:${bgColor}; color:${textColor};" title="ID ${s.id}: ${s.type_group} – ${count}/${threshold}" data-id="${s.id}">
+        // s.type_group đã là display_name, dùng trực tiếp
+        const displayType = s.type_group || "";
+        html += `<div class="badge-card" style="background:${bgColor}; color:${textColor};" title="ID ${s.id}: ${displayType} – ${count}/${threshold}" data-id="${s.id}">
           <div class="badge-id">${s.id}</div>
-          <div class="badge-type" title="${s.type_group}">${displayType || "-"}</div>
+          <div class="badge-type" title="${displayType}">${displayType || "-"}</div>
           <div class="badge-count">${count}/${threshold}</div>
           <div class="badge-bar"><div class="badge-fill" style="width:${percent}%"></div></div>
         </div>`;
@@ -558,7 +555,6 @@ export class UIManager {
   }
 
   updateTop5(sessions) {
-    // this.state.sessions = sessions;
     if (this.shadowRoot && this._viewMode === "arrival") this._updateTop5();
   }
 
@@ -587,7 +583,6 @@ export class UIManager {
     const errorInfo = this.shadowRoot.getElementById("error-info");
     const undoBtn = this.shadowRoot.getElementById("btn-undo");
 
-    // Ẩn tất cả trước khi render
     if (idBox) {
       idBox.style.display = "none";
       idBox.classList.remove("unknown");
@@ -603,12 +598,11 @@ export class UIManager {
     const canOperate =
       !processing && !closed && !error && count > 0 && id && !isUnknown;
 
-    // Nút hủy (góc trên phải)
     if (undoBtn) {
       const canUndo = canOperate || (error && id && count > 0);
       undoBtn.style.display = canUndo ? "flex" : "none";
       if (canUndo) {
-        undoBtn.disabled = false; // reset trạng thái
+        undoBtn.disabled = false;
         undoBtn.onclick = (e) => {
           if (undoBtn.disabled) return;
           undoBtn.disabled = true;
@@ -627,7 +621,6 @@ export class UIManager {
       }
     }
 
-    // ---- Xác định màu nền của card dựa trên trạng thái ----
     if (card) {
       if (processing) {
         card.style.background = "#f5f5f5";
@@ -643,7 +636,6 @@ export class UIManager {
       }
     }
 
-    // ---- Xử lý chế độ ERROR ----
     if (error) {
       if (idBox) {
         if (isUnknown) {
@@ -687,7 +679,6 @@ export class UIManager {
       return;
     }
 
-    // ---- Xử lý chế độ PROCESSING (đang chờ kết quả) ----
     if (processing) {
       if (idBox) {
         if (isUnknown) {
@@ -732,14 +723,12 @@ export class UIManager {
       return;
     }
 
-    // ---- Xử lý chế độ NORMAL (thành công hoặc trạng thái bình thường) ----
     if (idBox) idBox.style.display = "inline-block";
     if (typeEl) typeEl.style.display = "block";
     if (returnTnEl) returnTnEl.style.display = "block";
     if (progressBar) progressBar.style.display = "block";
     if (countEl) countEl.style.display = "block";
 
-    // ID box
     if (idBox) {
       if (isUnknown) {
         idBox.style.background = "";
@@ -755,11 +744,9 @@ export class UIManager {
       }
     }
 
-    // Type & Return TN
     if (typeEl) typeEl.textContent = type || "--";
     if (returnTnEl) returnTnEl.textContent = return_tn || "----";
 
-    // Progress bar
     const percent =
       count !== undefined && threshold
         ? Math.min(100, Math.round((count / threshold) * 100))
@@ -770,13 +757,11 @@ export class UIManager {
         id && !isUnknown && STATION_COLORS[id] ? STATION_COLORS[id] : "#cbd5e1";
     }
 
-    // Count text
     if (countEl) {
       countEl.textContent =
         count !== undefined ? `${count}/${threshold || 30}` : `∞/∞`;
     }
 
-    // Buttons
     if (canOperate && btnContainer) {
       if (isFull) {
         btnContainer.innerHTML = `<button class="btn btn-close" id="btn-close">Xác nhận đóng kiện (đầy)</button>`;
@@ -814,7 +799,6 @@ export class UIManager {
       btnContainer.innerHTML = "";
     }
 
-    // Animation
     if (card) {
       if (animate) {
         card.classList.add("animate");
@@ -829,7 +813,6 @@ export class UIManager {
     }
   }
 
-  // Khi status === 'processing', hiển thị màu xám
   showDetected(return_tn, type, id, session, status = "detected") {
     this.currentId = id || "";
     this._updateCard({
@@ -902,15 +885,14 @@ export class UIManager {
 
   showScanError({ return_tn, type, id, reason, detail }) {
     this.currentId = id || "";
-    // Chọn âm thanh dựa vào reason
     if (reason.includes("Không có trong master data")) {
       this.audio.playNotFound();
     } else if (reason.includes("Lỗi ánh xạ")) {
       this.audio.playMappingError();
     } else if (reason.includes("Sai tuyến")) {
-      this.audio.playMappingError(); // hoặc âm riêng
+      this.audio.playMappingError();
     } else {
-      this.audio.playError(); // Lỗi server, mạng
+      this.audio.playError();
     }
 
     this._updateCard({

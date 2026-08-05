@@ -118,7 +118,7 @@ else window.addEventListener("load", connectKeepAlive);
         if (match) email = match[0];
         localStorage.setItem("useremail", email);
       }
-    } catch (e) {}
+    } catch (e) { }
 
     const stateManager = new StateManager(masterData, email);
 

@@ -178,8 +178,7 @@
       .arrow {
         width: 22px;
         height: 22px;
-        background: var(--primary);
-        color: white;
+        color: black;
         border-radius: 50%;
         display: flex;
         align-items: center;
@@ -712,8 +711,7 @@
           allTypeGroups.forEach((tg) => {
             const li = document.createElement("li");
             li.className = "item";
-            if (["45K-NA", "450K-NA-COM"].includes(tg))
-              li.classList.add("checked");
+            if (["450K-NA"].includes(tg)) li.classList.add("checked");
             li.innerHTML = `<span class="checkbox-custom"></span><span class="item-text">${tg}</span>`;
             li.addEventListener("click", () => {
               li.classList.toggle("checked");

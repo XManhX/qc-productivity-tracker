@@ -858,8 +858,7 @@
             const li = document.createElement("li");
             li.className = "item";
             li.tabIndex = 0;
-            if (["45k-NA", "450k-NA-COM"].includes(tg))
-              li.classList.add("checked");
+            if (["450K-NA"].includes(tg)) li.classList.add("checked");
             li.innerHTML = `<span class="checkbox-custom"></span><span class="item-text">${tg}</span>`;
             li.addEventListener("click", () => {
               li.classList.toggle("checked");

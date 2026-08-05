@@ -5,31 +5,24 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Scan Events – Trích xuất dữ liệu quét hàng</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <!-- Slim Select CSS + JS -->
-    <link
-      rel="stylesheet"
-      href="https://cdn.jsdelivr.net/npm/slim-select@2.8.2/dist/slimselect.min.css"
-    />
-    <script src="https://cdn.jsdelivr.net/npm/slim-select@2.8.2/dist/slimselect.min.js"></script>
     <style>
       :root {
-        --color-primary: #2563eb;
-        --color-primary-hover: #1d4ed8;
-        --color-success: #10b981;
-        --color-success-hover: #059669;
-        --color-bg: #f1f5f9;
-        --color-surface: #ffffff;
-        --color-border: #e2e8f0;
-        --color-text: #1e293b;
-        --color-text-secondary: #64748b;
-        --color-text-muted: #94a3b8;
+        --primary: #2563eb;
+        --primary-hover: #1d4ed8;
+        --success: #10b981;
+        --success-hover: #059669;
+        --bg: #f1f5f9;
+        --surface: #ffffff;
+        --border: #e2e8f0;
+        --text: #1e293b;
+        --text-secondary: #64748b;
+        --text-muted: #94a3b8;
         --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
         --shadow-md:
           0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
         --radius-lg: 1rem;
         --radius-md: 0.5rem;
-        --font-sans: "Inter", system-ui, -apple-system, sans-serif;
-        --transition-fast: 150ms ease;
+        --font: "Inter", system-ui, -apple-system, sans-serif;
       }
       * {
         margin: 0;
@@ -37,16 +30,16 @@
         box-sizing: border-box;
       }
       body {
-        font-family: var(--font-sans);
-        background: var(--color-bg);
-        color: var(--color-text);
+        font-family: var(--font);
+        background: var(--bg);
+        color: var(--text);
         padding: 2rem;
         min-height: 100vh;
       }
       .app-container {
         max-width: 1440px;
         margin: 0 auto;
-        background: var(--color-surface);
+        background: var(--surface);
         border-radius: var(--radius-lg);
         box-shadow: var(--shadow-md);
         overflow: hidden;
@@ -72,8 +65,8 @@
         color: #94a3b8;
       }
       .filters-card {
-        background: var(--color-bg);
-        border-bottom: 1px solid var(--color-border);
+        background: var(--bg);
+        border-bottom: 1px solid var(--border);
         padding: 1.5rem 2rem;
         display: flex;
         flex-wrap: wrap;
@@ -90,12 +83,12 @@
         font-weight: 600;
         text-transform: uppercase;
         letter-spacing: 0.05em;
-        color: var(--color-text-secondary);
+        color: var(--text-secondary);
       }
       .filter-group input,
       .filter-group select {
         padding: 0.5rem 0.75rem;
-        border: 1px solid var(--color-border);
+        border: 1px solid var(--border);
         border-radius: var(--radius-md);
         font-size: 0.875rem;
         background: white;
@@ -107,38 +100,158 @@
       .filter-group input:focus,
       .filter-group select:focus {
         outline: none;
-        border-color: var(--color-primary);
+        border-color: var(--primary);
         box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.2);
       }
 
-      /* Tùy chỉnh Slim Select cho đồng bộ giao diện */
-      .ss-main {
+      /* Custom multi-select */
+      .multi-select {
+        position: relative;
+        min-width: 250px;
+      }
+      .select-btn {
+        display: flex;
+        height: 40px;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 12px;
+        border: 1px solid var(--border);
         border-radius: var(--radius-md);
-        border-color: var(--color-border);
+        cursor: pointer;
+        background-color: #fff;
+        transition:
+          border-color 0.2s,
+          box-shadow 0.2s;
+        user-select: none;
       }
-      .ss-main .ss-multi-selected .ss-values .ss-value {
-        background: var(--color-primary);
-        color: white;
-        border-radius: 12px;
-        font-size: 0.75rem;
+      .select-btn:hover {
+        border-color: #94a3b8;
       }
-      .ss-main .ss-multi-selected .ss-values .ss-value .ss-value-delete {
-        background: none;
-        color: rgba(255, 255, 255, 0.8);
-      }
-      .ss-main:focus {
-        border-color: var(--color-primary);
+      .multi-select.open .select-btn {
+        border-color: var(--primary);
         box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.2);
       }
-      .ss-content {
-        border-radius: var(--radius-md);
-        border-color: var(--color-border);
+      .btn-text {
+        font-size: 0.875rem;
+        color: var(--text);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 180px;
       }
-      .ss-content .ss-list .ss-option:hover {
+      .btn-text.placeholder {
+        color: var(--text-muted);
+      }
+      .arrow {
+        width: 22px;
+        height: 22px;
+        background: var(--primary);
+        color: white;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 12px;
+        transition: transform 0.2s;
+      }
+      .multi-select.open .arrow {
+        transform: rotate(180deg);
+      }
+      .dropdown {
+        position: absolute;
+        top: calc(100% + 4px);
+        left: 0;
+        right: 0;
+        background: white;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-md);
+        box-shadow: var(--shadow-md);
+        z-index: 100;
+        max-height: 280px;
+        overflow: hidden;
+        display: none;
+        flex-direction: column;
+      }
+      .multi-select.open .dropdown {
+        display: flex;
+      }
+      .dropdown-search {
+        padding: 8px;
+        border-bottom: 1px solid var(--border);
+      }
+      .dropdown-search input {
+        width: 100%;
+        padding: 6px 8px;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        font-size: 0.8rem;
+      }
+      .dropdown-actions {
+        display: flex;
+        justify-content: space-between;
+        padding: 4px 8px;
+        border-bottom: 1px solid var(--border);
+        background: #f8fafc;
+      }
+      .dropdown-actions button {
+        background: none;
+        border: none;
+        color: var(--primary);
+        font-size: 0.8rem;
+        font-weight: 500;
+        cursor: pointer;
+      }
+      .list-items {
+        list-style: none;
+        overflow-y: auto;
+        max-height: 200px;
+        padding: 4px;
+      }
+      .list-items .item {
+        display: flex;
+        align-items: center;
+        padding: 6px 8px;
+        border-radius: 6px;
+        cursor: pointer;
+        transition: background 0.1s;
+        font-size: 0.85rem;
+      }
+      .list-items .item:hover {
         background: #f1f5f9;
       }
-      .ss-content .ss-list .ss-option.ss-highlighted {
-        background: #eef2ff;
+      .list-items .item.hidden {
+        display: none;
+      }
+      .checkbox-custom {
+        width: 18px;
+        height: 18px;
+        border: 2px solid #c0c0c0;
+        border-radius: 4px;
+        margin-right: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+        transition: all 0.2s;
+      }
+      .item.checked .checkbox-custom {
+        background: var(--primary);
+        border-color: var(--primary);
+      }
+      .checkbox-custom::after {
+        content: "✔";
+        color: white;
+        font-size: 12px;
+        opacity: 0;
+        transform: scale(0);
+        transition: 0.1s;
+      }
+      .item.checked .checkbox-custom::after {
+        opacity: 1;
+        transform: scale(1);
+      }
+      .item-text {
+        color: var(--text);
       }
 
       .btn {
@@ -155,11 +268,11 @@
         white-space: nowrap;
       }
       .btn-primary {
-        background: var(--color-primary);
+        background: var(--primary);
         color: white;
       }
       .btn-primary:hover {
-        background: var(--color-primary-hover);
+        background: var(--primary-hover);
       }
       .btn-secondary {
         background: #e2e8f0;
@@ -169,11 +282,11 @@
         background: #cbd5e1;
       }
       .btn-success {
-        background: var(--color-success);
+        background: var(--success);
         color: white;
       }
       .btn-success:hover {
-        background: var(--color-success-hover);
+        background: var(--success-hover);
       }
       .btn:disabled {
         opacity: 0.6;
@@ -182,7 +295,7 @@
       .column-selector-bar {
         padding: 0.75rem 2rem;
         background: #f8fafc;
-        border-bottom: 1px solid var(--color-border);
+        border-bottom: 1px solid var(--border);
         display: flex;
         align-items: center;
         flex-wrap: wrap;
@@ -191,7 +304,7 @@
       .column-selector-bar .label {
         font-size: 0.8rem;
         font-weight: 600;
-        color: var(--color-text-secondary);
+        color: var(--text-secondary);
       }
       .column-chip {
         display: inline-flex;
@@ -199,7 +312,7 @@
         gap: 0.25rem;
         padding: 0.25rem 0.75rem;
         background: white;
-        border: 1px solid var(--color-border);
+        border: 1px solid var(--border);
         border-radius: 20px;
         font-size: 0.8rem;
         cursor: pointer;
@@ -207,9 +320,9 @@
         user-select: none;
       }
       .column-chip.active {
-        background: var(--color-primary);
+        background: var(--primary);
         color: white;
-        border-color: var(--color-primary);
+        border-color: var(--primary);
       }
       .column-chip:hover:not(.active) {
         border-color: #94a3b8;
@@ -228,8 +341,8 @@
         padding: 0.75rem 1rem;
         text-align: left;
         font-weight: 600;
-        color: var(--color-text-secondary);
-        border-bottom: 2px solid var(--color-border);
+        color: var(--text-secondary);
+        border-bottom: 2px solid var(--border);
         white-space: nowrap;
       }
       td {
@@ -244,7 +357,7 @@
       .status-bar {
         padding: 1rem 2rem;
         background: #f8fafc;
-        border-top: 1px solid var(--color-border);
+        border-top: 1px solid var(--border);
         display: flex;
         align-items: center;
         justify-content: space-between;
@@ -261,7 +374,7 @@
         justify-content: center;
         z-index: 20;
         font-weight: 500;
-        color: var(--color-text-secondary);
+        color: var(--text-secondary);
       }
       .relative {
         position: relative;
@@ -304,9 +417,28 @@
           <label>Ngày</label>
           <input type="date" id="filter-date" />
         </div>
-        <div class="filter-group" style="min-width: 250px">
+        <div class="filter-group">
           <label>Loại hàng</label>
-          <select id="type-group-select" multiple></select>
+          <div class="multi-select" id="type-group-multi">
+            <div class="select-btn" tabindex="0" role="button">
+              <span class="btn-text placeholder">Tất cả</span>
+              <span class="arrow">▼</span>
+            </div>
+            <div class="dropdown">
+              <div class="dropdown-search">
+                <input
+                  type="text"
+                  placeholder="Tìm loại hàng..."
+                  id="type-search"
+                />
+              </div>
+              <div class="dropdown-actions">
+                <button type="button" id="select-all">Chọn tất cả</button>
+                <button type="button" id="deselect-all">Bỏ chọn</button>
+              </div>
+              <ul class="list-items" id="type-list"></ul>
+            </div>
+          </div>
         </div>
         <div class="filter-group">
           <label>ID Trạm</label>
@@ -352,7 +484,7 @@
                   style="
                     text-align: center;
                     padding: 3rem;
-                    color: var(--color-text-muted);
+                    color: var(--text-muted);
                   "
                 >
                   Chưa có dữ liệu. Nhấn <strong>Tìm kiếm</strong> để bắt đầu.
@@ -367,8 +499,8 @@
       </div>
 
       <div class="status-bar">
-        <span id="result-count" class="copy-info"></span>
-        <span style="color: var(--color-text-muted); font-size: 0.875rem"
+        <span id="result-count"></span>
+        <span style="color: var(--text-muted); font-size: 0.875rem"
           >Mẹo: Ctrl+V trực tiếp vào Google Sheets</span
         >
       </div>
@@ -386,7 +518,14 @@
 
         // DOM elements
         const dateEl = document.getElementById("filter-date");
-        const typeGroupSelect = document.getElementById("type-group-select");
+        const multiSelectContainer =
+          document.getElementById("type-group-multi");
+        const selectBtn = multiSelectContainer.querySelector(".select-btn");
+        const btnText = selectBtn.querySelector(".btn-text");
+        const typeList = document.getElementById("type-list");
+        const typeSearch = document.getElementById("type-search");
+        const selectAllBtn = document.getElementById("select-all");
+        const deselectAllBtn = document.getElementById("deselect-all");
         const stationIdEl = document.getElementById("station-id");
         const eventTypeEl = document.getElementById("event-type");
         const searchBtn = document.getElementById("search-btn");
@@ -399,7 +538,6 @@
 
         let currentRows = [];
         let allTypeGroups = [];
-        let slimInstance = null;
         let selectedColumns = new Set();
 
         const columnDefs = [
@@ -421,33 +559,116 @@
             .toISOString()
             .slice(0, 10);
 
-        // Khởi tạo Slim Select với dữ liệu
-        function initSlimSelect() {
-          typeGroupSelect.innerHTML = "";
-          allTypeGroups.forEach((tg) => {
-            const opt = document.createElement("option");
-            opt.value = tg;
-            opt.textContent = tg;
-            typeGroupSelect.appendChild(opt);
-          });
-          // Nếu đã có instance cũ thì hủy
-          if (slimInstance) slimInstance.destroy();
-          slimInstance = new SlimSelect({
-            select: typeGroupSelect,
-            settings: {
-              placeholderText: "Tất cả",
-              searchPlaceholder: "Tìm loại hàng...",
-              allowDeselect: true,
-              closeOnSelect: false,
-            },
-          });
-          // Đặt giá trị mặc định
-          slimInstance.set(["45k-NA", "450k-NA-COM"]);
+        // Multi-select logic
+        function updateBtnText() {
+          const checkedItems = typeList.querySelectorAll(".item.checked");
+          if (
+            checkedItems.length === 0 ||
+            checkedItems.length === allTypeGroups.length
+          ) {
+            btnText.textContent = "Tất cả";
+            btnText.classList.add("placeholder");
+          } else if (checkedItems.length <= 2) {
+            btnText.textContent = [...checkedItems]
+              .map((el) => el.querySelector(".item-text").textContent)
+              .join(", ");
+            btnText.classList.remove("placeholder");
+          } else {
+            btnText.textContent = `${checkedItems.length} đã chọn`;
+            btnText.classList.remove("placeholder");
+          }
         }
 
-        // Render cột sao chép
+        function toggleDropdown() {
+          multiSelectContainer.classList.toggle("open");
+          if (multiSelectContainer.classList.contains("open")) {
+            typeSearch.focus();
+          }
+        }
+
+        function closeDropdown() {
+          multiSelectContainer.classList.remove("open");
+        }
+
+        function renderTypeItems(filter = "") {
+          const existingItems = typeList.querySelectorAll(".item");
+          existingItems.forEach((el) => el.remove());
+          allTypeGroups.forEach((tg) => {
+            const li = document.createElement("li");
+            li.className = "item";
+            // Set checked nếu trong selected mặc định
+            if (["45k-NA", "450k-NA-COM"].includes(tg))
+              li.classList.add("checked");
+            li.innerHTML = `<span class="checkbox-custom"></span><span class="item-text">${tg}</span>`;
+            li.addEventListener("click", () => {
+              li.classList.toggle("checked");
+              updateBtnText();
+            });
+            if (filter && !tg.toLowerCase().includes(filter.toLowerCase())) {
+              li.classList.add("hidden");
+            }
+            typeList.appendChild(li);
+          });
+          updateBtnText();
+        }
+
+        // Search trong dropdown
+        typeSearch.addEventListener("input", (e) => {
+          const filter = e.target.value;
+          const items = typeList.querySelectorAll(".item");
+          items.forEach((item) => {
+            const text = item
+              .querySelector(".item-text")
+              .textContent.toLowerCase();
+            if (text.includes(filter.toLowerCase())) {
+              item.classList.remove("hidden");
+            } else {
+              item.classList.add("hidden");
+            }
+          });
+        });
+
+        // Chọn tất cả
+        selectAllBtn.addEventListener("click", () => {
+          typeList
+            .querySelectorAll(".item")
+            .forEach((item) => item.classList.add("checked"));
+          updateBtnText();
+        });
+        // Bỏ chọn tất cả
+        deselectAllBtn.addEventListener("click", () => {
+          typeList
+            .querySelectorAll(".item")
+            .forEach((item) => item.classList.remove("checked"));
+          updateBtnText();
+        });
+
+        // Toggle dropdown
+        selectBtn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          toggleDropdown();
+        });
+        // Đóng dropdown khi click bên ngoài
+        document.addEventListener("click", (e) => {
+          if (!multiSelectContainer.contains(e.target)) closeDropdown();
+        });
+        // Keyboard support
+        selectBtn.addEventListener("keydown", (e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            toggleDropdown();
+          }
+        });
+
+        // Lấy danh sách type_group đã chọn
+        function getSelectedTypeGroups() {
+          return [...typeList.querySelectorAll(".item.checked")].map(
+            (el) => el.querySelector(".item-text").textContent,
+          );
+        }
+
+        // Column selector
         function renderColumnSelector() {
-          if (!columnSelector) return;
           columnSelector.innerHTML = '<span class="label">Cột sao chép:</span>';
           columnDefs.forEach((col) => {
             const chip = document.createElement("span");
@@ -482,7 +703,7 @@
             allTypeGroups = [
               ...new Set(typeRes.data.map((d) => d.type_group).filter(Boolean)),
             ];
-            initSlimSelect();
+            renderTypeItems();
           }
           if (eventRes.data && eventTypeEl) {
             const events = [
@@ -493,7 +714,6 @@
             eventTypeEl.innerHTML =
               '<option value="">Tất cả</option>' +
               events.map((e) => `<option value="${e}">${e}</option>`).join("");
-            // Mặc định chọn "open" nếu tồn tại
             if (events.includes("open")) eventTypeEl.value = "open";
           }
         }
@@ -502,8 +722,7 @@
           const date = dateEl?.value;
           const station = stationIdEl?.value.trim();
           const evType = eventTypeEl?.value;
-          const selected = slimInstance?.getSelected() || [];
-          const typeArr = selected.map((s) => s.value);
+          const typeArr = getSelectedTypeGroups();
 
           let q = supabaseClient
             .from("scan_events")
@@ -528,11 +747,10 @@
 
         function renderTable(rows) {
           currentRows = rows;
-          if (!tableBody) return;
           if (!rows.length) {
-            tableBody.innerHTML = `<tr><td colspan="9" style="text-align:center; padding:3rem; color:var(--color-text-muted);">Không tìm thấy dữ liệu phù hợp.</td></tr>`;
-            if (copyBtn) copyBtn.disabled = true;
-            if (resultCount) resultCount.textContent = "";
+            tableBody.innerHTML = `<tr><td colspan="9" style="text-align:center; padding:3rem; color:var(--text-muted);">Không tìm thấy dữ liệu phù hợp.</td></tr>`;
+            copyBtn.disabled = true;
+            resultCount.textContent = "";
             return;
           }
           tableBody.innerHTML = rows
@@ -546,22 +764,20 @@
           </tr>`,
             )
             .join("");
-          if (copyBtn) copyBtn.disabled = false;
-          if (resultCount)
-            resultCount.textContent = `Tìm thấy ${rows.length} bản ghi.`;
+          copyBtn.disabled = false;
+          resultCount.textContent = `Tìm thấy ${rows.length} bản ghi.`;
         }
 
         async function handleSearch() {
-          if (loadingOverlay) loadingOverlay.style.display = "flex";
+          loadingOverlay.style.display = "flex";
           try {
             renderTable(await fetchData());
           } catch (err) {
-            if (tableBody)
-              tableBody.innerHTML = `<tr><td colspan="9" style="text-align:center; padding:2rem; color:#ef4444;">Lỗi: ${err.message}</td></tr>`;
-            if (copyBtn) copyBtn.disabled = true;
-            if (resultCount) resultCount.textContent = "";
+            tableBody.innerHTML = `<tr><td colspan="9" style="text-align:center; padding:2rem; color:#ef4444;">Lỗi: ${err.message}</td></tr>`;
+            copyBtn.disabled = true;
+            resultCount.textContent = "";
           } finally {
-            if (loadingOverlay) loadingOverlay.style.display = "none";
+            loadingOverlay.style.display = "none";
           }
         }
 
@@ -588,12 +804,10 @@
             .writeText(header + "\n" + rows.join("\n"))
             .then(() => {
               showToast("✅ Đã sao chép!");
-              if (copyBtn) {
-                copyBtn.disabled = true;
-                setTimeout(() => {
-                  if (copyBtn) copyBtn.disabled = false;
-                }, 2000);
-              }
+              copyBtn.disabled = true;
+              setTimeout(() => {
+                copyBtn.disabled = false;
+              }, 2000);
             })
             .catch(() => alert("Sao chép thất bại."));
         }
@@ -607,25 +821,31 @@
         }
 
         function resetFilters() {
-          if (dateEl) dateEl.value = todayStr();
-          if (stationIdEl) stationIdEl.value = "";
-          if (eventTypeEl) eventTypeEl.value = "open";
-          if (slimInstance) slimInstance.set(["45k-NA", "450k-NA-COM"]);
+          dateEl.value = todayStr();
+          stationIdEl.value = "";
+          eventTypeEl.value = "open";
+          typeList.querySelectorAll(".item").forEach((item) => {
+            const text = item.querySelector(".item-text").textContent;
+            if (["45k-NA", "450k-NA-COM"].includes(text))
+              item.classList.add("checked");
+            else item.classList.remove("checked");
+          });
+          updateBtnText();
           currentRows = [];
           renderTable([]);
         }
 
         function initEvents() {
-          searchBtn?.addEventListener("click", handleSearch);
-          resetBtn?.addEventListener("click", resetFilters);
-          copyBtn?.addEventListener("click", copySelectedColumns);
-          stationIdEl?.addEventListener("keypress", (e) => {
+          searchBtn.addEventListener("click", handleSearch);
+          resetBtn.addEventListener("click", resetFilters);
+          copyBtn.addEventListener("click", copySelectedColumns);
+          stationIdEl.addEventListener("keypress", (e) => {
             if (e.key === "Enter") handleSearch();
           });
         }
 
         async function init() {
-          if (dateEl) dateEl.value = todayStr();
+          dateEl.value = todayStr();
           selectedColumns = new Set(["return_tn"]);
           renderColumnSelector();
           await loadFilterOptions();

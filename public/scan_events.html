@@ -4,6 +4,20 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Scan Events – Trích xuất dữ liệu quét hàng</title>
+    <!-- jQuery & Moment.js (required by daterangepicker) -->
+    <script src="https://cdn.jsdelivr.net/npm/jquery@3.6.4/dist/jquery.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/moment@2.29.4/moment.min.js"></script>
+    <!-- Date Range Picker CSS + JS -->
+    <link
+      rel="stylesheet"
+      type="text/css"
+      href="https://cdn.jsdelivr.net/npm/daterangepicker/daterangepicker.css"
+    />
+    <script
+      type="text/javascript"
+      src="https://cdn.jsdelivr.net/npm/daterangepicker/daterangepicker.min.js"
+    ></script>
+    <!-- Supabase -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
       :root {
@@ -104,7 +118,26 @@
         box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.2);
       }
 
-      /* Custom multi-select */
+      /* Style cho input daterangepicker */
+      #filter-daterange {
+        padding: 0.5rem 0.75rem;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-md);
+        font-size: 0.875rem;
+        background: white;
+        min-width: 260px;
+        cursor: pointer;
+        transition:
+          border-color 0.2s,
+          box-shadow 0.2s;
+      }
+      #filter-daterange:focus {
+        outline: none;
+        border-color: var(--primary);
+        box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.2);
+      }
+
+      /* Multi-select */
       .multi-select {
         position: relative;
         min-width: 250px;
@@ -145,7 +178,8 @@
       .arrow {
         width: 22px;
         height: 22px;
-        color: black;
+        background: var(--primary);
+        color: white;
         border-radius: 50%;
         display: flex;
         align-items: center;
@@ -434,8 +468,8 @@
 
       <div class="filters-card">
         <div class="filter-group">
-          <label>Ngày</label>
-          <input type="date" id="filter-date" />
+          <label>Thời gian</label>
+          <input type="text" id="filter-daterange" name="daterange" />
         </div>
         <div class="filter-group">
           <label>Loại hàng</label>
@@ -472,10 +506,10 @@
         </div>
         <button class="btn btn-primary" id="search-btn">🔍 Tìm kiếm</button>
         <button class="btn btn-success" id="copy-btn" disabled>
-          📋 Sao chép trang này
+          📋 Sao chép trang
         </button>
         <button class="btn btn-secondary" id="copy-all-btn" disabled>
-          📋 Sao chép toàn bộ
+          📋 Sao chép tất cả
         </button>
         <button class="btn btn-secondary" id="reset-btn">↺ Đặt lại</button>
       </div>
@@ -551,7 +585,55 @@
           SUPABASE_ANON_KEY,
         );
 
-        const dateEl = document.getElementById("filter-date");
+        // ========== DATE RANGE PICKER ==========
+        const daterangeInput = $("#filter-daterange");
+        daterangeInput.daterangepicker(
+          {
+            startDate: moment().startOf("day"),
+            endDate: moment().endOf("day"),
+            locale: {
+              format: "DD/MM/YYYY HH:mm",
+              applyLabel: "Áp dụng",
+              cancelLabel: "Hủy",
+              fromLabel: "Từ",
+              toLabel: "Đến",
+              customRangeLabel: "Tùy chỉnh",
+              daysOfWeek: ["CN", "T2", "T3", "T4", "T5", "T6", "T7"],
+              monthNames: [
+                "Tháng 1",
+                "Tháng 2",
+                "Tháng 3",
+                "Tháng 4",
+                "Tháng 5",
+                "Tháng 6",
+                "Tháng 7",
+                "Tháng 8",
+                "Tháng 9",
+                "Tháng 10",
+                "Tháng 11",
+                "Tháng 12",
+              ],
+            },
+            autoUpdateInput: true,
+            timePicker: true,
+            timePicker24Hour: true,
+            timePickerSeconds: false,
+          },
+          function (start, end) {
+            // Callback khi chọn xong - không cần làm gì thêm
+          },
+        );
+
+        function getDateRange() {
+          const picker = daterangeInput.data("daterangepicker");
+          if (!picker) return { start: null, end: null };
+          return {
+            start: picker.startDate.toISOString(),
+            end: picker.endDate.toISOString(),
+          };
+        }
+
+        // ========== DOM ELEMENTS ==========
         const multiSelectContainer =
           document.getElementById("type-group-multi");
         const selectBtn = multiSelectContainer.querySelector(".select-btn");
@@ -574,13 +656,12 @@
         const loadingOverlay = document.getElementById("loading-overlay");
         const columnSelector = document.getElementById("column-selector");
 
-        let currentRows = []; // dữ liệu của trang hiện tại
+        let currentRows = [];
         let allTypeGroups = [];
         let selectedColumns = new Set();
         let currentPage = 1;
         let totalCount = 0;
         const PAGE_SIZE = 1000;
-        let allDataCache = []; // cache toàn bộ khi copy all
 
         const columnDefs = [
           { key: "id", label: "ID" },
@@ -596,12 +677,8 @@
 
         const formatDate = (d) =>
           new Date(d).toLocaleString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" });
-        const todayStr = () =>
-          new Date(new Date().getTime() + 7 * 3600 * 1000)
-            .toISOString()
-            .slice(0, 10);
 
-        // Multi-select helpers
+        // ========== MULTI-SELECT ==========
         function updateBtnText() {
           const checkedItems = typeList.querySelectorAll(".item.checked");
           if (
@@ -693,7 +770,7 @@
           );
         }
 
-        // Column selector
+        // ========== COLUMN SELECTOR ==========
         function renderColumnSelector() {
           columnSelector.innerHTML = '<span class="label">Cột sao chép:</span>';
           columnDefs.forEach((col) => {
@@ -714,20 +791,19 @@
           });
         }
 
-        // Build base query with filters
+        // ========== QUERY ==========
         function buildQuery() {
-          const date = dateEl?.value;
-          const station = stationIdEl?.value.trim();
-          const evType = eventTypeEl?.value;
+          const station = stationIdEl.value.trim();
+          const evType = eventTypeEl.value;
           const typeArr = getSelectedTypeGroups();
+          const { start, end } = getDateRange();
+
           let q = supabaseClient
             .from("scan_events")
             .select("*", { count: "exact" })
             .order("created_at", { ascending: false });
-          if (date)
-            q = q
-              .gte("created_at", `${date}T00:00:00+07:00`)
-              .lte("created_at", `${date}T23:59:59+07:00`);
+          if (start) q = q.gte("created_at", start);
+          if (end) q = q.lte("created_at", end);
           if (typeArr.length > 0 && typeArr.length < allTypeGroups.length)
             q = q.in("type_group", typeArr);
           if (station) q = q.eq("station_id", station);
@@ -735,7 +811,6 @@
           return q;
         }
 
-        // Lấy tổng số bản ghi (chỉ count)
         async function fetchTotalCount() {
           const query = buildQuery();
           const { count, error } = await query;
@@ -743,7 +818,6 @@
           return count ?? 0;
         }
 
-        // Lấy dữ liệu của trang hiện tại
         async function fetchPage(page) {
           const from = (page - 1) * PAGE_SIZE;
           const to = from + PAGE_SIZE - 1;
@@ -756,15 +830,10 @@
         async function loadCurrentPage() {
           loadingOverlay.style.display = "flex";
           try {
-            if (currentPage === 1) {
-              // Lần đầu tìm kiếm hoặc reset, lấy cả count
-              totalCount = await fetchTotalCount();
-            }
+            if (currentPage === 1) totalCount = await fetchTotalCount();
             const rows = await fetchPage(currentPage);
             renderTable(rows);
             updatePagination();
-            // Reset cache khi thay đổi filter/page
-            allDataCache = [];
           } catch (err) {
             tableBody.innerHTML = `<tr><td colspan="9" style="text-align:center; padding:2rem; color:#ef4444;">Lỗi: ${err.message}</td></tr>`;
             disableButtons();
@@ -785,12 +854,12 @@
           tableBody.innerHTML = rows
             .map(
               (r) => `
-          <tr>
-            <td>${r.id}</td><td>${r.event_type || ""}</td><td>${r.email || ""}</td>
-            <td>${r.station_id || ""}</td><td>${r.type_group || ""}</td>
-            <td>${r.return_tn || ""}</td><td>${r.to_number || ""}</td>
-            <td>${r.item_count ?? ""}</td><td>${formatDate(r.created_at)}</td>
-          </tr>`,
+        <tr>
+          <td>${r.id}</td><td>${r.event_type || ""}</td><td>${r.email || ""}</td>
+          <td>${r.station_id || ""}</td><td>${r.type_group || ""}</td>
+          <td>${r.return_tn || ""}</td><td>${r.to_number || ""}</td>
+          <td>${r.item_count ?? ""}</td><td>${formatDate(r.created_at)}</td>
+        </tr>`,
             )
             .join("");
           copyBtn.disabled = false;
@@ -812,14 +881,13 @@
           nextPageBtn.disabled = true;
         }
 
-        // Hàm tải toàn bộ dữ liệu (từng trang) cho copy all
         async function fetchAllPages() {
           loadingOverlay.style.display = "flex";
           try {
             const totalPages = Math.ceil(totalCount / PAGE_SIZE);
             if (totalCount > 10000) {
               alert(
-                "Dữ liệu quá lớn (>10.000 bản ghi). Vui lòng thu hẹp bộ lọc hoặc liên hệ quản trị viên.",
+                "Dữ liệu quá lớn (>10.000 bản ghi). Vui lòng thu hẹp bộ lọc.",
               );
               return null;
             }
@@ -827,11 +895,10 @@
             for (let p = 1; p <= totalPages; p++) {
               const rows = await fetchPage(p);
               allData.push(...rows);
-              // Cập nhật tiến trình nếu cần
             }
             return allData;
           } catch (err) {
-            alert("Lỗi khi tải toàn bộ dữ liệu: " + err.message);
+            alert("Lỗi khi tải toàn bộ: " + err.message);
             return null;
           } finally {
             loadingOverlay.style.display = "none";
@@ -840,7 +907,6 @@
 
         async function handleSearch() {
           currentPage = 1;
-          allDataCache = [];
           await loadCurrentPage();
         }
 
@@ -863,9 +929,8 @@
               })
               .join("\t"),
           );
-          const text = header + "\n" + rows.join("\n");
           navigator.clipboard
-            .writeText(text)
+            .writeText(header + "\n" + rows.join("\n"))
             .then(() => showToast("✅ Đã sao chép trang hiện tại!"));
         }
 
@@ -883,7 +948,7 @@
           const allData = await fetchAllPages();
           if (!allData) {
             copyAllBtn.disabled = false;
-            copyAllBtn.textContent = "📋 Sao chép toàn bộ";
+            copyAllBtn.textContent = "📋 Sao chép tất cả";
             return;
           }
           const header = colsToCopy.map((c) => c.label).join("\t");
@@ -896,9 +961,8 @@
               })
               .join("\t"),
           );
-          const text = header + "\n" + rows.join("\n");
           navigator.clipboard
-            .writeText(text)
+            .writeText(header + "\n" + rows.join("\n"))
             .then(() => {
               showToast(
                 `✅ Đã sao chép toàn bộ ${allData.length.toLocaleString()} bản ghi!`,
@@ -906,7 +970,7 @@
             })
             .catch(() => alert("Sao chép thất bại."));
           copyAllBtn.disabled = false;
-          copyAllBtn.textContent = "📋 Sao chép toàn bộ";
+          copyAllBtn.textContent = "📋 Sao chép tất cả";
         }
 
         function showToast(msg) {
@@ -918,7 +982,12 @@
         }
 
         function resetFilters() {
-          dateEl.value = todayStr();
+          daterangeInput
+            .data("daterangepicker")
+            .setStartDate(moment().startOf("day"));
+          daterangeInput
+            .data("daterangepicker")
+            .setEndDate(moment().endOf("day"));
           stationIdEl.value = "";
           eventTypeEl.value = "open";
           typeList.querySelectorAll(".item").forEach((item) => {
@@ -931,12 +1000,11 @@
           currentPage = 1;
           totalCount = 0;
           currentRows = [];
-          allDataCache = [];
           renderTable([]);
           updatePagination();
         }
 
-        async function initEvents() {
+        function initEvents() {
           searchBtn.addEventListener("click", handleSearch);
           resetBtn.addEventListener("click", resetFilters);
           copyBtn.addEventListener("click", copyCurrentPage);
@@ -990,12 +1058,11 @@
         }
 
         async function init() {
-          dateEl.value = todayStr();
           selectedColumns = new Set(["return_tn"]);
           renderColumnSelector();
           await loadFilterOptions();
-          await initEvents();
-          await handleSearch();
+          initEvents();
+          handleSearch();
         }
         init();
       })();

@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>In Nhãn Trạm – Nhóm Station ID (Chữ to, rõ ràng)</title>
+    <title>In Nhãn Trạm – Nhóm Station ID (Cỡ chữ theo khổ giấy)</title>
     <style>
       * {
         margin: 0;
@@ -98,11 +98,12 @@
         justify-content: center;
         flex-direction: column;
         margin-bottom: 20px;
-        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2); /* chỉ ở preview */
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
         page-break-after: always;
         break-inside: avoid;
         -webkit-print-color-adjust: exact;
         print-color-adjust: exact;
+        overflow: hidden; /* đảm bảo không tràn */
       }
       .print-page:last-child {
         page-break-after: auto;
@@ -117,25 +118,27 @@
         height: 100%;
         text-align: center;
         gap: 2rem;
+        padding: 2mm;
       }
 
-      /* Mã trạm cực lớn */
+      /* Mã trạm – cỡ chữ được set inline theo mm */
       .station-id {
-        font-size: 35vw;
         font-weight: 800;
         line-height: 1;
         letter-spacing: 2px;
         text-transform: uppercase;
+        word-break: break-word;
+        max-width: 100%;
       }
 
-      /* Danh sách tên gọi – to, rõ */
+      /* Danh sách tên – cỡ chữ set inline */
       .station-names {
-        font-size: 9vw;
         font-weight: 700;
         line-height: 1.3;
         opacity: 0.95;
         max-width: 90%;
         word-break: break-word;
+        overflow-wrap: break-word;
       }
 
       @media print {
@@ -202,7 +205,6 @@
 
     <script>
       (() => {
-        // Dữ liệu gốc
         const ITEMS = [
           { id: 1, station_id: "1", display_name: "NA" },
           { id: 2, station_id: "1", display_name: "NA-COM" },
@@ -221,7 +223,6 @@
           { id: 15, station_id: "D", display_name: "SBS-Resell" },
         ];
 
-        // Nhóm theo station_id
         const GROUPS = {};
         ITEMS.forEach((item) => {
           const sid = String(item.station_id).toUpperCase();
@@ -229,7 +230,6 @@
           GROUPS[sid].push(item);
         });
 
-        // Bảng màu
         const STATION_COLORS = {
           1: "#E74C3C",
           2: "#3498DB",
@@ -289,7 +289,6 @@
 
         function renderPages() {
           const paper = getPaperSize(currentPaperKey, currentOrientation);
-          // Sắp xếp station_id: số trước (1-9), chữ sau (A-D)
           const stationIds = Object.keys(GROUPS).sort((a, b) => {
             const aIsNum = !isNaN(a),
               bIsNum = !isNaN(b);
@@ -299,12 +298,15 @@
             return a.localeCompare(b);
           });
 
+          // Tính cỡ chữ (mm) dựa trên chiều rộng trang
+          const idFontSize = Math.round(paper.w * 0.25 * 10) / 10; // 25% chiều rộng
+          const namesFontSize = Math.round(paper.w * 0.07 * 10) / 10; // 7% chiều rộng
+
           const pages = stationIds
             .map((sid) => {
               const items = GROUPS[sid];
               const bg = STATION_COLORS[sid] || "#607D8B";
               const color = getTextColor(bg);
-              // Hiển thị tên gọi, mỗi tên một dòng, không kèm ID gốc
               const namesHtml = items
                 .map((it) => `<div>${it.display_name}</div>`)
                 .join("");
@@ -314,8 +316,8 @@
               background:${bg}; color:${color};
             ">
               <div class="station-content">
-                <div class="station-id">${sid}</div>
-                <div class="station-names">${namesHtml}</div>
+                <div class="station-id" style="font-size:${idFontSize}mm;">${sid}</div>
+                <div class="station-names" style="font-size:${namesFontSize}mm;">${namesHtml}</div>
               </div>
             </div>
           `;

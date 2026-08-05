@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>In Nhãn Trạm – Full Page (Dọc/Ngang)</title>
+    <title>In Nhãn Trạm – Nhóm Station ID (Chữ to, rõ ràng)</title>
     <style>
       * {
         margin: 0;
@@ -98,7 +98,7 @@
         justify-content: center;
         flex-direction: column;
         margin-bottom: 20px;
-        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2); /* chỉ ở preview */
         page-break-after: always;
         break-inside: avoid;
         -webkit-print-color-adjust: exact;
@@ -108,7 +108,7 @@
         page-break-after: auto;
       }
 
-      .badge-content {
+      .station-content {
         display: flex;
         flex-direction: column;
         align-items: center;
@@ -116,19 +116,26 @@
         width: 100%;
         height: 100%;
         text-align: center;
-        gap: 1rem;
+        gap: 2rem;
       }
-      .badge-id {
-        font-size: 20vw;
+
+      /* Mã trạm cực lớn */
+      .station-id {
+        font-size: 35vw;
         font-weight: 800;
         line-height: 1;
         letter-spacing: 2px;
+        text-transform: uppercase;
       }
-      .badge-name {
-        font-size: 8vw;
+
+      /* Danh sách tên gọi – to, rõ */
+      .station-names {
+        font-size: 9vw;
         font-weight: 700;
-        opacity: 0.9;
-        line-height: 1.2;
+        line-height: 1.3;
+        opacity: 0.95;
+        max-width: 90%;
+        word-break: break-word;
       }
 
       @media print {
@@ -140,7 +147,6 @@
         .control-bar {
           display: none !important;
         }
-
         .preview-wrapper {
           display: block !important;
           background: none;
@@ -164,7 +170,6 @@
         }
       }
     </style>
-    <!-- Style động cho @page orientation -->
     <style id="print-orientation-style"></style>
   </head>
   <body>
@@ -187,7 +192,7 @@
       </select>
 
       <button class="print-btn" onclick="window.print()">
-        🖨️ In tất cả (mỗi badge một trang)
+        🖨️ In tất cả trạm
       </button>
     </div>
 
@@ -197,8 +202,8 @@
 
     <script>
       (() => {
-        // Dữ liệu trạm
-        const STATIONS = [
+        // Dữ liệu gốc
+        const ITEMS = [
           { id: 1, station_id: "1", display_name: "NA" },
           { id: 2, station_id: "1", display_name: "NA-COM" },
           { id: 3, station_id: "2", display_name: "CB" },
@@ -215,6 +220,14 @@
           { id: 14, station_id: "C", display_name: "SBS-GTC" },
           { id: 15, station_id: "D", display_name: "SBS-Resell" },
         ];
+
+        // Nhóm theo station_id
+        const GROUPS = {};
+        ITEMS.forEach((item) => {
+          const sid = String(item.station_id).toUpperCase();
+          if (!GROUPS[sid]) GROUPS[sid] = [];
+          GROUPS[sid].push(item);
+        });
 
         // Bảng màu
         const STATION_COLORS = {
@@ -247,7 +260,6 @@
         const getTextColor = (bgHex) =>
           contrastRatio(getLuminance(bgHex), 0) >= 4.5 ? "#000000" : "#FFFFFF";
 
-        // Kích thước gốc (portrait) mm
         const BASE_PAPERS = {
           A3: { w: 297, h: 420 },
           A4: { w: 210, h: 297 },
@@ -258,12 +270,9 @@
           Tabloid: { w: 279.4, h: 431.8 },
         };
 
-        // Hàm lấy kích thước thực tế theo orientation
         function getPaperSize(key, orientation) {
           const base = BASE_PAPERS[key];
-          if (orientation === "landscape") {
-            return { w: base.h, h: base.w };
-          }
+          if (orientation === "landscape") return { w: base.h, h: base.w };
           return { w: base.w, h: base.h };
         }
 
@@ -280,22 +289,38 @@
 
         function renderPages() {
           const paper = getPaperSize(currentPaperKey, currentOrientation);
-          const pages = STATIONS.map((item) => {
-            const stationId = String(item.station_id).toUpperCase();
-            const bg = STATION_COLORS[stationId] || "#607D8B";
-            const color = getTextColor(bg);
-            return `
+          // Sắp xếp station_id: số trước (1-9), chữ sau (A-D)
+          const stationIds = Object.keys(GROUPS).sort((a, b) => {
+            const aIsNum = !isNaN(a),
+              bIsNum = !isNaN(b);
+            if (aIsNum && bIsNum) return Number(a) - Number(b);
+            if (aIsNum) return -1;
+            if (bIsNum) return 1;
+            return a.localeCompare(b);
+          });
+
+          const pages = stationIds
+            .map((sid) => {
+              const items = GROUPS[sid];
+              const bg = STATION_COLORS[sid] || "#607D8B";
+              const color = getTextColor(bg);
+              // Hiển thị tên gọi, mỗi tên một dòng, không kèm ID gốc
+              const namesHtml = items
+                .map((it) => `<div>${it.display_name}</div>`)
+                .join("");
+              return `
             <div class="print-page" style="
               width:${paper.w}mm; height:${paper.h}mm;
               background:${bg}; color:${color};
             ">
-              <div class="badge-content">
-                <div class="badge-id">${item.id}</div>
-                <div class="badge-name">${item.display_name}</div>
+              <div class="station-content">
+                <div class="station-id">${sid}</div>
+                <div class="station-names">${namesHtml}</div>
               </div>
             </div>
           `;
-          }).join("");
+            })
+            .join("");
 
           scaler.innerHTML = pages;
           updatePrintOrientationStyle();
@@ -312,27 +337,22 @@
         }
 
         function updatePrintOrientationStyle() {
-          // Cập nhật @page CSS để hỗ trợ hướng in khi in trực tiếp
-          if (currentOrientation === "landscape") {
-            printOrientationStyle.textContent = "@page { size: landscape; }";
-          } else {
-            printOrientationStyle.textContent = "@page { size: portrait; }";
-          }
+          printOrientationStyle.textContent =
+            currentOrientation === "landscape"
+              ? "@page { size: landscape; }"
+              : "@page { size: portrait; }";
         }
 
         paperSelect.addEventListener("change", (e) => {
           currentPaperKey = e.target.value;
           renderPages();
         });
-
         orientationSelect.addEventListener("change", (e) => {
           currentOrientation = e.target.value;
           renderPages();
         });
-
         window.addEventListener("resize", () => updateScale());
 
-        // Khởi tạo
         renderPages();
       })();
     </script>

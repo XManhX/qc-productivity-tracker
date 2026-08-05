@@ -42,7 +42,7 @@ const getTextColor = (bgHex) => {
 const STYLES = `
 :host { all: initial; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; }
 .popup {
-  position: fixed; width: 622px; background: #fff;
+  position: fixed; width: 630px; background: #fff;
   border-radius: 20px; box-shadow: 0 20px 60px rgba(0,0,0,0.2), 0 0 0 2px rgba(0,0,0,0.05);
   z-index: 999999; overflow: hidden;
   display: flex; flex-direction: column;

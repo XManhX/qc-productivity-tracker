@@ -1,0 +1,292 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>In Nhãn Trạm – Full Page</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family:
+          "Segoe UI",
+          system-ui,
+          -apple-system,
+          sans-serif;
+        background: #f1f5f9;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        min-height: 100vh;
+        padding: 20px;
+      }
+
+      /* ========== Thanh điều khiển ========== */
+      .control-bar {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        margin-bottom: 24px;
+        background: white;
+        padding: 12px 24px;
+        border-radius: 12px;
+        box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+        flex-wrap: wrap;
+        justify-content: center;
+        position: sticky;
+        top: 10px;
+        z-index: 10;
+      }
+      .control-bar label {
+        font-weight: 600;
+        color: #334155;
+      }
+      select,
+      button {
+        padding: 10px 18px;
+        border: 1px solid #cbd5e1;
+        border-radius: 8px;
+        font-size: 15px;
+        font-weight: 500;
+        background: white;
+        cursor: pointer;
+        transition: 0.2s;
+      }
+      select:hover,
+      button:hover {
+        border-color: #94a3b8;
+      }
+      button.print-btn {
+        background: #1e293b;
+        color: white;
+        border: none;
+        font-weight: 600;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      button.print-btn:hover {
+        background: #0f172a;
+      }
+
+      /* ========== Vùng xem trước ========== */
+      .preview-wrapper {
+        width: 100%;
+        max-width: 1000px;
+        background: #e2e8f0;
+        border-radius: 16px;
+        padding: 20px;
+        display: flex;
+        justify-content: center;
+        align-items: flex-start;
+        overflow: auto;
+        box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.05);
+      }
+      .page-scaler {
+        transform-origin: top center;
+        transition: transform 0.2s ease;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+      }
+
+      /* ========== Mỗi trang in ========== */
+      .print-page {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-direction: column;
+        margin-bottom: 20px;
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2); /* chỉ hiển thị khi preview, sẽ ẩn khi in */
+        page-break-after: always;
+        break-inside: avoid;
+        /* Kích thước & màu nền sẽ được set bằng JS inline */
+      }
+      .print-page:last-child {
+        page-break-after: auto;
+      }
+
+      /* Badge nội dung bên trong – thuần text, không style dư thừa */
+      .badge-content {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        width: 100%;
+        height: 100%;
+        text-align: center;
+        gap: 1rem;
+      }
+      .badge-id {
+        font-size: 20vw; /* to linh hoạt theo trang */
+        font-weight: 800;
+        line-height: 1;
+        letter-spacing: 2px;
+      }
+      .badge-name {
+        font-size: 8vw;
+        font-weight: 700;
+        opacity: 0.9;
+        line-height: 1.2;
+      }
+
+      /* ========== In ấn ========== */
+      @media print {
+        body {
+          background: white;
+          padding: 0;
+          margin: 0;
+        }
+        .control-bar,
+        .preview-wrapper {
+          display: none !important;
+        }
+        .page-scaler {
+          transform: none !important;
+        }
+        .print-page {
+          box-shadow: none;
+          margin: 0;
+          page-break-after: always;
+          width: 100vw; /* chiếm toàn bộ khổ giấy */
+          height: 100vh;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="control-bar">
+      <label for="paperSize">📄 Khổ giấy:</label>
+      <select id="paperSize">
+        <option value="A3">A3 (297×420 mm)</option>
+        <option value="A4" selected>A4 (210×297 mm)</option>
+        <option value="A5">A5 (148×210 mm)</option>
+        <option value="A6">A6 (105×148 mm)</option>
+        <option value="Letter">Letter (8.5×11 in)</option>
+        <option value="Legal">Legal (8.5×14 in)</option>
+        <option value="Tabloid">Tabloid (11×17 in)</option>
+      </select>
+      <button class="print-btn" onclick="window.print()">
+        🖨️ In tất cả (mỗi badge một trang)
+      </button>
+    </div>
+
+    <div class="preview-wrapper" id="previewWrapper">
+      <div class="page-scaler" id="pageScaler"></div>
+    </div>
+
+    <script>
+      (() => {
+        // Dữ liệu trạm (15 mục)
+        const STATIONS = [
+          { id: 1, station_id: "1", display_name: "NA" },
+          { id: 2, station_id: "1", display_name: "NA-COM" },
+          { id: 3, station_id: "2", display_name: "CB" },
+          { id: 4, station_id: "2", display_name: "WH-QC" },
+          { id: 5, station_id: "3", display_name: "CB-GTC" },
+          { id: 6, station_id: "4", display_name: "FBS_P-B" },
+          { id: 7, station_id: "5", display_name: "FBS_S-A" },
+          { id: 8, station_id: "6", display_name: "FBS_S-B" },
+          { id: 9, station_id: "7", display_name: "FBS_V" },
+          { id: 10, station_id: "8", display_name: "Wrong-A" },
+          { id: 11, station_id: "9", display_name: "Wrong-B" },
+          { id: 12, station_id: "A", display_name: "L'Oreal" },
+          { id: 13, station_id: "B", display_name: "SBS-B" },
+          { id: 14, station_id: "C", display_name: "SBS-GTC" },
+          { id: 15, station_id: "D", display_name: "SBS-Resell" },
+        ];
+
+        // Bảng màu theo station_id
+        const STATION_COLORS = {
+          1: "#E74C3C",
+          2: "#3498DB",
+          3: "#2ECC71",
+          4: "#F39C12",
+          5: "#9B59B6",
+          6: "#1ABC9C",
+          7: "#E67E22",
+          8: "#2C3E50",
+          9: "#E91E63",
+          A: "#00BCD4",
+          B: "#FF5722",
+          C: "#795548",
+          D: "#607D8B",
+        };
+
+        // Tự động chọn màu chữ tương phản
+        const getLuminance = (hex) => {
+          const [r, g, b] = hex.match(/\w\w/g).map((c) => {
+            const v = parseInt(c, 16) / 255;
+            return v <= 0.03928
+              ? v / 12.92
+              : Math.pow((v + 0.055) / 1.055, 2.4);
+          });
+          return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+        };
+        const contrastRatio = (l1, l2) =>
+          (Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05);
+        const getTextColor = (bgHex) =>
+          contrastRatio(getLuminance(bgHex), 0) >= 4.5 ? "#000000" : "#FFFFFF";
+
+        // Kích thước các khổ giấy (mm)
+        const PAPERS = {
+          A3: { w: 297, h: 420 },
+          A4: { w: 210, h: 297 },
+          A5: { w: 148, h: 210 },
+          A6: { w: 105, h: 148 },
+          Letter: { w: 215.9, h: 279.4 },
+          Legal: { w: 215.9, h: 355.6 },
+          Tabloid: { w: 279.4, h: 431.8 },
+        };
+
+        const scaler = document.getElementById("pageScaler");
+        const paperSelect = document.getElementById("paperSize");
+        const wrapper = document.getElementById("previewWrapper");
+
+        function renderPages(paperKey) {
+          const paper = PAPERS[paperKey];
+          const pages = STATIONS.map((item) => {
+            const stationId = String(item.station_id).toUpperCase();
+            const bg = STATION_COLORS[stationId] || "#607D8B";
+            const color = getTextColor(bg);
+            return `
+            <div class="print-page" style="
+              width:${paper.w}mm; height:${paper.h}mm;
+              background:${bg}; color:${color};
+            ">
+              <div class="badge-content">
+                <div class="badge-id">${item.id}</div>
+                <div class="badge-name">${item.display_name}</div>
+              </div>
+            </div>
+          `;
+          }).join("");
+
+          scaler.innerHTML = pages;
+          requestAnimationFrame(() => updateScale(paperKey));
+        }
+
+        function updateScale(paperKey) {
+          const paper = PAPERS[paperKey];
+          const mmToPx = 3.779527559; // 1mm = 3.78px (96dpi)
+          const pageWidthPx = paper.w * mmToPx;
+          const wrapperWidth = wrapper.clientWidth - 40;
+          const scale = Math.min(1, wrapperWidth / pageWidthPx);
+          scaler.style.transform = `scale(${scale})`;
+        }
+
+        paperSelect.addEventListener("change", (e) =>
+          renderPages(e.target.value),
+        );
+        window.addEventListener("resize", () => updateScale(paperSelect.value));
+
+        // Khởi tạo với A4
+        renderPages("A4");
+      })();
+    </script>
+  </body>
+</html>

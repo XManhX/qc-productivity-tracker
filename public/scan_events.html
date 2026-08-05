@@ -364,6 +364,27 @@
         flex-wrap: wrap;
         gap: 1rem;
       }
+      .pagination {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+      }
+      .pagination button {
+        padding: 0.35rem 0.75rem;
+        background: white;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-md);
+        font-size: 0.875rem;
+        cursor: pointer;
+        transition: all 0.2s;
+      }
+      .pagination button:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+      .pagination button:not(:disabled):hover {
+        border-color: var(--primary);
+      }
       .loading-overlay {
         position: absolute;
         inset: 0;
@@ -452,7 +473,10 @@
         </div>
         <button class="btn btn-primary" id="search-btn">🔍 Tìm kiếm</button>
         <button class="btn btn-success" id="copy-btn" disabled>
-          📋 Sao chép
+          📋 Sao chép trang này
+        </button>
+        <button class="btn btn-secondary" id="copy-all-btn" disabled>
+          📋 Sao chép toàn bộ
         </button>
         <button class="btn btn-secondary" id="reset-btn">↺ Đặt lại</button>
       </div>
@@ -499,10 +523,22 @@
       </div>
 
       <div class="status-bar">
-        <span id="result-count"></span>
-        <span style="color: var(--text-muted); font-size: 0.875rem"
-          >Mẹo: Ctrl+V trực tiếp vào Google Sheets</span
-        >
+        <div>
+          <span id="result-count"></span>
+          <span
+            style="
+              color: var(--text-muted);
+              font-size: 0.875rem;
+              margin-left: 1rem;
+            "
+            >Mẹo: Ctrl+V trực tiếp vào Google Sheets</span
+          >
+        </div>
+        <div class="pagination">
+          <button id="prev-page" disabled>← Trước</button>
+          <span id="page-info" style="font-size: 0.875rem">Trang 1 / 1</span>
+          <button id="next-page" disabled>Sau →</button>
+        </div>
       </div>
     </div>
 
@@ -516,7 +552,6 @@
           SUPABASE_ANON_KEY,
         );
 
-        // DOM elements
         const dateEl = document.getElementById("filter-date");
         const multiSelectContainer =
           document.getElementById("type-group-multi");
@@ -530,15 +565,23 @@
         const eventTypeEl = document.getElementById("event-type");
         const searchBtn = document.getElementById("search-btn");
         const copyBtn = document.getElementById("copy-btn");
+        const copyAllBtn = document.getElementById("copy-all-btn");
         const resetBtn = document.getElementById("reset-btn");
         const tableBody = document.getElementById("table-body");
         const resultCount = document.getElementById("result-count");
+        const pageInfo = document.getElementById("page-info");
+        const prevPageBtn = document.getElementById("prev-page");
+        const nextPageBtn = document.getElementById("next-page");
         const loadingOverlay = document.getElementById("loading-overlay");
         const columnSelector = document.getElementById("column-selector");
 
-        let currentRows = [];
+        let currentRows = []; // dữ liệu của trang hiện tại
         let allTypeGroups = [];
         let selectedColumns = new Set();
+        let currentPage = 1;
+        let totalCount = 0;
+        const PAGE_SIZE = 1000;
+        let allDataCache = []; // cache toàn bộ khi copy all
 
         const columnDefs = [
           { key: "id", label: "ID" },
@@ -559,7 +602,7 @@
             .toISOString()
             .slice(0, 10);
 
-        // Multi-select logic
+        // Multi-select helpers
         function updateBtnText() {
           const checkedItems = typeList.querySelectorAll(".item.checked");
           if (
@@ -581,24 +624,18 @@
 
         function toggleDropdown() {
           multiSelectContainer.classList.toggle("open");
-          if (multiSelectContainer.classList.contains("open")) {
+          if (multiSelectContainer.classList.contains("open"))
             typeSearch.focus();
-          }
         }
-
         function closeDropdown() {
           multiSelectContainer.classList.remove("open");
         }
 
         function renderTypeItems(filter = "") {
-          // Xóa item cũ
-          const existingItems = typeList.querySelectorAll(".item");
-          existingItems.forEach((el) => el.remove());
-
+          typeList.querySelectorAll(".item").forEach((el) => el.remove());
           allTypeGroups.forEach((tg) => {
             const li = document.createElement("li");
             li.className = "item";
-            // Mặc định check nếu nằm trong danh sách ưu tiên
             if (["45k-NA", "450k-NA-COM"].includes(tg))
               li.classList.add("checked");
             li.innerHTML = `<span class="checkbox-custom"></span><span class="item-text">${tg}</span>`;
@@ -606,55 +643,44 @@
               li.classList.toggle("checked");
               updateBtnText();
             });
-            if (filter && !tg.toLowerCase().includes(filter.toLowerCase())) {
+            if (filter && !tg.toLowerCase().includes(filter.toLowerCase()))
               li.classList.add("hidden");
-            }
             typeList.appendChild(li);
           });
           updateBtnText();
         }
 
-        // Search trong dropdown
         typeSearch.addEventListener("input", (e) => {
           const filter = e.target.value;
-          const items = typeList.querySelectorAll(".item");
-          items.forEach((item) => {
+          typeList.querySelectorAll(".item").forEach((item) => {
             const text = item
               .querySelector(".item-text")
               .textContent.toLowerCase();
-            if (text.includes(filter.toLowerCase())) {
-              item.classList.remove("hidden");
-            } else {
-              item.classList.add("hidden");
-            }
+            item.classList.toggle(
+              "hidden",
+              !text.includes(filter.toLowerCase()),
+            );
           });
         });
-
-        // Chọn tất cả
         selectAllBtn.addEventListener("click", () => {
           typeList
             .querySelectorAll(".item")
-            .forEach((item) => item.classList.add("checked"));
+            .forEach((i) => i.classList.add("checked"));
           updateBtnText();
         });
-        // Bỏ chọn tất cả
         deselectAllBtn.addEventListener("click", () => {
           typeList
             .querySelectorAll(".item")
-            .forEach((item) => item.classList.remove("checked"));
+            .forEach((i) => i.classList.remove("checked"));
           updateBtnText();
         });
-
-        // Toggle dropdown
         selectBtn.addEventListener("click", (e) => {
           e.stopPropagation();
           toggleDropdown();
         });
-        // Đóng dropdown khi click bên ngoài
         document.addEventListener("click", (e) => {
           if (!multiSelectContainer.contains(e.target)) closeDropdown();
         });
-        // Keyboard support
         selectBtn.addEventListener("keydown", (e) => {
           if (e.key === "Enter" || e.key === " ") {
             e.preventDefault();
@@ -662,7 +688,6 @@
           }
         });
 
-        // Lấy danh sách type_group đã chọn
         function getSelectedTypeGroups() {
           return [...typeList.querySelectorAll(".item.checked")].map(
             (el) => el.querySelector(".item-text").textContent,
@@ -690,52 +715,12 @@
           });
         }
 
-        async function loadFilterOptions() {
-          // Lấy type_name từ bảng type_mappings
-          const typeMappingPromise = supabaseClient
-            .from("type_mappings")
-            .select("type_name")
-            .order("type_name");
-
-          // Lấy event_type từ scan_events
-          const eventTypePromise = supabaseClient
-            .from("scan_events")
-            .select("event_type")
-            .order("event_type");
-
-          const [typeRes, eventRes] = await Promise.all([
-            typeMappingPromise,
-            eventTypePromise,
-          ]);
-
-          if (typeRes.data) {
-            allTypeGroups = [
-              ...new Set(typeRes.data.map((d) => d.type_name).filter(Boolean)),
-            ];
-            renderTypeItems();
-          } else {
-            console.error("Failed to load type mappings:", typeRes.error);
-          }
-
-          if (eventRes.data && eventTypeEl) {
-            const events = [
-              ...new Set(
-                eventRes.data.map((d) => d.event_type).filter(Boolean),
-              ),
-            ];
-            eventTypeEl.innerHTML =
-              '<option value="">Tất cả</option>' +
-              events.map((e) => `<option value="${e}">${e}</option>`).join("");
-            if (events.includes("open")) eventTypeEl.value = "open";
-          }
-        }
-
+        // Build base query with filters
         function buildQuery() {
           const date = dateEl?.value;
           const station = stationIdEl?.value.trim();
           const evType = eventTypeEl?.value;
           const typeArr = getSelectedTypeGroups();
-
           let q = supabaseClient
             .from("scan_events")
             .select("*", { count: "exact" })
@@ -748,13 +733,45 @@
             q = q.in("type_group", typeArr);
           if (station) q = q.eq("station_id", station);
           if (evType) q = q.eq("event_type", evType);
-          return q.limit(1000);
+          return q;
         }
 
-        async function fetchData() {
-          const { data, error } = await buildQuery();
+        // Lấy tổng số bản ghi (chỉ count)
+        async function fetchTotalCount() {
+          const query = buildQuery();
+          const { count, error } = await query;
+          if (error) throw error;
+          return count ?? 0;
+        }
+
+        // Lấy dữ liệu của trang hiện tại
+        async function fetchPage(page) {
+          const from = (page - 1) * PAGE_SIZE;
+          const to = from + PAGE_SIZE - 1;
+          const query = buildQuery().range(from, to);
+          const { data, error } = await query;
           if (error) throw error;
           return data || [];
+        }
+
+        async function loadCurrentPage() {
+          loadingOverlay.style.display = "flex";
+          try {
+            if (currentPage === 1) {
+              // Lần đầu tìm kiếm hoặc reset, lấy cả count
+              totalCount = await fetchTotalCount();
+            }
+            const rows = await fetchPage(currentPage);
+            renderTable(rows);
+            updatePagination();
+            // Reset cache khi thay đổi filter/page
+            allDataCache = [];
+          } catch (err) {
+            tableBody.innerHTML = `<tr><td colspan="9" style="text-align:center; padding:2rem; color:#ef4444;">Lỗi: ${err.message}</td></tr>`;
+            disableButtons();
+          } finally {
+            loadingOverlay.style.display = "none";
+          }
         }
 
         function renderTable(rows) {
@@ -762,6 +779,7 @@
           if (!rows.length) {
             tableBody.innerHTML = `<tr><td colspan="9" style="text-align:center; padding:3rem; color:var(--text-muted);">Không tìm thấy dữ liệu phù hợp.</td></tr>`;
             copyBtn.disabled = true;
+            copyAllBtn.disabled = true;
             resultCount.textContent = "";
             return;
           }
@@ -777,23 +795,57 @@
             )
             .join("");
           copyBtn.disabled = false;
-          resultCount.textContent = `Tìm thấy ${rows.length} bản ghi.`;
+          copyAllBtn.disabled = false;
+          resultCount.textContent = `Tổng: ${totalCount.toLocaleString()} bản ghi | Hiển thị: ${rows.length}`;
         }
 
-        async function handleSearch() {
+        function updatePagination() {
+          const totalPages = Math.ceil(totalCount / PAGE_SIZE) || 1;
+          pageInfo.textContent = `Trang ${currentPage} / ${totalPages}`;
+          prevPageBtn.disabled = currentPage <= 1;
+          nextPageBtn.disabled = currentPage >= totalPages;
+        }
+
+        function disableButtons() {
+          copyBtn.disabled = true;
+          copyAllBtn.disabled = true;
+          prevPageBtn.disabled = true;
+          nextPageBtn.disabled = true;
+        }
+
+        // Hàm tải toàn bộ dữ liệu (từng trang) cho copy all
+        async function fetchAllPages() {
           loadingOverlay.style.display = "flex";
           try {
-            renderTable(await fetchData());
+            const totalPages = Math.ceil(totalCount / PAGE_SIZE);
+            if (totalCount > 10000) {
+              alert(
+                "Dữ liệu quá lớn (>10.000 bản ghi). Vui lòng thu hẹp bộ lọc hoặc liên hệ quản trị viên.",
+              );
+              return null;
+            }
+            const allData = [];
+            for (let p = 1; p <= totalPages; p++) {
+              const rows = await fetchPage(p);
+              allData.push(...rows);
+              // Cập nhật tiến trình nếu cần
+            }
+            return allData;
           } catch (err) {
-            tableBody.innerHTML = `<tr><td colspan="9" style="text-align:center; padding:2rem; color:#ef4444;">Lỗi: ${err.message}</td></tr>`;
-            copyBtn.disabled = true;
-            resultCount.textContent = "";
+            alert("Lỗi khi tải toàn bộ dữ liệu: " + err.message);
+            return null;
           } finally {
             loadingOverlay.style.display = "none";
           }
         }
 
-        function copySelectedColumns() {
+        async function handleSearch() {
+          currentPage = 1;
+          allDataCache = [];
+          await loadCurrentPage();
+        }
+
+        function copyCurrentPage() {
           if (!currentRows.length) return;
           const colsToCopy = columnDefs.filter((c) =>
             selectedColumns.has(c.key),
@@ -812,16 +864,50 @@
               })
               .join("\t"),
           );
+          const text = header + "\n" + rows.join("\n");
           navigator.clipboard
-            .writeText(header + "\n" + rows.join("\n"))
+            .writeText(text)
+            .then(() => showToast("✅ Đã sao chép trang hiện tại!"));
+        }
+
+        async function copyAllPages() {
+          if (totalCount === 0) return;
+          const colsToCopy = columnDefs.filter((c) =>
+            selectedColumns.has(c.key),
+          );
+          if (!colsToCopy.length) {
+            alert("Vui lòng chọn ít nhất một cột.");
+            return;
+          }
+          copyAllBtn.disabled = true;
+          copyAllBtn.textContent = "⏳ Đang tải toàn bộ...";
+          const allData = await fetchAllPages();
+          if (!allData) {
+            copyAllBtn.disabled = false;
+            copyAllBtn.textContent = "📋 Sao chép toàn bộ";
+            return;
+          }
+          const header = colsToCopy.map((c) => c.label).join("\t");
+          const rows = allData.map((row) =>
+            colsToCopy
+              .map((col) => {
+                let val = row[col.key];
+                if (col.key === "created_at") val = formatDate(val);
+                return val ?? "";
+              })
+              .join("\t"),
+          );
+          const text = header + "\n" + rows.join("\n");
+          navigator.clipboard
+            .writeText(text)
             .then(() => {
-              showToast("✅ Đã sao chép!");
-              copyBtn.disabled = true;
-              setTimeout(() => {
-                copyBtn.disabled = false;
-              }, 2000);
+              showToast(
+                `✅ Đã sao chép toàn bộ ${allData.length.toLocaleString()} bản ghi!`,
+              );
             })
             .catch(() => alert("Sao chép thất bại."));
+          copyAllBtn.disabled = false;
+          copyAllBtn.textContent = "📋 Sao chép toàn bộ";
         }
 
         function showToast(msg) {
@@ -843,17 +929,65 @@
             else item.classList.remove("checked");
           });
           updateBtnText();
+          currentPage = 1;
+          totalCount = 0;
           currentRows = [];
+          allDataCache = [];
           renderTable([]);
+          updatePagination();
         }
 
-        function initEvents() {
+        async function initEvents() {
           searchBtn.addEventListener("click", handleSearch);
           resetBtn.addEventListener("click", resetFilters);
-          copyBtn.addEventListener("click", copySelectedColumns);
+          copyBtn.addEventListener("click", copyCurrentPage);
+          copyAllBtn.addEventListener("click", copyAllPages);
           stationIdEl.addEventListener("keypress", (e) => {
             if (e.key === "Enter") handleSearch();
           });
+          prevPageBtn.addEventListener("click", async () => {
+            if (currentPage > 1) {
+              currentPage--;
+              await loadCurrentPage();
+            }
+          });
+          nextPageBtn.addEventListener("click", async () => {
+            const totalPages = Math.ceil(totalCount / PAGE_SIZE) || 1;
+            if (currentPage < totalPages) {
+              currentPage++;
+              await loadCurrentPage();
+            }
+          });
+        }
+
+        async function loadFilterOptions() {
+          const [typeRes, eventRes] = await Promise.all([
+            supabaseClient
+              .from("type_mappings")
+              .select("type_name")
+              .order("type_name"),
+            supabaseClient
+              .from("scan_events")
+              .select("event_type")
+              .order("event_type"),
+          ]);
+          if (typeRes.data) {
+            allTypeGroups = [
+              ...new Set(typeRes.data.map((d) => d.type_name).filter(Boolean)),
+            ];
+            renderTypeItems();
+          }
+          if (eventRes.data && eventTypeEl) {
+            const events = [
+              ...new Set(
+                eventRes.data.map((d) => d.event_type).filter(Boolean),
+              ),
+            ];
+            eventTypeEl.innerHTML =
+              '<option value="">Tất cả</option>' +
+              events.map((e) => `<option value="${e}">${e}</option>`).join("");
+            if (events.includes("open")) eventTypeEl.value = "open";
+          }
         }
 
         async function init() {
@@ -861,8 +995,8 @@
           selectedColumns = new Set(["return_tn"]);
           renderColumnSelector();
           await loadFilterOptions();
-          initEvents();
-          handleSearch();
+          await initEvents();
+          await handleSearch();
         }
         init();
       })();

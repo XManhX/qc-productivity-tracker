@@ -418,6 +418,7 @@ export class DashboardUI {
   }
 
   _renderActiveEventCard(event) {
+    const displayType = this.state.getDisplayName(event.type_group) || event.type_group || "";
     const color = STATION_COLORS[event.station_id] || "#94a3b8";
     const textColor = getTextColor(color);
     const timeStr = event.created_at
@@ -425,18 +426,18 @@ export class DashboardUI {
       : "";
 
     return `
-      <div class="card status-open" data-station="${event.station_id}" data-return="${event.return_tn}" data-type="${event.type_group}">
+      <div class="card status-open" data-station="${event.station_id}" data-return="${event.return_tn}" data-type="${displayType}">
         <div class="card-row">
           <div class="card-left">
             <div class="id-badge" style="background:${color}; color:${textColor};">${event.station_id}</div>
             <div>
-              <div class="type">${event.type_group || ""}</div>
+              <div class="type">${displayType}</div>
               <div class="time">${event.return_tn || ""}</div>
               ${timeStr ? `<div class="time">${timeStr}</div>` : ""}
             </div>
           </div>
           <div class="card-actions">
-            <button class="btn btn-close" data-action="cancel-event" data-station="${event.station_id}" data-return="${event.return_tn}" data-type="${event.type_group}">Hủy</button>
+            <button class="btn btn-close" data-action="cancel-event" data-station="${event.station_id}" data-return="${event.return_tn}" data-type="${displayType}">Hủy</button>
           </div>
         </div>
       </div>
@@ -444,16 +445,12 @@ export class DashboardUI {
   }
 
   _renderCard(session) {
+    const displayType = this.state.getDisplayName(session.type_group) || session.type_group || "";
     const status = session.status;
     const threshold = session.threshold || 30;
     const count = session.item_count;
     const percent = Math.min(100, Math.round((count / threshold) * 100));
-    const statusClass =
-      status === "full"
-        ? "status-full"
-        : status === "open"
-          ? "status-open"
-          : "status-closed";
+    const statusClass = status === "full" ? "status-full" : status === "open" ? "status-open" : "status-closed";
     const color = STATION_COLORS[session.id] || "#94a3b8";
     const textColor = getTextColor(color);
     const timeStr = session.session_start
@@ -461,18 +458,22 @@ export class DashboardUI {
       : "";
 
     return `
-      <div class="card ${statusClass}" data-id="${session.id}" data-type="${session.type_group || ""}">
+      <div class="card ${statusClass}" data-id="${session.id}" data-type="${displayType}">
         <div class="card-row">
           <div class="card-left">
             <div class="id-badge" style="background:${color}; color:${textColor};">${session.id}</div>
             <div>
-              <div class="type">${session.type_group || ""}</div>
+              <div class="type">${displayType}</div>
               ${timeStr ? `<div class="time">${timeStr}</div>` : ""}
             </div>
           </div>
           <div class="card-actions">
-            ${(status === "open" || status === "full") && count > 0 ? `<button class="btn btn-close" data-action="close" data-id="${session.id}" data-type="${session.type_group}">Đóng</button>` : ""}
-            ${status === "closed" ? `<button class="btn btn-reprint" data-action="reprint-closed" data-id="${session.id}" data-type="${session.type_group}" data-to="${session.to_number || ""}" data-date="${timeStr}" data-number="${session.to_number ? session.to_number.split("-").pop() : ""}" data-qty="${count}">In lại</button>` : ""}
+            ${(status === "open" || status === "full") && count > 0
+        ? `<button class="btn btn-close" data-action="close" data-id="${session.id}" data-type="${displayType}">Đóng</button>`
+        : ""}
+            ${status === "closed"
+        ? `<button class="btn btn-reprint" data-action="reprint-closed" data-id="${session.id}" data-type="${displayType}" data-to="${session.to_number || ""}" data-date="${timeStr}" data-number="${session.to_number ? session.to_number.split("-").pop() : ""}" data-qty="${count}">In lại</button>`
+        : ""}
           </div>
         </div>
         <div class="progress-row">
@@ -486,20 +487,22 @@ export class DashboardUI {
   }
 
   _renderCardFromLabel(label) {
+    // label.type đã là display_name khi lưu từ printAndClose, không cần đổi
+    const displayType = label.type || "";
     const color = STATION_COLORS[label.id] || "#3b82f6";
     const textColor = getTextColor(color);
     return `
-      <div class="card status-closed" data-id="${label.id}" data-type="${label.type}">
+      <div class="card status-closed" data-id="${label.id}" data-type="${displayType}">
         <div class="card-row">
           <div class="card-left">
             <div class="id-badge" style="background:${color}; color:${textColor};">${label.id || "?"}</div>
             <div>
-              <div class="type">${label.type || ""}</div>
+              <div class="type">${displayType}</div>
               <div class="time">${label.dateStr || ""}</div>
             </div>
           </div>
           <div class="card-actions">
-            <button class="btn btn-reprint" data-action="reprint-label" data-to="${label.toNumber}" data-type="${label.type}" data-id="${label.id}" data-date="${label.dateStr}" data-number="${label.number}" data-email="${label.email}" data-qty="${label.itemCount}">In lại</button>
+            <button class="btn btn-reprint" data-action="reprint-label" data-to="${label.toNumber}" data-type="${displayType}" data-id="${label.id}" data-date="${label.dateStr}" data-number="${label.number}" data-email="${label.email}" data-qty="${label.itemCount}">In lại</button>
           </div>
         </div>
         <div class="progress-row">

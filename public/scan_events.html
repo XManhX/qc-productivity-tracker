@@ -1,0 +1,479 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Scan Events Filter & Copy</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+        font-family:
+          -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          "Helvetica Neue", Arial, sans-serif;
+      }
+      body {
+        background: #f8fafc;
+        color: #1e293b;
+        padding: 2rem;
+        min-height: 100vh;
+      }
+      .container {
+        max-width: 1400px;
+        margin: 0 auto;
+        background: white;
+        border-radius: 1.5rem;
+        box-shadow:
+          0 4px 6px -1px rgba(0, 0, 0, 0.1),
+          0 2px 4px -2px rgba(0, 0, 0, 0.1);
+        overflow: hidden;
+      }
+      .header {
+        background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+        color: white;
+        padding: 1.5rem 2rem;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: 1rem;
+      }
+      .header h1 {
+        font-size: 1.75rem;
+        font-weight: 700;
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+      }
+      .filters {
+        padding: 1.5rem 2rem;
+        background: #f1f5f9;
+        border-bottom: 1px solid #e2e8f0;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 1rem;
+        align-items: flex-end;
+      }
+      .filter-group {
+        display: flex;
+        flex-direction: column;
+        gap: 0.25rem;
+      }
+      .filter-group label {
+        font-size: 0.75rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: #64748b;
+      }
+      .filter-group input,
+      .filter-group select {
+        padding: 0.5rem 0.75rem;
+        border: 1px solid #cbd5e1;
+        border-radius: 0.5rem;
+        font-size: 0.875rem;
+        background: white;
+        min-width: 160px;
+      }
+      .btn {
+        padding: 0.5rem 1.25rem;
+        border: none;
+        border-radius: 0.5rem;
+        font-weight: 600;
+        font-size: 0.875rem;
+        cursor: pointer;
+        transition: all 0.2s;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+      }
+      .btn-primary {
+        background: #3b82f6;
+        color: white;
+      }
+      .btn-primary:hover {
+        background: #2563eb;
+      }
+      .btn-secondary {
+        background: #e2e8f0;
+        color: #334155;
+      }
+      .btn-secondary:hover {
+        background: #cbd5e1;
+      }
+      .btn-success {
+        background: #10b981;
+        color: white;
+      }
+      .btn-success:hover {
+        background: #059669;
+      }
+      .btn:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+      }
+      .table-container {
+        overflow-x: auto;
+        padding: 1.5rem 2rem;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.875rem;
+      }
+      th {
+        background: #f8fafc;
+        padding: 0.75rem 1rem;
+        text-align: left;
+        font-weight: 600;
+        color: #475569;
+        border-bottom: 2px solid #e2e8f0;
+        white-space: nowrap;
+      }
+      td {
+        padding: 0.75rem 1rem;
+        border-bottom: 1px solid #f1f5f9;
+        white-space: nowrap;
+        color: #334155;
+      }
+      tr:hover td {
+        background: #f8fafc;
+      }
+      .copy-section {
+        padding: 1rem 2rem;
+        background: #f8fafc;
+        border-top: 1px solid #e2e8f0;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: 1rem;
+      }
+      .copy-info {
+        font-size: 0.875rem;
+        color: #475569;
+      }
+      .loading-overlay {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(255, 255, 255, 0.8);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.25rem;
+        color: #64748b;
+        backdrop-filter: blur(2px);
+        z-index: 10;
+      }
+      .relative {
+        position: relative;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container" id="app">
+      <div class="header">
+        <h1><span>📋</span> Scan Events Data</h1>
+        <span style="color: #94a3b8">Trích xuất dữ liệu quét hàng</span>
+      </div>
+
+      <!-- Filters -->
+      <div class="filters">
+        <div class="filter-group">
+          <label>Từ ngày</label>
+          <input type="date" id="date-from" />
+        </div>
+        <div class="filter-group">
+          <label>Đến ngày</label>
+          <input type="date" id="date-to" />
+        </div>
+        <div class="filter-group">
+          <label>Loại hàng (type_group)</label>
+          <select id="type-group">
+            <option value="">Tất cả</option>
+          </select>
+        </div>
+        <div class="filter-group">
+          <label>ID Trạm (station_id)</label>
+          <input type="text" id="station-id" placeholder="Ví dụ: 3A" />
+        </div>
+        <button class="btn btn-primary" id="search-btn">🔍 Tìm kiếm</button>
+        <button class="btn btn-secondary" id="reset-btn">↺ Đặt lại</button>
+      </div>
+
+      <!-- Loading & table -->
+      <div class="relative">
+        <div id="loading" style="display: none" class="loading-overlay">
+          Đang tải dữ liệu...
+        </div>
+        <div class="table-container">
+          <table id="data-table">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Event Type</th>
+                <th>Email</th>
+                <th>Station ID</th>
+                <th>Type Group</th>
+                <th>Return TN</th>
+                <th>TO Number</th>
+                <th>Item Count</th>
+                <th>Created At</th>
+              </tr>
+            </thead>
+            <tbody id="table-body">
+              <tr>
+                <td
+                  colspan="9"
+                  style="text-align: center; padding: 2rem; color: #94a3b8"
+                >
+                  Chưa có dữ liệu. Vui lòng chọn bộ lọc và nhấn Tìm kiếm.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Copy section -->
+      <div class="copy-section">
+        <span class="copy-info" id="result-count"></span>
+        <button class="btn btn-success" id="copy-btn" disabled>
+          📋 Sao chép toàn bộ (dán vào Google Sheets)
+        </button>
+      </div>
+    </div>
+
+    <script>
+      // Supabase credentials (public anon key – same as extension)
+      const SUPABASE_URL = "https://gjnfyjmrrpxmnufikjgo.supabase.co";
+      const SUPABASE_ANON_KEY =
+        "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdqbmZ5am1ycnB4bW51ZmlramdvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODU1NDg1MTIsImV4cCI6MjEwMTEyNDUxMn0.TKEFJNI4_r_c1frKroSLAUhbE8YW4ofdLwQPrwSbsT4";
+      const supabase = window.supabase.createClient(
+        SUPABASE_URL,
+        SUPABASE_ANON_KEY,
+      );
+
+      // DOM elements
+      const dateFromEl = document.getElementById("date-from");
+      const dateToEl = document.getElementById("date-to");
+      const typeGroupEl = document.getElementById("type-group");
+      const stationIdEl = document.getElementById("station-id");
+      const searchBtn = document.getElementById("search-btn");
+      const resetBtn = document.getElementById("reset-btn");
+      const copyBtn = document.getElementById("copy-btn");
+      const tableBody = document.getElementById("table-body");
+      const resultCount = document.getElementById("result-count");
+      const loadingEl = document.getElementById("loading");
+
+      // Current data cache
+      let currentRows = [];
+
+      // Helper: format UTC date to VN time string (YYYY-MM-DD HH:mm:ss)
+      function formatCreatedAt(dateStr) {
+        const d = new Date(dateStr);
+        return d.toLocaleString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" });
+      }
+
+      // Helper: get today and 30 days ago for default date range
+      function getDefaultDates() {
+        const today = new Date(new Date().getTime() + 7 * 60 * 60 * 1000); // UTC+7
+        const start = new Date(today);
+        start.setDate(today.getDate() - 30);
+        return {
+          from: start.toISOString().split("T")[0],
+          to: today.toISOString().split("T")[0],
+        };
+      }
+
+      // Load distinct type_groups for dropdown
+      async function loadTypeGroups() {
+        const { data, error } = await supabase
+          .from("scan_events")
+          .select("type_group")
+          .order("type_group", { ascending: true });
+
+        if (error) {
+          console.error("Error loading type groups:", error);
+          return;
+        }
+        const types = [
+          ...new Set(data.map((d) => d.type_group).filter(Boolean)),
+        ];
+        typeGroupEl.innerHTML =
+          '<option value="">Tất cả</option>' +
+          types.map((t) => `<option value="${t}">${t}</option>`).join("");
+      }
+
+      // Perform search
+      async function fetchData() {
+        const dateFrom = dateFromEl.value;
+        const dateTo = dateToEl.value;
+        const typeGroup = typeGroupEl.value;
+        const stationId = stationIdEl.value.trim();
+
+        let query = supabase
+          .from("scan_events")
+          .select("*", { count: "exact" })
+          .order("created_at", { ascending: false });
+
+        // Date filters: created_at >= start of dateFrom (UTC), created_at < start of next day after dateTo
+        if (dateFrom) {
+          query = query.gte("created_at", `${dateFrom}T00:00:00+07:00`);
+        }
+        if (dateTo) {
+          // End of dateTo in UTC+7: next day 00:00:00
+          const nextDay = new Date(dateTo + "T00:00:00+07:00");
+          nextDay.setDate(nextDay.getDate() + 1);
+          query = query.lt("created_at", nextDay.toISOString());
+        }
+        if (typeGroup) {
+          query = query.eq("type_group", typeGroup);
+        }
+        if (stationId) {
+          query = query.eq("station_id", stationId);
+        }
+
+        // Limit to 1000 records for performance (can adjust)
+        query = query.limit(1000);
+
+        return await query;
+      }
+
+      // Render table rows
+      function renderTable(rows) {
+        currentRows = rows || [];
+        if (!currentRows.length) {
+          tableBody.innerHTML = `<tr><td colspan="9" style="text-align:center; padding:2rem; color:#94a3b8;">Không tìm thấy dữ liệu phù hợp.</td></tr>`;
+          copyBtn.disabled = true;
+          resultCount.textContent = "";
+          return;
+        }
+
+        tableBody.innerHTML = currentRows
+          .map(
+            (row) => `
+                <tr>
+                    <td>${row.id}</td>
+                    <td>${row.event_type || ""}</td>
+                    <td>${row.email || ""}</td>
+                    <td>${row.station_id || ""}</td>
+                    <td>${row.type_group || ""}</td>
+                    <td>${row.return_tn || ""}</td>
+                    <td>${row.to_number || ""}</td>
+                    <td>${row.item_count ?? ""}</td>
+                    <td>${formatCreatedAt(row.created_at)}</td>
+                </tr>
+            `,
+          )
+          .join("");
+
+        copyBtn.disabled = false;
+        resultCount.textContent = `Tìm thấy ${currentRows.length} bản ghi.`;
+      }
+
+      // Handle search
+      async function handleSearch() {
+        loadingEl.style.display = "flex";
+        try {
+          const { data, error, count } = await fetchData();
+          if (error) throw error;
+          renderTable(data);
+        } catch (err) {
+          alert("Lỗi khi tải dữ liệu: " + err.message);
+          tableBody.innerHTML = `<tr><td colspan="9" style="text-align:center; padding:2rem; color:#ef4444;">Lỗi: ${err.message}</td></tr>`;
+          copyBtn.disabled = true;
+          resultCount.textContent = "";
+        } finally {
+          loadingEl.style.display = "none";
+        }
+      }
+
+      // Copy to clipboard (tab-separated, can paste into Google Sheets)
+      function copyToClipboard() {
+        if (!currentRows.length) return;
+
+        // Prepare tab-separated string with header
+        const header = [
+          "ID",
+          "Event Type",
+          "Email",
+          "Station ID",
+          "Type Group",
+          "Return TN",
+          "TO Number",
+          "Item Count",
+          "Created At",
+        ].join("\t");
+        const rows = currentRows.map((r) =>
+          [
+            r.id,
+            r.event_type || "",
+            r.email || "",
+            r.station_id || "",
+            r.type_group || "",
+            r.return_tn || "",
+            r.to_number || "",
+            r.item_count ?? "",
+            formatCreatedAt(r.created_at),
+          ].join("\t"),
+        );
+
+        const text = header + "\n" + rows.join("\n");
+
+        navigator.clipboard
+          .writeText(text)
+          .then(() => {
+            // Show temporary feedback
+            const originalText = copyBtn.innerHTML;
+            copyBtn.innerHTML = "✅ Đã sao chép!";
+            copyBtn.disabled = true;
+            setTimeout(() => {
+              copyBtn.innerHTML = originalText;
+              copyBtn.disabled = false;
+            }, 2000);
+          })
+          .catch((err) => {
+            alert("Không thể sao chép: " + err);
+          });
+      }
+
+      // Reset filters
+      function resetFilters() {
+        const defaults = getDefaultDates();
+        dateFromEl.value = defaults.from;
+        dateToEl.value = defaults.to;
+        typeGroupEl.value = "";
+        stationIdEl.value = "";
+        currentRows = [];
+        renderTable([]);
+      }
+
+      // Initialize page
+      async function init() {
+        const defaults = getDefaultDates();
+        dateFromEl.value = defaults.from;
+        dateToEl.value = defaults.to;
+
+        await loadTypeGroups();
+
+        // Event listeners
+        searchBtn.addEventListener("click", handleSearch);
+        resetBtn.addEventListener("click", resetFilters);
+        copyBtn.addEventListener("click", copyToClipboard);
+
+        // Allow pressing Enter in station ID input to search
+        stationIdEl.addEventListener("keypress", (e) => {
+          if (e.key === "Enter") handleSearch();
+        });
+      }
+
+      init();
+    </script>
+  </body>
+</html>

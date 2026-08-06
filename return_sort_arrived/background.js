@@ -150,7 +150,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       const page = msg.page || 1;
       const limit = msg.limit || 20;
       const { data, error } = await supabaseClient.rpc(
-        "get_active_scan_events",
+        "get_today_active_scan_events",
         {
           p_page: page,
           p_limit: limit,
@@ -164,7 +164,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.action === "GET_ACTIVE_EVENTS_COUNT") {
     (async () => {
       const { data, error } = await supabaseClient.rpc(
-        "count_active_scan_events",
+        "count_today_active_scan_events",
       );
       sendResponse({ count: error ? 0 : data });
     })();

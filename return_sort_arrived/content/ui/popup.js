@@ -162,7 +162,7 @@ const STYLES = `
   color: #999; border: 2px dashed #ccc;
 }
 .return-tn-text { font-size: 28px; font-weight: 700; color: #0f172a; word-break: break-all; min-height: 40px; }
-.type-text { font-size: 22px; font-weight: 700; color: #334155; min-height: 30px; }
+.type-text { font-size: 28px; font-weight: 700; color: #334155; min-height: 40px; }
 .progress-bar { height: 14px; background: #e2e8f0; border-radius: 7px; overflow: hidden; width: 100%; }
 .progress-fill { height: 100%; border-radius: 7px; transition: width 0.4s ease; background: #cbd5e1; }
 .count-text { font-size: 42px; font-weight: 800; color: #0f172a; min-height: 50px; }
@@ -750,8 +750,8 @@ export class UIManager {
         const color = this._getErrorColor(error.reason);
         errorInfo.style.display = "block";
         errorInfo.innerHTML = `
-          <div style="font-size:26px; font-weight:800; color:${color}; margin-bottom:8px; display:flex; align-items:center; justify-content:center; gap:8px;">
-            <span style="font-size:32px;">${icon}</span> ${error.reason}
+          <div style="font-size:22px; font-weight:800; color:${color}; margin-bottom:8px; display:flex; align-items:center; justify-content:center; gap:8px;">
+            <span style="font-size:26px;">${icon}</span> ${error.reason}
           </div>
           <div style="font-size:16px; color:#4b5563; font-weight:600;">${error.detail || ""}</div>
         `;

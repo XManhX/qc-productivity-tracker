@@ -501,26 +501,53 @@ export class DashboardUI {
   }
 
   _renderCardFromLabel(label) {
-    const displayType = label.displayType || ""; // label lưu là displayType
+    const displayType = label.displayType || "";
     const stationId = label.id || "?";
     const color = STATION_COLORS[stationId] || "#3b82f6";
     const textColor = getTextColor(color);
+    const toNumber = label.toNumber || "N/A";
+    const email = label.email || "unknown";
+    const itemCount = label.itemCount ?? 0;
+
+    // Định dạng thời gian in (nếu có)
+    let timeDisplay = "N/A";
+    if (label.createdAt) {
+      try {
+        const d = new Date(label.createdAt);
+        timeDisplay = d.toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" })
+          + " " + d.toLocaleDateString("vi-VN");
+      } catch (e) {
+        timeDisplay = "Lỗi ngày";
+      }
+    }
+
     return `
       <div class="card status-closed" data-id="${label.id}" data-type="${displayType}">
         <div class="card-row">
           <div class="card-left">
-            <div class="id-badge" style="background:${color}; color:${textColor};">${label.id || "?"}</div>
+            <div class="id-badge" style="background:${color}; color:${textColor};">${stationId}</div>
             <div>
               <div class="type">${displayType}</div>
-              <div class="time">${label.dateStr || ""}</div>
+              <div class="to-number" style="font-weight:600; color:#1e293b; font-size:13px;">${toNumber}</div>
+              <div class="time">${timeDisplay}</div>
+              <div class="email" style="font-size:11px; color:#64748b;">${email}</div>
             </div>
           </div>
           <div class="card-actions">
-            <button class="btn btn-reprint" data-action="reprint-label" data-to="${label.toNumber}" data-type="${displayType}" data-id="${label.id}" data-date="${label.dateStr}" data-number="${label.number}" data-email="${label.email}" data-qty="${label.itemCount}">In lại</button>
+            <button class="btn btn-reprint" data-action="reprint-label"
+                    data-to="${label.toNumber}"
+                    data-type="${displayType}"
+                    data-id="${label.id}"
+                    data-date="${label.dateStr}"
+                    data-number="${label.number}"
+                    data-email="${label.email}"
+                    data-qty="${itemCount}">
+              In lại
+            </button>
           </div>
         </div>
         <div class="progress-row">
-          <span class="progress-text">QTY: ${label.itemCount}</span>
+          <span class="progress-text">QTY: ${itemCount}</span>
         </div>
       </div>
     `;

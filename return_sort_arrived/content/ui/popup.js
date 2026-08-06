@@ -539,14 +539,26 @@ export class UIManager {
     if (!topRow) return;
 
     const sessions = this.state.sessions || [];
-    const top5 = sessions.slice(0, 5);
+
+    // Sắp xếp giảm dần theo % đầy (count/threshold), nếu bằng nhau thì ưu tiên count lớn hơn
+    const sorted = [...sessions].sort((a, b) => {
+      const thresholdA = this._resolveThreshold(a.id, a.threshold);
+      const thresholdB = this._resolveThreshold(b.id, b.threshold);
+      const percentA = thresholdA > 0 ? a.item_count / thresholdA : 0;
+      const percentB = thresholdB > 0 ? b.item_count / thresholdB : 0;
+
+      if (percentB !== percentA) return percentB - percentA; // giảm dần theo %
+      // Nếu bằng % thì so sánh count thực tế (ưu tiên count cao hơn)
+      return b.item_count - a.item_count;
+    });
+
+    const top5 = sorted.slice(0, 5);
     const SLOT_COUNT = 5;
 
     let html = "";
     for (let i = 0; i < SLOT_COUNT; i++) {
       const s = top5[i];
       if (s) {
-        // Dùng hàm resolve để đảm bảo lấy đúng
         const threshold = this._resolveThreshold(s.id, s.threshold);
         const count = s.item_count;
         const percent = threshold > 0 ? Math.min(100, Math.round((count / threshold) * 100)) : 0;
@@ -554,28 +566,26 @@ export class UIManager {
         const textColor = getTextColor(bgColor);
         const displayType = s.type_group || "";
         html += `<div class="badge-card" style="background:${bgColor}; color:${textColor};" title="ID ${s.id}: ${displayType} – ${count}/${threshold}" data-id="${s.id}">
-          <div class="badge-id">${s.id}</div>
-          <div class="badge-type" title="${displayType}">${displayType || "-"}</div>
-          <div class="badge-count">${count}/${threshold}</div>
-          <div class="badge-bar"><div class="badge-fill" style="width:${percent}%"></div></div>
-        </div>`;
+        <div class="badge-id">${s.id}</div>
+        <div class="badge-type" title="${displayType}">${displayType || "-"}</div>
+        <div class="badge-count">${count}/${threshold}</div>
+        <div class="badge-bar"><div class="badge-fill" style="width:${percent}%"></div></div>
+      </div>`;
       } else {
         html += `<div class="badge-card placeholder">
-          <div class="badge-id">-</div><div class="badge-type">-</div><div class="badge-count">-</div>
-          <div class="badge-bar"><div class="badge-fill" style="width:0%"></div></div>
-        </div>`;
+        <div class="badge-id">-</div><div class="badge-type">-</div><div class="badge-count">-</div>
+        <div class="badge-bar"><div class="badge-fill" style="width:0%"></div></div>
+      </div>`;
       }
     }
     topRow.innerHTML = html;
 
-    topRow
-      .querySelectorAll(".badge-card:not(.placeholder)")
-      .forEach((badge) => {
-        badge.addEventListener("click", (e) => {
-          const id = badge.dataset.id;
-          if (id) this.state.showSessionDetail(id);
-        });
+    topRow.querySelectorAll(".badge-card:not(.placeholder)").forEach((badge) => {
+      badge.addEventListener("click", (e) => {
+        const id = badge.dataset.id;
+        if (id) this.state.showSessionDetail(id);
       });
+    });
   }
 
   updateTop5(sessions) {
@@ -1051,8 +1061,15 @@ export class UIManager {
   async _savePrintedLabel(labelData) {
     const { printedLabels } = await chrome.storage.local.get("printedLabels");
     const labels = printedLabels || [];
-    labels.unshift(labelData);
-    if (labels.length > 10) labels.pop();
+    // Thêm timestamp lúc in
+    labels.unshift({
+      ...labelData,
+      createdAt: new Date().toISOString()
+    });
+    // Giữ tối đa 50 tem gần nhất
+    if (labels.length > 50) {
+      labels.length = 50;
+    }
     await chrome.storage.local.set({ printedLabels: labels });
   }
 

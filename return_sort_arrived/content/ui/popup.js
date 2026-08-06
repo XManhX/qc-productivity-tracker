@@ -511,6 +511,28 @@ export class UIManager {
     }
   }
 
+  /**
+   * Tìm threshold chính xác:
+   * 1. Dùng rawThreshold nếu là số hợp lệ (>0 hoặc 0)
+   * 2. Nếu không có, tìm trong state.sessions theo id
+   * 3. Fallback 30
+   */
+  _resolveThreshold(id, rawThreshold) {
+    // Nếu rawThreshold là số (kể cả 0) thì dùng
+    if (typeof rawThreshold === "number" && rawThreshold >= 0) {
+      return rawThreshold;
+    }
+    // Tra cứu từ state
+    if (id && this.state.sessions) {
+      const session = this.state.sessions.find((s) => s.id === id);
+      if (session && typeof session.threshold === "number" && session.threshold >= 0) {
+        return session.threshold;
+      }
+    }
+    // Fallback cuối cùng
+    return 30;
+  }
+
   _updateTop5() {
     if (this.minimized || !this.shadowRoot) return;
     const topRow = this.shadowRoot.getElementById("top-row");
@@ -524,12 +546,13 @@ export class UIManager {
     for (let i = 0; i < SLOT_COUNT; i++) {
       const s = top5[i];
       if (s) {
-        const threshold = s.threshold || 30;
+        // Dùng hàm resolve để đảm bảo lấy đúng
+        const threshold = this._resolveThreshold(s.id, s.threshold);
         const count = s.item_count;
-        const percent = Math.min(100, Math.round((count / threshold) * 100));
+        const percent = threshold > 0 ? Math.min(100, Math.round((count / threshold) * 100)) : 0;
         const bgColor = STATION_COLORS[s.id] || "#607D8B";
         const textColor = getTextColor(bgColor);
-        const displayType = s.type_group || ""; // đã là display_name
+        const displayType = s.type_group || "";
         html += `<div class="badge-card" style="background:${bgColor}; color:${textColor};" title="ID ${s.id}: ${displayType} – ${count}/${threshold}" data-id="${s.id}">
           <div class="badge-id">${s.id}</div>
           <div class="badge-type" title="${displayType}">${displayType || "-"}</div>
@@ -564,7 +587,7 @@ export class UIManager {
     displayType,
     return_tn,
     count,
-    threshold,
+    threshold: rawThreshold,
     isFull,
     error,
     unknownId,
@@ -573,6 +596,9 @@ export class UIManager {
     processing,
   }) {
     if (!this.shadowRoot) return;
+    // Luôn lấy threshold chính xác từ nguồn đáng tin nhất
+    const threshold = this._resolveThreshold(id, rawThreshold);
+
     const idBox = this.shadowRoot.getElementById("id-box");
     const typeEl = this.shadowRoot.getElementById("type-el");
     const returnTnEl = this.shadowRoot.getElementById("return-tn-el");
@@ -605,7 +631,7 @@ export class UIManager {
       const canUndo = canOperate || (error && id && count > 0);
       undoBtn.style.display = canUndo ? "flex" : "none";
       if (canUndo) {
-        undoBtn.disabled = false; // reset trạng thái
+        undoBtn.disabled = false;
         undoBtn.onclick = (e) => {
           if (undoBtn.disabled) return;
           undoBtn.disabled = true;
@@ -758,7 +784,7 @@ export class UIManager {
 
     // Progress bar
     const percent =
-      count !== undefined && threshold
+      count !== undefined && threshold > 0
         ? Math.min(100, Math.round((count / threshold) * 100))
         : 0;
     if (progressFill) {
@@ -770,7 +796,7 @@ export class UIManager {
     // Count text
     if (countEl) {
       countEl.textContent =
-        count !== undefined ? `${count}/${threshold || 30}` : `∞/∞`;
+        count !== undefined ? `${count}/${threshold}` : `∞/∞`;
     }
 
     // Buttons
@@ -788,7 +814,7 @@ export class UIManager {
           });
         });
       } else {
-        btnContainer.innerHTML = `<button class="btn btn-close-early" id="btn-close-early">Đóng kiện ngay (${count}/${threshold || 30})</button>`;
+        btnContainer.innerHTML = `<button class="btn btn-close-early" id="btn-close-early">Đóng kiện ngay (${count}/${threshold})</button>`;
         const closeEarlyBtn = btnContainer.querySelector("#btn-close-early");
         closeEarlyBtn.addEventListener("click", () => {
           if (closeEarlyBtn.disabled) return;
@@ -802,7 +828,7 @@ export class UIManager {
               '<span class="spinner"></span> Đang đóng...';
             this.state.closeSession(id, displayType).finally(() => {
               closeEarlyBtn.disabled = false;
-              closeEarlyBtn.textContent = `Đóng kiện ngay (${count}/${threshold || 30})`;
+              closeEarlyBtn.textContent = `Đóng kiện ngay (${count}/${threshold})`;
             });
           }
         });
@@ -834,7 +860,7 @@ export class UIManager {
       displayType: displayType || null,
       return_tn,
       count: session?.item_count || 0,
-      threshold: session?.threshold || 30,
+      threshold: session?.threshold, // để _resolveThreshold xử lý
       isFull: session?.status === "full",
       closed: session?.status === "closed",
       unknownId: !id,
@@ -851,7 +877,7 @@ export class UIManager {
       displayType,
       return_tn,
       count: serverData.item_count,
-      threshold: serverData.threshold || 30,
+      threshold: serverData.threshold, // để _resolveThreshold xử lý
       isFull: serverData.status === "full",
       closed: serverData.status === "closed",
       unknownId: !id,
@@ -899,15 +925,14 @@ export class UIManager {
 
   showScanError({ return_tn, displayType, id, reason, detail }) {
     this.currentId = id || "";
-    // Chọn âm thanh dựa vào reason
     if (reason.includes("Không có trong master data")) {
       this.audio.playNotFound();
     } else if (reason.includes("Lỗi ánh xạ")) {
       this.audio.playMappingError();
     } else if (reason.includes("Sai tuyến")) {
-      this.audio.playMappingError(); // hoặc âm riêng
+      this.audio.playMappingError();
     } else {
-      this.audio.playError(); // Lỗi server, mạng
+      this.audio.playError();
     }
 
     this._updateCard({
@@ -926,7 +951,6 @@ export class UIManager {
       displayType: null,
       return_tn: null,
       count: 0,
-      threshold: 30,
       isFull: false,
       closed: false,
       unknownId: false,
@@ -1027,7 +1051,7 @@ export class UIManager {
   async _savePrintedLabel(labelData) {
     const { printedLabels } = await chrome.storage.local.get("printedLabels");
     const labels = printedLabels || [];
-    labels.unshift(labelData); // labelData.displayType
+    labels.unshift(labelData);
     if (labels.length > 10) labels.pop();
     await chrome.storage.local.set({ printedLabels: labels });
   }
@@ -1039,7 +1063,7 @@ export class UIManager {
       displayType,
       return_tn: "Đang in...",
       count: itemCount,
-      threshold: 0,
+      threshold: 0, // tạm thời
       isFull: false,
     });
     const date = new Date();

@@ -1,42 +1,108 @@
 // lib/printer-main.js
+// Chạy trong main world: nạp html2canvas & jsPDF, xử lý tạo PDF nhãn in.
+
 (function () {
-    function log(msg, data) {
-        console.log('[printer-main]', msg, data || '');
+    'use strict';
+
+    function log(msg) {
+        console.log('[printer-main]', msg);
     }
 
-    function waitForDeps() {
-        return new Promise(function (resolve, reject) {
-            function handler(e) {
-                if (e.source !== window) return;
-                if (e.data.type === 'dependencies-ready') {
-                    window.removeEventListener('message', handler);
-                    resolve();
-                } else if (e.data.type === 'dependencies-error') {
-                    window.removeEventListener('message', handler);
-                    reject(new Error(e.data.message));
-                }
-            }
-            window.addEventListener('message', handler);
+    /* ---------- Hàm nạp script ---------- */
+    function loadScript(src) {
+        return new Promise((resolve, reject) => {
+            const script = document.createElement('script');
+            script.src = src;
+            script.onload = () => resolve();
+            script.onerror = () => reject(new Error('Failed to load script: ' + src));
+            document.head.appendChild(script);
         });
     }
 
-    function mmToPx(mm) { return mm * 3.779527559; }
+    /* ---------- Nạp thư viện từ attribute được content script đặt ---------- */
+    const html2canvasUrl = document.documentElement.getAttribute('data-html2canvas-url');
+    const jspdfUrl = document.documentElement.getAttribute('data-jspdf-url');
 
+    if (!html2canvasUrl || !jspdfUrl) {
+        window.postMessage({ type: 'printer-main-error', error: 'Missing library URLs' }, '*');
+        return;
+    }
+
+    loadScript(html2canvasUrl)
+        .then(() => loadScript(jspdfUrl))
+        .then(() => {
+            log('Libraries loaded successfully');
+            window.postMessage({ type: 'printer-main-ready' }, '*');
+            window.addEventListener('message', onPrintRequest);
+        })
+        .catch((err) => {
+            window.postMessage({ type: 'printer-main-error', error: err.message }, '*');
+        });
+
+    /* ---------- Xử lý yêu cầu in ---------- */
+    async function onPrintRequest(event) {
+        if (event.source !== window) return;
+        if (event.data.action !== 'printLabel') return;
+
+        const { requestId, payload } = event.data;
+        log('Received printLabel request: ' + requestId);
+
+        try {
+            await handlePrintLabel(payload, requestId);
+        } catch (err) {
+            log('Error: ' + err.message);
+            window.postMessage(
+                { action: 'printLabel-result', requestId, success: false, error: err.message },
+                '*'
+            );
+        }
+    }
+
+    /* ---------- Đơn vị mm -> px ---------- */
+    function mmToPx(mm) {
+        return mm * 3.779527559;
+    }
+
+    /**
+     * Điều chỉnh font-size của element để nội dung vừa khít 1 dòng,
+     * không bị cắt, không xuống dòng.
+     * @param {HTMLElement} element - Phần tử cần điều chỉnh
+     * @param {number} maxWidth - Chiều rộng tối đa cho phép (px)
+     * @param {number} initialFontSize - Font-size khởi tạo (px)
+     */
+    function fitTextToWidth(element, maxWidth, initialFontSize) {
+        element.style.whiteSpace = 'nowrap';
+        element.style.display = 'inline-block'; // Để đo chính xác
+        element.style.fontSize = initialFontSize + 'px';
+
+        // Giảm font-size nếu nội dung tràn
+        if (element.scrollWidth > maxWidth) {
+            const ratio = maxWidth / element.scrollWidth;
+            const newSize = Math.max(1, initialFontSize * ratio); // tối thiểu 1px
+            element.style.fontSize = newSize + 'px';
+        }
+    }
+
+    /* ---------- Tạo container nhãn ẩn ---------- */
     function createLabelContainer(toNumber, type, id, dateStr, number, email, itemCount, qrDataUrl) {
-        var container = document.createElement('div');
-        container.style.position = 'fixed';
-        container.style.top = '-9999px';
-        container.style.left = '-9999px';
-        container.style.width = mmToPx(100) + 'px';
-        container.style.height = mmToPx(50) + 'px';
-        container.style.backgroundColor = 'white';
-        container.style.fontFamily = "'Helvetica Neue', Helvetica, Arial, sans-serif";
-        container.style.display = 'flex';
-        container.style.alignItems = 'stretch';
+        const container = document.createElement('div');
+        Object.assign(container.style, {
+            position: 'fixed',
+            top: '-9999px',
+            left: '-9999px',
+            width: mmToPx(100) + 'px',
+            height: mmToPx(50) + 'px',
+            backgroundColor: 'white',
+            fontFamily: "'Helvetica Neue', Helvetica, Arial, sans-serif",
+            display: 'flex',
+            alignItems: 'stretch'
+        });
+
+        // Tạo HTML cơ bản (chưa áp fit riêng cho tiêu đề)
         container.innerHTML =
             '<div style="width:67%; display:flex; flex-direction:column; justify-content:space-between; padding:' +
             mmToPx(3) + 'px ' + mmToPx(3) + 'px ' + mmToPx(3) + 'px ' + mmToPx(5) + 'px;">' +
-            '<div style="font-size:' + mmToPx(8) + 'px; font-weight:800; color:#000; letter-spacing:0.5px; line-height:1.2; text-transform:uppercase;">TO-' + type + '-' + id + '</div>' +
+            '<div id="label-title-main" style="font-weight:800; color:#000; letter-spacing:0.5px; line-height:1.2; text-transform:uppercase;">TO-' + type + '-' + id + '</div>' +
             '<div style="font-size:' + mmToPx(6) + 'px; font-weight:700; color:#000; font-family:\'Courier New\', Courier, monospace; letter-spacing:0.5px;">' + number + '</div>' +
             '<div style="font-size:' + mmToPx(5.3) + 'px; font-weight:700; color:#000; font-family:\'Courier New\', Courier, monospace;">' + dateStr + '</div>' +
             '<div style="font-size:' + mmToPx(5.3) + 'px; font-weight:700; color:#000; font-family:\'Courier New\', Courier, monospace;">QTY: ' + itemCount + '</div>' +
@@ -44,70 +110,86 @@
             '</div>' +
             '<div style="width:33%; display:flex; flex-direction:column; align-items:center; justify-content:space-between; padding:' +
             mmToPx(3) + 'px ' + mmToPx(5) + 'px ' + mmToPx(3) + 'px 0;">' +
-            '<div style="font-size:' + mmToPx(4) + 'px; font-weight:700; color:#000; font-family:\'Courier New\', Courier, monospace; text-transform:uppercase;">TO-' + type + '-' + id + '</div>' +
+            '<div id="label-title-side" style="font-weight:700; color:#000; font-family:\'Courier New\', Courier, monospace; text-transform:uppercase;">TO-' + type + '-' + id + '</div>' +
             '<div style="width:' + mmToPx(30) + 'px; height:' + mmToPx(30) + 'px;">' +
             '<img src="' + qrDataUrl + '" style="width:100%; height:100%; filter: grayscale(100%) contrast(150%);" crossorigin="anonymous" />' +
             '</div>' +
             '<div style="font-size:' + mmToPx(4) + 'px; font-weight:700; color:#000; font-family:\'Courier New\', Courier, monospace;">QTY: ' + itemCount + '</div>' +
             '</div>';
+
         document.body.appendChild(container);
+
+        // Tìm các phần tử tiêu đề
+        const mainTitle = container.querySelector('#label-title-main');
+        const sideTitle = container.querySelector('#label-title-side');
+
+        // Xác định chiều rộng tối đa cho từng vị trí
+        const mainMaxWidth = mmToPx(67) - mmToPx(5 + 3); // padding trái 5, phải 3
+        const sideMaxWidth = mmToPx(33) - mmToPx(5); // padding phải 5
+
+        // Fit font-size cho tiêu đề chính (khởi tạo 8mm)
+        fitTextToWidth(mainTitle, mainMaxWidth, mmToPx(8));
+        // Fit font-size cho tiêu đề phụ (khởi tạo 4mm)
+        fitTextToWidth(sideTitle, sideMaxWidth, mmToPx(4));
+
         return container;
     }
 
+    /* ---------- Render PDF từ element ---------- */
     async function generatePDFBase64(element, widthMM, heightMM) {
         log('Capturing canvas...');
-        var canvas = await window.html2canvas(element, { scale: 2, useCORS: true, logging: false });
-        log('Canvas size: ' + canvas.width + 'x' + canvas.height);
-        if (canvas.width === 0 || canvas.height === 0) throw new Error('Canvas is empty');
-        var { jsPDF } = window.jspdf;
-        var doc = new jsPDF({ unit: 'mm', format: [widthMM, heightMM], orientation: 'landscape' });
-        var imgData = canvas.toDataURL('image/jpeg', 1.0);
+        const canvas = await window.html2canvas(element, {
+            scale: 2,
+            useCORS: true,
+            logging: false
+        });
+
+        if (canvas.width === 0 || canvas.height === 0) {
+            throw new Error('Canvas is empty');
+        }
+
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF({
+            unit: 'mm',
+            format: [widthMM, heightMM],
+            orientation: 'landscape'
+        });
+
+        const imgData = canvas.toDataURL('image/jpeg', 1.0);
         doc.addImage(imgData, 'JPEG', 0, 0, widthMM, heightMM);
-        var dataUri = doc.output('datauristring');
+        const dataUri = doc.output('datauristring');
         return dataUri.substring(dataUri.indexOf(',') + 1);
     }
 
-    async function handlePrintLabel(data) {
-        log('Creating label container...');
-        var container = createLabelContainer(
+    /* ---------- Quy trình in một nhãn ---------- */
+    async function handlePrintLabel(data, requestId) {
+        const container = createLabelContainer(
             data.toNumber, data.type, data.id, data.dateStr,
             data.number, data.email, data.itemCount, data.qrDataUrl
         );
-        var img = container.querySelector('img');
+
+        // Đợi ảnh QR load (nếu chưa cache)
+        const img = container.querySelector('img');
         if (img && !img.complete) {
-            log('Waiting for QR image...');
-            await new Promise(function (resolve) { img.onload = resolve; img.onerror = resolve; });
+            await new Promise(resolve => {
+                img.onload = resolve;
+                img.onerror = resolve;
+            });
         }
-        await new Promise(function (r) { setTimeout(r, 300); });
 
-        log('Generating PDF...');
-        var pdfBase64 = await generatePDFBase64(container, 100, 50);
-        document.body.removeChild(container);
-        log('PDF ready, sending to content script via message');
+        // Chờ layout ổn định
+        await new Promise(r => setTimeout(r, 100));
 
-        // Gửi base64 về content script để gọi API qua background
-        window.postMessage({ action: 'printLabel-pdf-ready', pdfBase64: pdfBase64 }, '*');
+        try {
+            const pdfBase64 = await generatePDFBase64(container, 100, 50);
+            document.body.removeChild(container);
+            window.postMessage(
+                { action: 'printLabel-pdf-ready', requestId, pdfBase64 },
+                '*'
+            );
+        } catch (err) {
+            if (container.parentNode) document.body.removeChild(container);
+            throw err;
+        }
     }
-
-    // Bắt đầu
-    waitForDeps().then(function () {
-        log('Dependencies OK, notifying content script...');
-        window.postMessage({ type: 'printer-main-ready' }, '*');
-
-        window.addEventListener('message', async function (event) {
-            if (event.source !== window) return;
-            if (event.data.action === 'printLabel') {
-                log('Received printLabel request');
-                try {
-                    await handlePrintLabel(event.data.payload);
-                    // Không gửi kết quả ở đây, sẽ đợi content script phản hồi
-                } catch (err) {
-                    log('Error: ' + err.message);
-                    window.postMessage({ action: 'printLabel-result', success: false, error: err.message }, '*');
-                }
-            }
-        });
-    }).catch(function (err) {
-        log('Dependencies failed: ' + err.message);
-    });
 })();

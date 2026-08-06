@@ -2,7 +2,7 @@
   if (window.__asInterceptorInjected) return;
   window.__asInterceptorInjected = true;
 
-  console.log("[AS Interceptor] Injecting into main world...");
+  // console.log("[AS Interceptor] Injecting into main world...");
 
   let pendingSheetId = null;
 
@@ -67,7 +67,7 @@
   function clickComplete() {
     const btn = findCompleteButton();
     if (btn) {
-      console.log("[AS Interceptor] Clicking Complete button...");
+      // console.log("[AS Interceptor] Clicking Complete button...");
       btn.click();
       return true;
     }
@@ -197,5 +197,5 @@
     window.XMLHttpRequest[p] = OrigXHR[p];
   });
 
-  console.log("[AS Interceptor] Interceptors active.");
+  // console.log("[AS Interceptor] Interceptors active.");
 })();

@@ -57,10 +57,10 @@ export class StateManager {
       this.typeToId[typeName] = info.station_id;
       this.typeToDisplay[typeName] = info.display_name || typeName;
     }
-    console.log(
-      "[StateManager] Type mapping loaded:",
-      Object.keys(this.typeToId).length,
-    );
+    // console.log(
+    //   "[StateManager] Type mapping loaded:",
+    //   Object.keys(this.typeToId).length,
+    // );
     this._typeMappingReady = true;
   }
 

@@ -32,7 +32,7 @@ async function fetchMasterData() {
         masterDataUpdated: Date.now(),
       });
       masterDataMap = map;
-      console.log("[BG] Master data updated:", Object.keys(map).length);
+      // console.log("[BG] Master data updated:", Object.keys(map).length);
     }
   } catch (e) {
     console.error("[BG] Master data fetch error:", e);
@@ -49,7 +49,7 @@ async function fetchTypeMappings() {
       typeMapping: json,
       typeMappingUpdated: Date.now(),
     });
-    console.log("[BG] Type mappings updated:", Object.keys(typeToIdMap).length);
+    // console.log("[BG] Type mappings updated:", Object.keys(typeToIdMap).length);
   } catch (e) {
     console.error("[BG] Fetch type mappings error:", e);
   }
@@ -62,12 +62,12 @@ supabaseClient
     "postgres_changes",
     { event: "*", schema: "public", table: "id_sessions" },
     (payload) => {
-      console.log("[BG] Realtime change:", payload);
+      // console.log("[BG] Realtime change:", payload);
       broadcastSessions();
     },
   )
   .subscribe((status) => {
-    console.log("[BG] Subscription status:", status);
+    // console.log("[BG] Subscription status:", status);
   });
 
 async function broadcastSessions() {
@@ -234,7 +234,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
 chrome.runtime.onConnect.addListener((port) => {
   if (port.name === "as-keepalive") {
-    console.log("[BG] Persistent port connected");
+    // console.log("[BG] Persistent port connected");
     port.onDisconnect.addListener(() =>
       console.log("[BG] Persistent port disconnected"),
     );

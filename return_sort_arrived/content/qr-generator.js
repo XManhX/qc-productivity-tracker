@@ -37,7 +37,7 @@
         return n[t];
       },
       i = function (t) {
-        for (var r = 0; 0 !== t; ) (r++, (t >>>= 1));
+        for (var r = 0; 0 !== t;) (r++, (t >>>= 1));
         return r;
       },
       u = function (t) {
@@ -145,10 +145,10 @@
           if (1 === t) return [];
           for (
             var r = Math.floor(t / 7) + 2,
-              n = e(t),
-              o = 145 === n ? 26 : 2 * Math.ceil((n - 13) / (2 * r - 2)),
-              a = [n - 7],
-              i = 1;
+            n = e(t),
+            o = 145 === n ? 26 : 2 * Math.ceil((n - 13) / (2 * r - 2)),
+            a = [n - 7],
+            i = 1;
             i < r - 1;
             i++
           )
@@ -301,16 +301,16 @@
       E.applyMask,
       E.getBestMask);
     var y = [
-        1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2, 1, 2, 2, 4, 1, 2, 4, 4, 2, 4, 4, 4,
-        2, 4, 6, 5, 2, 4, 6, 6, 2, 5, 8, 8, 4, 5, 8, 8, 4, 5, 8, 11, 4, 8, 10,
-        11, 4, 9, 12, 16, 4, 9, 16, 16, 6, 10, 12, 18, 6, 10, 17, 16, 6, 11, 16,
-        19, 6, 13, 18, 21, 7, 14, 21, 25, 8, 16, 20, 25, 8, 17, 23, 25, 9, 17,
-        23, 34, 9, 18, 25, 30, 10, 20, 27, 32, 12, 21, 29, 35, 12, 23, 34, 37,
-        12, 25, 34, 40, 13, 26, 35, 42, 14, 28, 38, 45, 15, 29, 40, 48, 16, 31,
-        43, 51, 17, 33, 45, 54, 18, 35, 48, 57, 19, 37, 51, 60, 19, 38, 53, 63,
-        20, 40, 56, 66, 21, 43, 59, 70, 22, 45, 62, 74, 24, 47, 65, 77, 25, 49,
-        68, 81,
-      ],
+      1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2, 1, 2, 2, 4, 1, 2, 4, 4, 2, 4, 4, 4,
+      2, 4, 6, 5, 2, 4, 6, 6, 2, 5, 8, 8, 4, 5, 8, 8, 4, 5, 8, 11, 4, 8, 10,
+      11, 4, 9, 12, 16, 4, 9, 16, 16, 6, 10, 12, 18, 6, 10, 17, 16, 6, 11, 16,
+      19, 6, 13, 18, 21, 7, 14, 21, 25, 8, 16, 20, 25, 8, 17, 23, 25, 9, 17,
+      23, 34, 9, 18, 25, 30, 10, 20, 27, 32, 12, 21, 29, 35, 12, 23, 34, 37,
+      12, 25, 34, 40, 13, 26, 35, 42, 14, 28, 38, 45, 15, 29, 40, 48, 16, 31,
+      43, 51, 17, 33, 45, 54, 18, 35, 48, 57, 19, 37, 51, 60, 19, 38, 53, 63,
+      20, 40, 56, 66, 21, 43, 59, 70, 22, 45, 62, 74, 24, 47, 65, 77, 25, 49,
+      68, 81,
+    ],
       A = [
         7, 10, 13, 17, 10, 16, 22, 28, 15, 26, 36, 44, 20, 36, 52, 64, 26, 48,
         72, 88, 36, 64, 96, 112, 40, 72, 108, 130, 48, 88, 132, 156, 60, 110,
@@ -361,8 +361,8 @@
       for (var e = 255; e < 512; e++) N[e] = N[e - 255];
     })();
     var C = function (t) {
-        return N[t];
-      },
+      return N[t];
+    },
       P = function (t, r) {
         return 0 === t || 0 === r ? 0 : N[B[t] + B[r]];
       },
@@ -377,9 +377,9 @@
           return e;
         }),
           (r.mod = function (t, r) {
-            for (var e = new Uint8Array(t); e.length - r.length >= 0; ) {
+            for (var e = new Uint8Array(t); e.length - r.length >= 0;) {
               for (var n = e[0], o = 0; o < r.length; o++) e[o] ^= P(r[o], n);
-              for (var a = 0; a < e.length && 0 === e[a]; ) a++;
+              for (var a = 0; a < e.length && 0 === e[a];) a++;
               e = e.slice(a);
             }
             return e;
@@ -571,14 +571,14 @@
         }),
         (r.getEncodedBits = function (t) {
           if (!b(t) || t < 7) throw new Error("Invalid QR Code version");
-          for (var r = t << 12; i(r) - e >= 0; ) r ^= 7973 << (i(r) - e);
+          for (var r = t << 12; i(r) - e >= 0;) r ^= 7973 << (i(r) - e);
           return (t << 12) | r;
         }));
     });
     (O.getCapacity, O.getBestVersionForData, O.getEncodedBits);
     var Q = i(1335),
       V = function (t, r) {
-        for (var e = (t.bit << 3) | r, n = e << 10; i(n) - Q >= 0; )
+        for (var e = (t.bit << 3) | r, n = e << 10; i(n) - Q >= 0;)
           n ^= 1335 << (i(n) - Q);
         return 21522 ^ ((e << 10) | n);
       };
@@ -601,8 +601,8 @@
         var o = this.data.length - r;
         o > 0 &&
           ((e = this.data.substr(r)),
-          (n = parseInt(e, 10)),
-          t.put(n, 3 * o + 1));
+            (n = parseInt(e, 10)),
+            t.put(n, 3 * o + 1));
       }));
     var j = q,
       $ = [
@@ -676,32 +676,32 @@
     function W(t) {
       ((this.mode = K.BYTE),
         "string" == typeof t &&
-          (t = (function (t) {
-            for (var r = [], e = t.length, n = 0; n < e; n++) {
-              var o = t.charCodeAt(n);
-              if (o >= 55296 && o <= 56319 && e > n + 1) {
-                var a = t.charCodeAt(n + 1);
-                a >= 56320 &&
-                  a <= 57343 &&
-                  ((o = 1024 * (o - 55296) + a - 56320 + 65536), (n += 1));
-              }
-              o < 128
-                ? r.push(o)
-                : o < 2048
-                  ? (r.push((o >> 6) | 192), r.push((63 & o) | 128))
-                  : o < 55296 || (o >= 57344 && o < 65536)
-                    ? (r.push((o >> 12) | 224),
+        (t = (function (t) {
+          for (var r = [], e = t.length, n = 0; n < e; n++) {
+            var o = t.charCodeAt(n);
+            if (o >= 55296 && o <= 56319 && e > n + 1) {
+              var a = t.charCodeAt(n + 1);
+              a >= 56320 &&
+                a <= 57343 &&
+                ((o = 1024 * (o - 55296) + a - 56320 + 65536), (n += 1));
+            }
+            o < 128
+              ? r.push(o)
+              : o < 2048
+                ? (r.push((o >> 6) | 192), r.push((63 & o) | 128))
+                : o < 55296 || (o >= 57344 && o < 65536)
+                  ? (r.push((o >> 12) | 224),
+                    r.push(((o >> 6) & 63) | 128),
+                    r.push((63 & o) | 128))
+                  : o >= 65536 && o <= 1114111
+                    ? (r.push((o >> 18) | 240),
+                      r.push(((o >> 12) & 63) | 128),
                       r.push(((o >> 6) & 63) | 128),
                       r.push((63 & o) | 128))
-                    : o >= 65536 && o <= 1114111
-                      ? (r.push((o >> 18) | 240),
-                        r.push(((o >> 12) & 63) | 128),
-                        r.push(((o >> 6) & 63) | 128),
-                        r.push((63 & o) | 128))
-                      : r.push(239, 191, 189);
-            }
-            return new Uint8Array(r).buffer;
-          })(t)),
+                    : r.push(239, 191, 189);
+          }
+          return new Uint8Array(r).buffer;
+        })(t)),
         (this.data = new Uint8Array(t)));
     }
     ((W.getBitsLength = function (t) {
@@ -739,8 +739,8 @@
             if (!(e >= 57408 && e <= 60351))
               throw new Error(
                 "Invalid SJIS character: " +
-                  this.data[r] +
-                  "\nMake sure your charset is UTF-8",
+                this.data[r] +
+                "\nMake sure your charset is UTF-8",
               );
             e -= 49472;
           }
@@ -762,14 +762,14 @@
               c,
               g,
               d = r.PriorityQueue.make();
-            for (d.push(e, 0); !d.empty(); )
+            for (d.push(e, 0); !d.empty();)
               for (s in ((u = (i = d.pop()).value),
-              (f = i.cost),
-              (h = t[u] || {})))
+                (f = i.cost),
+                (h = t[u] || {})))
                 h.hasOwnProperty(s) &&
                   ((c = f + h[s]),
-                  (g = a[s]),
-                  (void 0 === a[s] || g > c) &&
+                    (g = a[s]),
+                    (void 0 === a[s] || g > c) &&
                     ((a[s] = c), d.push(s, c), (o[s] = u)));
             if (void 0 !== n && void 0 === a[n]) {
               var l = ["Could not find a path from ", e, " to ", n, "."].join(
@@ -780,7 +780,7 @@
             return o;
           },
           extract_shortest_path_from_predecessor_list: function (t, r) {
-            for (var e = [], n = r; n; ) (e.push(n), (n = t[n]));
+            for (var e = [], n = r; n;) (e.push(n), (n = t[n]));
             return (e.reverse(), e);
           },
           find_path: function (t, e, n) {
@@ -822,7 +822,7 @@
           return unescape(encodeURIComponent(t)).length;
         }
         function n(t, r, e) {
-          for (var n, o = []; null !== (n = t.exec(e)); )
+          for (var n, o = []; null !== (n = t.exec(e));)
             o.push({
               data: n[0],
               index: n.index,
@@ -868,11 +868,11 @@
           if ((e = K.from(r, n)) !== K.BYTE && e.bit < n.bit)
             throw new Error(
               '"' +
-                t +
-                '" cannot be encoded with mode ' +
-                K.toString(e) +
-                ".\n Suggested mode is: " +
-                K.toString(n),
+              t +
+              '" cannot be encoded with mode ' +
+              K.toString(e) +
+              ".\n Suggested mode is: " +
+              K.toString(n),
             );
           switch ((e !== K.KANJI || s() || (e = K.BYTE), e)) {
             case K.NUMERIC:
@@ -898,76 +898,76 @@
           (r.fromString = function (t, n) {
             for (
               var i = (function (t, r) {
-                  for (
-                    var e = {}, n = { start: {} }, o = ["start"], i = 0;
-                    i < t.length;
-                    i++
-                  ) {
-                    for (var u = t[i], s = [], f = 0; f < u.length; f++) {
-                      var h = u[f],
-                        c = "" + i + f;
-                      (s.push(c),
-                        (e[c] = { node: h, lastCount: 0 }),
-                        (n[c] = {}));
-                      for (var g = 0; g < o.length; g++) {
-                        var d = o[g];
-                        e[d] && e[d].node.mode === h.mode
-                          ? ((n[d][c] =
-                              a(e[d].lastCount + h.length, h.mode) -
-                              a(e[d].lastCount, h.mode)),
-                            (e[d].lastCount += h.length))
-                          : (e[d] && (e[d].lastCount = h.length),
-                            (n[d][c] =
-                              a(h.length, h.mode) +
-                              4 +
-                              K.getCharCountIndicator(h.mode, r)));
-                      }
+                for (
+                  var e = {}, n = { start: {} }, o = ["start"], i = 0;
+                  i < t.length;
+                  i++
+                ) {
+                  for (var u = t[i], s = [], f = 0; f < u.length; f++) {
+                    var h = u[f],
+                      c = "" + i + f;
+                    (s.push(c),
+                      (e[c] = { node: h, lastCount: 0 }),
+                      (n[c] = {}));
+                    for (var g = 0; g < o.length; g++) {
+                      var d = o[g];
+                      e[d] && e[d].node.mode === h.mode
+                        ? ((n[d][c] =
+                          a(e[d].lastCount + h.length, h.mode) -
+                          a(e[d].lastCount, h.mode)),
+                          (e[d].lastCount += h.length))
+                        : (e[d] && (e[d].lastCount = h.length),
+                          (n[d][c] =
+                            a(h.length, h.mode) +
+                            4 +
+                            K.getCharCountIndicator(h.mode, r)));
                     }
-                    o = s;
                   }
-                  for (var l = 0; l < o.length; l++) n[o[l]].end = 0;
-                  return { map: n, table: e };
-                })(
-                  (function (t) {
-                    for (var r = [], n = 0; n < t.length; n++) {
-                      var o = t[n];
-                      switch (o.mode) {
-                        case K.NUMERIC:
-                          r.push([
-                            o,
-                            {
-                              data: o.data,
-                              mode: K.ALPHANUMERIC,
-                              length: o.length,
-                            },
-                            { data: o.data, mode: K.BYTE, length: o.length },
-                          ]);
-                          break;
-                        case K.ALPHANUMERIC:
-                          r.push([
-                            o,
-                            { data: o.data, mode: K.BYTE, length: o.length },
-                          ]);
-                          break;
-                        case K.KANJI:
-                          r.push([
-                            o,
-                            { data: o.data, mode: K.BYTE, length: e(o.data) },
-                          ]);
-                          break;
-                        case K.BYTE:
-                          r.push([
-                            { data: o.data, mode: K.BYTE, length: e(o.data) },
-                          ]);
-                      }
+                  o = s;
+                }
+                for (var l = 0; l < o.length; l++) n[o[l]].end = 0;
+                return { map: n, table: e };
+              })(
+                (function (t) {
+                  for (var r = [], n = 0; n < t.length; n++) {
+                    var o = t[n];
+                    switch (o.mode) {
+                      case K.NUMERIC:
+                        r.push([
+                          o,
+                          {
+                            data: o.data,
+                            mode: K.ALPHANUMERIC,
+                            length: o.length,
+                          },
+                          { data: o.data, mode: K.BYTE, length: o.length },
+                        ]);
+                        break;
+                      case K.ALPHANUMERIC:
+                        r.push([
+                          o,
+                          { data: o.data, mode: K.BYTE, length: o.length },
+                        ]);
+                        break;
+                      case K.KANJI:
+                        r.push([
+                          o,
+                          { data: o.data, mode: K.BYTE, length: e(o.data) },
+                        ]);
+                        break;
+                      case K.BYTE:
+                        r.push([
+                          { data: o.data, mode: K.BYTE, length: e(o.data) },
+                        ]);
                     }
-                    return r;
-                  })(o(t)),
-                  n,
-                ),
-                u = et.find_path(i.map, "start", "end"),
-                s = [],
-                f = 1;
+                  }
+                  return r;
+                })(o(t)),
+                n,
+              ),
+              u = et.find_path(i.map, "start", "end"),
+              s = [],
+              f = 1;
               f < u.length - 1;
               f++
             )
@@ -1024,21 +1024,21 @@
       return (function (t, r, e) {
         for (
           var n = a(r),
-            o = M(r, e),
-            i = n - o,
-            u = I(r, e),
-            s = u - (n % u),
-            f = Math.floor(n / u),
-            h = Math.floor(i / u),
-            c = h + 1,
-            g = f - h,
-            d = new L(g),
-            l = 0,
-            v = new Array(u),
-            p = new Array(u),
-            w = 0,
-            m = new Uint8Array(t.buffer),
-            E = 0;
+          o = M(r, e),
+          i = n - o,
+          u = I(r, e),
+          s = u - (n % u),
+          f = Math.floor(n / u),
+          h = Math.floor(i / u),
+          c = h + 1,
+          g = f - h,
+          d = new L(g),
+          l = 0,
+          v = new Array(u),
+          p = new Array(u),
+          w = 0,
+          m = new Uint8Array(t.buffer),
+          E = 0;
           E < u;
           E++
         ) {
@@ -1079,8 +1079,8 @@
         if (r < s)
           throw new Error(
             "\nThe chosen QR Code version cannot contain this amount of data.\nMinimum version required to store current data is: " +
-              s +
-              ".\n",
+            s +
+            ".\n",
           );
       } else r = s;
       var f = at(r, e, a),
@@ -1095,8 +1095,8 @@
                   i + s <= -1 ||
                     e <= i + s ||
                     ((u >= 0 && u <= 6 && (0 === s || 6 === s)) ||
-                    (s >= 0 && s <= 6 && (0 === u || 6 === u)) ||
-                    (u >= 2 && u <= 4 && s >= 2 && s <= 4)
+                      (s >= 0 && s <= 6 && (0 === u || 6 === u)) ||
+                      (u >= 2 && u <= 4 && s >= 2 && s <= 4)
                       ? t.set(a + u, i + s, !0, !0)
                       : t.set(a + u, i + s, !1, !0));
         })(c, r),
@@ -1111,34 +1111,34 @@
             for (var o = e[n][0], a = e[n][1], i = -2; i <= 2; i++)
               for (var u = -2; u <= 2; u++)
                 -2 === i ||
-                2 === i ||
-                -2 === u ||
-                2 === u ||
-                (0 === i && 0 === u)
+                  2 === i ||
+                  -2 === u ||
+                  2 === u ||
+                  (0 === i && 0 === u)
                   ? t.set(o + i, a + u, !0, !0)
                   : t.set(o + i, a + u, !1, !0);
         })(c, r),
         ot(c, e, 0),
         r >= 7 &&
-          (function (t, r) {
-            for (
-              var e, n, o, a = t.size, i = O.getEncodedBits(r), u = 0;
-              u < 18;
-              u++
-            )
-              ((e = Math.floor(u / 3)),
-                (n = (u % 3) + a - 8 - 3),
-                (o = 1 == ((i >> u) & 1)),
-                t.set(e, n, o, !0),
-                t.set(n, e, o, !0));
-          })(c, r),
+        (function (t, r) {
+          for (
+            var e, n, o, a = t.size, i = O.getEncodedBits(r), u = 0;
+            u < 18;
+            u++
+          )
+            ((e = Math.floor(u / 3)),
+              (n = (u % 3) + a - 8 - 3),
+              (o = 1 == ((i >> u) & 1)),
+              t.set(e, n, o, !0),
+              t.set(n, e, o, !0));
+        })(c, r),
         (function (t, r) {
           for (
             var e = t.size, n = -1, o = e - 1, a = 7, i = 0, u = e - 1;
             u > 0;
             u -= 2
           )
-            for (6 === u && u--; ; ) {
+            for (6 === u && u--; ;) {
               for (var s = 0; s < 2; s++)
                 if (!t.isReserved(o, u - s)) {
                   var f = !1;
@@ -1166,19 +1166,19 @@
     }
     (nt.fromArray, nt.fromString, nt.rawSplit);
     var ut = function (t, r) {
-        if (void 0 === t || "" === t) throw new Error("No input text");
-        var e,
-          n,
-          o = c.M;
-        return (
-          void 0 !== r &&
-            ((o = c.from(r.errorCorrectionLevel, c.M)),
-            (e = O.from(r.version)),
-            (n = E.from(r.maskPattern)),
-            r.toSJISFunc && u(r.toSJISFunc)),
-          it(t, e, o, n)
-        );
-      },
+      if (void 0 === t || "" === t) throw new Error("No input text");
+      var e,
+        n,
+        o = c.M;
+      return (
+        void 0 !== r &&
+        ((o = c.from(r.errorCorrectionLevel, c.M)),
+          (e = O.from(r.version)),
+          (n = E.from(r.maskPattern)),
+          r.toSJISFunc && u(r.toSJISFunc)),
+        it(t, e, o, n)
+      );
+    },
       st = h(function (t, r) {
         function e(t) {
           if (
@@ -1208,9 +1208,9 @@
         ((r.getOptions = function (t) {
           (t || (t = {}), t.color || (t.color = {}));
           var r =
-              void 0 === t.margin || null === t.margin || t.margin < 0
-                ? 4
-                : t.margin,
+            void 0 === t.margin || null === t.margin || t.margin < 0
+              ? 4
+              : t.margin,
             n = t.width && t.width >= 21 ? t.width : void 0,
             o = t.scale || 4;
           return {
@@ -1237,12 +1237,12 @@
           (r.qrToImageData = function (t, e, n) {
             for (
               var o = e.modules.size,
-                a = e.modules.data,
-                i = r.getScale(o, n),
-                u = Math.floor((o + 2 * n.margin) * i),
-                s = n.margin * i,
-                f = [n.color.light, n.color.dark],
-                h = 0;
+              a = e.modules.data,
+              i = r.getScale(o, n),
+              u = Math.floor((o + 2 * n.margin) * i),
+              s = n.margin * i,
+              f = [n.color.light, n.color.dark],
+              h = 0;
               h < u;
               h++
             )
@@ -1252,9 +1252,9 @@
                 if (h >= s && c >= s && h < u - s && c < u - s)
                   d =
                     f[
-                      a[Math.floor((h - s) / i) * o + Math.floor((c - s) / i)]
-                        ? 1
-                        : 0
+                    a[Math.floor((h - s) / i) * o + Math.floor((c - s) / i)]
+                      ? 1
+                      : 0
                     ];
                 ((t[g++] = d.r), (t[g++] = d.g), (t[g++] = d.b), (t[g] = d.a));
               }
@@ -1267,13 +1267,13 @@
           o = r;
         (void 0 !== n || (r && r.getContext) || ((n = r), (r = void 0)),
           r ||
-            (o = (function () {
-              try {
-                return document.createElement("canvas");
-              } catch (t) {
-                throw new Error("You need to specify a canvas element");
-              }
-            })()),
+          (o = (function () {
+            try {
+              return document.createElement("canvas");
+            } catch (t) {
+              throw new Error("You need to specify a canvas element");
+            }
+          })()),
           (n = st.getOptions(n)));
         var a = st.getImageWidth(t.modules.size, n),
           i = o.getContext("2d"),
@@ -1321,12 +1321,12 @@
         i = o + 2 * n.margin,
         u = n.color.light.a
           ? "<path " +
-            ht(n.color.light, "fill") +
-            ' d="M0 0h' +
-            i +
-            "v" +
-            i +
-            'H0z"/>'
+          ht(n.color.light, "fill") +
+          ' d="M0 0h' +
+          i +
+          "v" +
+          i +
+          'H0z"/>'
           : "",
         s =
           "<path " +
@@ -1340,7 +1340,7 @@
                 t[u]
                   ? (i++,
                     (u > 0 && s > 0 && t[u - 1]) ||
-                      ((n += a ? ct("M", s + e, 0.5 + f + e) : ct("m", o, 0)),
+                    ((n += a ? ct("M", s + e, 0.5 + f + e) : ct("m", o, 0)),
                       (o = 0),
                       (a = !1)),
                     (s + 1 < r && t[u + 1]) || ((n += ct("h", i)), (i = 0)))
@@ -1385,9 +1385,9 @@
       2 === u
         ? ((a = n), (n = r), (r = o = void 0))
         : 3 === u &&
-          (r.getContext && void 0 === a
-            ? ((a = o), (o = void 0))
-            : ((a = o), (o = n), (n = r), (r = void 0)));
+        (r.getContext && void 0 === a
+          ? ((a = o), (o = void 0))
+          : ((a = o), (o = n), (n = r), (r = void 0)));
       try {
         var f = ut(n, o);
         a(null, t(f, r, o));
@@ -1459,5 +1459,5 @@
     }
   });
 
-  console.log("[QR Generator] Ready (embedded library)");
+  // console.log("[QR Generator] Ready (embedded library)");
 })();

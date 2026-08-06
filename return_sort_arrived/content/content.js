@@ -56,7 +56,7 @@ function connectKeepAlive() {
     }
     return;
   }
-  console.log("[Content] Keep-alive connected");
+  // console.log("[Content] Keep-alive connected");
   keepAlivePort.onDisconnect.addListener(() => {
     keepAlivePort = null;
     if (keepAliveAttempts < MAX_KEEP_ALIVE_ATTEMPTS) {

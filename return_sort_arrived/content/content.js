@@ -74,15 +74,7 @@ else window.addEventListener("load", connectKeepAlive);
 // --- Main ---
 (async () => {
   try {
-    // Inject scripts
-    const interceptorUrl = safeGetURL("content/interceptor.js");
-    if (interceptorUrl) {
-      const script = document.createElement("script");
-      script.src = interceptorUrl;
-      script.onload = () => script.remove();
-      (document.head || document.documentElement).appendChild(script);
-    }
-
+    // Inject scripts (QR generator có thể inject sớm, không ảnh hưởng)
     const qrGenUrl = safeGetURL("content/qr-generator.js");
     if (qrGenUrl) {
       const script = document.createElement("script");
@@ -91,7 +83,7 @@ else window.addEventListener("load", connectKeepAlive);
       (document.head || document.documentElement).appendChild(script);
     }
 
-    // Import modules
+    // Import modules trước khi thiết lập listeners
     const { StateManager } = await import(
       chrome.runtime.getURL("content/stateManager.js")
     );
@@ -102,30 +94,37 @@ else window.addEventListener("load", connectKeepAlive);
       chrome.runtime.getURL("content/ui/popup.js")
     );
 
+    // Lấy master data từ storage
     const stored = await new Promise((resolve) =>
       safeStorageGet(["masterData"], resolve),
     );
     const masterData = stored?.masterData || {};
 
-    // Lấy email
+    // Lấy email với fallback an toàn
     let email = "unknown@shopee.com";
     try {
-      email = localStorage.getItem("useremail");
-      if (!email && document.body) {
-        const match = document.body.innerText.match(
+      const storedEmail = localStorage.getItem("useremail");
+      if (storedEmail && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(storedEmail)) {
+        email = storedEmail;
+      } else {
+        // Fallback từ nội dung trang
+        const match = document.body?.innerText.match(
           /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i,
         );
-        if (match) email = match[0];
-        localStorage.setItem("useremail", email);
+        if (match) {
+          email = match[0];
+          localStorage.setItem("useremail", email);
+        }
       }
-    } catch (e) { }
+    } catch (e) {
+      // Giữ email mặc định
+    }
 
     const stateManager = new StateManager(masterData, email);
-
     const audioManager = new AudioManager();
     stateManager.audioManager = audioManager;
 
-    // ==== 3 sự kiện ====
+    // ========== ĐĂNG KÝ LISTENERS TRƯỚC KHI INJECT INTERCEPTOR ==========
     document.addEventListener("as-return-tn-detected", (e) => {
       stateManager.handleDetected(e.detail.sheetId);
     });
@@ -142,6 +141,15 @@ else window.addEventListener("load", connectKeepAlive);
       );
     });
 
+    // Inject interceptor chỉ sau khi listener đã sẵn sàng
+    const interceptorUrl = safeGetURL("content/interceptor.js");
+    if (interceptorUrl) {
+      const script = document.createElement("script");
+      script.src = interceptorUrl;
+      script.onload = () => script.remove();
+      (document.head || document.documentElement).appendChild(script);
+    }
+
     // Khởi tạo UI ngay lập tức
     function initUI() {
       new UIManager(stateManager, audioManager);
@@ -152,7 +160,7 @@ else window.addEventListener("load", connectKeepAlive);
       initUI();
     }
 
-    // Lấy master data từ storage và cập nhật
+    // Cập nhật master data khi storage thay đổi
     safeStorageGet(["masterData"], (stored) => {
       if (stored?.masterData) {
         stateManager.updateMasterData(stored.masterData);

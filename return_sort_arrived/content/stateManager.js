@@ -183,8 +183,8 @@ export class StateManager {
       return null;
     }
 
-    const typeName = this.getTypeName(sheetId);          // type_name gốc
-    const displayType = typeName ? this.getDisplayName(typeName) : null; // display_name
+    const typeName = this.getTypeName(sheetId);
+    const displayType = typeName ? this.getDisplayName(typeName) : null;
     const id = typeName ? this.getId(typeName) : null;
 
     if (typeName) {
@@ -201,7 +201,7 @@ export class StateManager {
     if (!id) {
       this.ui.showScanError({
         return_tn: sheetId,
-        displayType: displayType,   // truyền displayType
+        displayType: displayType,
         id: null,
         reason: "Lỗi ánh xạ",
         detail: `Type "${displayType}" chưa được gán ID`,
@@ -212,15 +212,14 @@ export class StateManager {
     const incrementPromise = this._callApi("increment", {
       id,
       return_tn: sheetId,
-      type_group: displayType,   // gửi display_name
+      type: displayType,
       email: this.email,
     })
       .then(async (data) => {
         if (!data.success) {
           throw new Error(data.error || "Lỗi không xác định");
         }
-        const freshSessions = await this._fetchSessions();
-        this._onSessionsUpdate(freshSessions);
+        // KHÔNG fetch sessions ở đây nữa – realtime sẽ tự cập nhật
         return { success: true, data, displayType, id };
       })
       .catch((e) => {

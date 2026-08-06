@@ -480,16 +480,14 @@ export class DashboardUI {
             </div>
           </div>
           <div class="card-actions">
-            ${
-              (status === "open" || status === "full") && count > 0
-                ? `<button class="btn btn-close" data-action="close" data-id="${session.id}" data-type="${displayType}">Đóng</button>`
-                : ""
-            }
-            ${
-              status === "closed"
-                ? `<button class="btn btn-reprint" data-action="reprint-closed" data-id="${session.id}" data-type="${displayType}" data-to="${toNumber}" data-date="${timeStr}" data-number="${toNumber.split("-").pop() || ""}" data-qty="${count}">In lại</button>`
-                : ""
-            }
+            ${(status === "open" || status === "full") && count > 0
+        ? `<button class="btn btn-close" data-action="close" data-id="${session.id}" data-type="${displayType}">Đóng</button>`
+        : ""
+      }
+            ${status === "closed"
+        ? `<button class="btn btn-reprint" data-action="reprint-closed" data-id="${session.id}" data-type="${displayType}" data-to="${toNumber}" data-date="${timeStr}" data-number="${toNumber.split("-").pop() || ""}" data-qty="${count}">In lại</button>`
+        : ""
+      }
           </div>
         </div>
         <div class="progress-row">
@@ -504,7 +502,8 @@ export class DashboardUI {
 
   _renderCardFromLabel(label) {
     const displayType = label.displayType || ""; // label lưu là displayType
-    const color = STATION_COLORS[label.id] || "#3b82f6";
+    const stationId = label.id || "?";
+    const color = STATION_COLORS[stationId] || "#3b82f6";
     const textColor = getTextColor(color);
     return `
       <div class="card status-closed" data-id="${label.id}" data-type="${displayType}">

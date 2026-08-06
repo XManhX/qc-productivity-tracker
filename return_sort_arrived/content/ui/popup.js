@@ -964,20 +964,11 @@ export class UIManager {
     }
   }
 
-  showWarning(msg) {
+  showWarning(return_tn, detail) {
     this.audio.playNotFound();
     this._updateCard({
-      return_tn: msg,
-      error: { reason: "Cảnh báo", detail: "" },
-      unknownId: true,
-    });
-  }
-
-  showError(msg) {
-    this.audio.playError();
-    this._updateCard({
-      return_tn: msg,
-      error: { reason: "Lỗi", detail: "" },
+      return_tn: return_tn,
+      error: { reason: "Cảnh báo", detail },
       unknownId: true,
     });
   }

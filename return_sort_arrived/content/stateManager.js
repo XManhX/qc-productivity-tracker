@@ -201,7 +201,7 @@ export class StateManager {
     await this._waitForTypeMapping();
     if (!this.ui) return null;
     if (!sheetId) {
-      this.ui.showWarning("Không có mã đơn hàng");
+      this.ui.showWarning(sheetId, "Không có mã đơn hàng");
       return null;
     }
 
@@ -216,7 +216,7 @@ export class StateManager {
       utterance.lang = "vi-VN";
       window.speechSynthesis.speak(utterance);
     } else {
-      this.ui.showWarning("Không có trong master data");
+      this.ui.showWarning(sheetId, "Không có trong master data");
       return null;
     }
 

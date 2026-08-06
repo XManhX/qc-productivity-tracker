@@ -193,10 +193,30 @@ const STYLES = `
 .dashboard-container.visible {
   display: flex;
 }
+
+/* Thông báo toast nâng cao */
 .toast-msg {
   position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
-  background: #1e293b; color: white; padding: 8px 20px; border-radius: 10px;
-  font-size: 14px; font-weight: 500; z-index: 9999999; animation: slideUp 0.3s ease;
+  padding: 12px 20px; border-radius: 12px;
+  font-size: 15px; font-weight: 600; z-index: 9999999;
+  display: flex; align-items: center; gap: 10px;
+  animation: slideUp 0.3s ease;
+  box-shadow: 0 10px 25px rgba(0,0,0,0.15);
+}
+.toast-msg.toast-success {
+  background: #f0fdf4; border-left: 5px solid #22c55e; color: #166534;
+}
+.toast-msg.toast-error {
+  background: #fef2f2; border-left: 5px solid #ef4444; color: #991b1b;
+}
+.toast-msg.toast-warning {
+  background: #fffbeb; border-left: 5px solid #f59e0b; color: #92400e;
+}
+.toast-icon {
+  font-size: 22px; line-height: 1;
+}
+.toast-text {
+  font-weight: 700; line-height: 1.4;
 }
 @keyframes slideUp {
   from { opacity: 0; transform: translateX(-50%) translateY(10px); }
@@ -409,9 +429,9 @@ export class UIManager {
       refreshMaster.innerHTML = '<span class="spinner"></span>';
       try {
         await this.state.refreshMasterData();
-        this._showToast("✅ Master Data đã được cập nhật");
+        this._showToast("Master Data đã được cập nhật", "success");
       } catch (e) {
-        this._showToast("❌ Lỗi cập nhật Master Data");
+        this._showToast("Lỗi cập nhật Master Data", "error");
       } finally {
         refreshMaster.disabled = false;
         refreshMaster.innerHTML = originalHTML;
@@ -429,9 +449,9 @@ export class UIManager {
       refreshMapping.innerHTML = '<span class="spinner"></span>';
       try {
         await this.state.refreshTypeMapping();
-        this._showToast("✅ Type Mapping đã được cập nhật");
+        this._showToast("Type Mapping đã được cập nhật", "success");
       } catch (e) {
-        this._showToast("❌ Lỗi cập nhật Type Mapping");
+        this._showToast("Lỗi cập nhật Type Mapping", "error");
       } finally {
         refreshMapping.disabled = false;
         refreshMapping.innerHTML = originalHTML;
@@ -592,6 +612,23 @@ export class UIManager {
     if (this.shadowRoot && this._viewMode === "arrival") this._updateTop5();
   }
 
+  // ─── Icon & màu sắc cho từng loại lỗi ─────────────────
+  _getErrorIcon(reason) {
+    const r = (reason || "").toLowerCase();
+    if (r.includes("sai tuyến")) return "🚫";
+    if (r.includes("không có trong master data") || r.includes("không tìm thấy")) return "📭";
+    if (r.includes("ánh xạ")) return "🗂️❌";
+    if (r.includes("cảnh báo")) return "⚠️";
+    return "❌";
+  }
+
+  _getErrorColor(reason) {
+    const r = (reason || "").toLowerCase();
+    if (r.includes("sai tuyến")) return "#856404";   // vàng đậm
+    if (r.includes("cảnh báo")) return "#92400e";    // cam nâu
+    return "#721c24"; // đỏ đậm
+  }
+
   _updateCard({
     id,
     displayType,
@@ -665,8 +702,14 @@ export class UIManager {
       if (processing) {
         card.style.background = "#f5f5f5";
       } else if (error) {
-        card.style.background =
-          error.reason === "Sai tuyến" ? "#fff3cd" : "#f8d7da";
+        const reason = error.reason || "";
+        if (reason.includes("Sai tuyến")) {
+          card.style.background = "#fff3cd";
+        } else if (reason.includes("Cảnh báo")) {
+          card.style.background = "#fff7ed";
+        } else {
+          card.style.background = "#f8d7da";
+        }
       } else if (isUnknown) {
         card.style.background = "#fff7ed";
       } else if (isFull) {
@@ -703,11 +746,15 @@ export class UIManager {
         returnTnEl.style.display = "block";
       }
       if (errorInfo) {
+        const icon = this._getErrorIcon(error.reason);
+        const color = this._getErrorColor(error.reason);
         errorInfo.style.display = "block";
         errorInfo.innerHTML = `
-                <div style="font-size:24px; font-weight:700; color:${error.reason === "Sai tuyến" ? "#856404" : "#721c24"}; margin-bottom:8px;">${error.reason}</div>
-                <div style="font-size:16px; color:#555;">${error.detail || ""}</div>
-            `;
+          <div style="font-size:26px; font-weight:800; color:${color}; margin-bottom:8px; display:flex; align-items:center; justify-content:center; gap:8px;">
+            <span style="font-size:32px;">${icon}</span> ${error.reason}
+          </div>
+          <div style="font-size:16px; color:#4b5563; font-weight:600;">${error.detail || ""}</div>
+        `;
       }
       if (card && animate) {
         card.classList.add("animate");
@@ -751,8 +798,10 @@ export class UIManager {
       if (errorInfo) {
         errorInfo.style.display = "block";
         errorInfo.innerHTML = `
-                <div style="font-size:20px; font-weight:600; color:#666;">⏳ Đang xử lý...</div>
-            `;
+          <div style="font-size:22px; font-weight:700; color:#4b5563; display:flex; align-items:center; justify-content:center; gap:8px;">
+            <span style="font-size:28px;">⏳</span> Đang xử lý...
+          </div>
+        `;
       }
       if (card && animate) {
         card.classList.add("animate");
@@ -1147,11 +1196,24 @@ export class UIManager {
       });
   }
 
-  _showToast(message) {
+  /**
+   * Hiển thị toast chuyên nghiệp với icon và màu sắc theo loại.
+   * @param {string} message - Nội dung thông báo (không cần icon).
+   * @param {'success'|'error'|'warning'} type - Loại thông báo.
+   */
+  _showToast(message, type = "info") {
     const toast = document.createElement("div");
-    toast.className = "toast-msg";
-    toast.textContent = message;
+    toast.className = `toast-msg toast-${type}`;
+    let icon = "";
+    if (type === "success") icon = "✅";
+    else if (type === "error") icon = "❌";
+    else if (type === "warning") icon = "⚠️";
+    else icon = "ℹ️"; // fallback info
+
+    toast.innerHTML = `<span class="toast-icon">${icon}</span><span class="toast-text">${message}</span>`;
     this.shadowRoot.appendChild(toast);
-    setTimeout(() => toast.remove(), 2500);
+    setTimeout(() => {
+      if (toast.parentNode) toast.remove();
+    }, 3000);
   }
 }

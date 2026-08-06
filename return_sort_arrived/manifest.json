@@ -6,7 +6,8 @@
   "host_permissions": [
     "https://wms.ssc.shopee.vn/*",
     "https://script.google.com/*",
-    "https://return-sort-arrived.vercel.app/*"
+    "https://return-sort-arrived.vercel.app/*",
+    "https://printproxy.wms.shopeemobile.com:21317/*"
   ],
   "background": {
     "service_worker": "background.js"

@@ -1193,8 +1193,8 @@
           const [typeRes, eventRes] = await Promise.all([
             supabaseClient
               .from("type_mappings")
-              .select("type_name")
-              .order("type_name"),
+              .select("display_name")
+              .order("display_name"),
             supabaseClient
               .from("scan_events")
               .select("event_type")
@@ -1202,7 +1202,9 @@
           ]);
           if (typeRes.data) {
             allTypeGroups = [
-              ...new Set(typeRes.data.map((d) => d.type_name).filter(Boolean)),
+              ...new Set(
+                typeRes.data.map((d) => d.display_name).filter(Boolean),
+              ),
             ];
             renderTypeItems();
           }

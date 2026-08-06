@@ -656,10 +656,14 @@
           <label>ID Trạm</label>
           <input type="text" id="station-id" placeholder="Ví dụ: 3A" />
         </div>
-        <!-- THÊM FILTER RETURN TN -->
         <div class="filter-group">
           <label>Return TN</label>
           <input type="text" id="return-tn" placeholder="Tìm Return TN..." />
+        </div>
+        <!-- THÊM FILTER TO NUMBER -->
+        <div class="filter-group">
+          <label>TO Number</label>
+          <input type="text" id="to-number" placeholder="Tìm TO Number..." />
         </div>
         <div class="filter-group">
           <label>Event Type</label>
@@ -794,7 +798,8 @@
         const selectAllBtn = document.getElementById("select-all");
         const deselectAllBtn = document.getElementById("deselect-all");
         const stationIdEl = document.getElementById("station-id");
-        const returnTnEl = document.getElementById("return-tn"); // THÊM
+        const returnTnEl = document.getElementById("return-tn");
+        const toNumberEl = document.getElementById("to-number"); // THÊM
         const eventTypeEl = document.getElementById("event-type");
         const searchBtn = document.getElementById("search-btn");
         const copyBtn = document.getElementById("copy-btn");
@@ -950,7 +955,8 @@
 
         function buildQuery() {
           const station = stationIdEl.value.trim();
-          const returnTn = returnTnEl.value.trim(); // LẤY GIÁ TRỊ RETURN TN
+          const returnTn = returnTnEl.value.trim();
+          const toNumber = toNumberEl.value.trim(); // LẤY GIÁ TRỊ TO NUMBER
           const evType = eventTypeEl.value;
           const typeArr = getSelectedTypeGroups();
           const { start, end } = getDateRange();
@@ -964,7 +970,8 @@
           if (typeArr.length > 0 && typeArr.length < allTypeGroups.length)
             q = q.in("type_group", typeArr);
           if (station) q = q.eq("station_id", station);
-          if (returnTn) q = q.ilike("return_tn", `%${returnTn}%`); // TÌM KIẾM CHỨA
+          if (returnTn) q = q.ilike("return_tn", `%${returnTn}%`);
+          if (toNumber) q = q.ilike("to_number", `%${toNumber}%`); // THÊM ĐIỀU KIỆN LỌC
           if (evType) q = q.eq("event_type", evType);
           return q;
         }
@@ -1147,7 +1154,8 @@
             .data("daterangepicker")
             .setEndDate(moment().endOf("day"));
           stationIdEl.value = "";
-          returnTnEl.value = ""; // XÓA RETURN TN
+          returnTnEl.value = "";
+          toNumberEl.value = ""; // XÓA GIÁ TRỊ TO NUMBER
           eventTypeEl.value = "open";
           typeList.querySelectorAll(".item").forEach((item) => {
             const text = item.querySelector(".item-text").textContent;
@@ -1172,6 +1180,10 @@
             if (e.key === "Enter") handleSearch();
           });
           returnTnEl.addEventListener("keypress", (e) => {
+            if (e.key === "Enter") handleSearch();
+          });
+          // THÊM SỰ KIỆN ENTER CHO TO NUMBER
+          toNumberEl.addEventListener("keypress", (e) => {
             if (e.key === "Enter") handleSearch();
           });
           prevPageBtn.addEventListener("click", async () => {

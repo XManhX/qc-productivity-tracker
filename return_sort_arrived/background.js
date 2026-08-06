@@ -184,6 +184,52 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       .catch((e) => sendResponse({ success: false, error: e.message }));
     return true;
   }
+
+  if (msg.action === 'PRINT_LABEL') {
+    (async () => {
+      const payload = {
+        pdf_data: msg.pdfBase64,
+        begin_page: 1,
+        end_page: 1000,
+        width: 100,
+        height: 50,
+        repeat_times: 1,
+        orientation: 1,
+        printer_mode: "common_mode",
+        scale: 100,
+        from: 1,
+        to: 1,
+        left_offset: 0,
+        top_offset: 0,
+        header_footer_print: false
+      };
+
+      try {
+        const res = await fetch('https://printproxy.wms.shopeemobile.com:21317/api/v2/print_pdf_file_base64', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+
+        if (!res.ok) {
+          const text = await res.text();
+          sendResponse({ success: false, error: `Print proxy HTTP ${res.status}: ${text}` });
+          return;
+        }
+
+        const result = await res.json();
+        if (result.retcode !== 0) {
+          sendResponse({ success: false, error: `retcode: ${result.retcode}` });
+          return;
+        }
+
+        sendResponse({ success: true });
+      } catch (err) {
+        sendResponse({ success: false, error: err.message });
+      }
+    })();
+    return true;
+  }
 });
 
 chrome.runtime.onConnect.addListener((port) => {

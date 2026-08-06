@@ -175,6 +175,28 @@ export class StateManager {
 
   // ============ LOGIC CHÍNH ============
 
+  /**
+   * Phân loại lỗi từ message để trả về reason phù hợp cho UI.
+   * Giúp hiển thị icon chuyên biệt (🚫 sai tuyến, 📭 không tìm thấy, v.v.)
+   */
+  _classifyError(message) {
+    if (!message) return { reason: "Lỗi", detail: "Không xác định" };
+    const msg = message.toLowerCase();
+    if (msg.includes("sai tuyến")) {
+      return { reason: "Sai tuyến", detail: message };
+    }
+    if (msg.includes("không tìm thấy") || msg.includes("không có trong master")) {
+      return { reason: "Không có trong master data", detail: message };
+    }
+    if (msg.includes("ánh xạ")) {
+      return { reason: "Lỗi ánh xạ", detail: message };
+    }
+    if (msg.includes("kết nối") || msg.includes("network") || msg.includes("timeout")) {
+      return { reason: "Lỗi kết nối", detail: "Vui lòng kiểm tra mạng và thử lại." };
+    }
+    return { reason: "Lỗi", detail: message };
+  }
+
   async _handleScan(sheetId) {
     await this._waitForTypeMapping();
     if (!this.ui) return null;
@@ -260,12 +282,14 @@ export class StateManager {
         } catch (e) { }
       }
     } else {
+      // Phân loại lỗi để hiển thị icon phù hợp
+      const { reason, detail } = this._classifyError(incResult.error);
       this.ui.showScanError({
         return_tn: sheetId,
         displayType: displayType,
         id,
-        reason: "Lỗi",
-        detail: incResult.error,
+        reason,
+        detail,
       });
     }
   }
@@ -277,7 +301,14 @@ export class StateManager {
     try {
       const data = await this._callApi("decrement", { id, return_tn });
       if (!data.success) {
-        this.ui.showError(data.error || "Không thể hủy đơn này");
+        // Sử dụng showScanError với reason "Lỗi hủy đơn" để có icon rõ ràng
+        this.ui.showScanError({
+          return_tn,
+          displayType,
+          id,
+          reason: "Lỗi hủy đơn",
+          detail: data.error || "Không thể hủy đơn này",
+        });
         return;
       }
       const freshSessions = await this._fetchSessions();
@@ -299,7 +330,13 @@ export class StateManager {
         this.ui.resetCard();
       }
     } catch (e) {
-      this.ui.showError("Lỗi kết nối");
+      this.ui.showScanError({
+        return_tn,
+        displayType,
+        id,
+        reason: "Lỗi kết nối",
+        detail: "Không thể kết nối đến máy chủ để hủy đơn.",
+      });
     }
   }
 
@@ -310,9 +347,23 @@ export class StateManager {
       this._onSessionsUpdate(freshSessions);
       if (data.success)
         this.ui.printAndClose(id, displayType, data.to_number, data.item_count);
-      else this.ui.showError(data.error);
+      else {
+        this.ui.showScanError({
+          return_tn: data.to_number || "",
+          displayType,
+          id,
+          reason: "Lỗi đóng kiện",
+          detail: data.error || "Không thể đóng kiện",
+        });
+      }
     } catch (e) {
-      this.ui.showError("Lỗi kết nối");
+      this.ui.showScanError({
+        return_tn: "",
+        displayType,
+        id,
+        reason: "Lỗi kết nối",
+        detail: "Không thể kết nối đến máy chủ để đóng kiện.",
+      });
     }
   }
 

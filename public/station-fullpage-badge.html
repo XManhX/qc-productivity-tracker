@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>In Nhãn Trạm – Nhóm Station ID (Cỡ chữ theo khổ giấy)</title>
+    <title>In Nhãn Trạm – Chữ Lớn</title>
     <style>
       * {
         margin: 0;
@@ -103,7 +103,7 @@
         break-inside: avoid;
         -webkit-print-color-adjust: exact;
         print-color-adjust: exact;
-        overflow: hidden; /* đảm bảo không tràn */
+        overflow: hidden;
       }
       .print-page:last-child {
         page-break-after: auto;
@@ -117,11 +117,10 @@
         width: 100%;
         height: 100%;
         text-align: center;
-        gap: 2rem;
+        gap: 1rem; /* giảm gap để tiết kiệm không gian */
         padding: 2mm;
       }
 
-      /* Mã trạm – cỡ chữ được set inline theo mm */
       .station-id {
         font-weight: 800;
         line-height: 1;
@@ -131,12 +130,11 @@
         max-width: 100%;
       }
 
-      /* Danh sách tên – cỡ chữ set inline */
       .station-names {
         font-weight: 700;
         line-height: 1.3;
         opacity: 0.95;
-        max-width: 90%;
+        max-width: 95%; /* tận dụng chiều ngang */
         word-break: break-word;
         overflow-wrap: break-word;
       }
@@ -298,9 +296,9 @@
             return a.localeCompare(b);
           });
 
-          // Tính cỡ chữ (mm) dựa trên chiều rộng trang
-          const idFontSize = Math.round(paper.w * 0.25 * 10) / 10; // 25% chiều rộng
-          const namesFontSize = Math.round(paper.w * 0.07 * 10) / 10; // 7% chiều rộng
+          // Cỡ chữ dựa trên chiều rộng trang (tỷ lệ lớn hơn)
+          const idFontSize = Math.round(paper.w * 0.35 * 10) / 10; // 35% -> mã trạm SIÊU TO
+          const namesFontSize = Math.round(paper.w * 0.12 * 10) / 10; // 12% -> tên to rõ
 
           const pages = stationIds
             .map((sid) => {

@@ -8,7 +8,6 @@ let mainWorldReadyPromise = null;
  */
 async function generateQRDataUrl(toNumber) {
   try {
-    // console.log('[Printer] Importing qrcode.js...');
     const { generateQR } = await import(chrome.runtime.getURL('content/qrcode.js'));
     return await generateQR(toNumber);
   } catch (e) {
@@ -44,7 +43,6 @@ function ensureMainWorldReady() {
       }
     };
 
-    // Set URL cho các thư viện
     document.documentElement.setAttribute(
       'data-html2canvas-url',
       chrome.runtime.getURL('lib/html2canvas.min.js')
@@ -54,7 +52,6 @@ function ensureMainWorldReady() {
       chrome.runtime.getURL('lib/jspdf.umd.min.js')
     );
 
-    // Inject printer-main.js (gộp cả nạp thư viện)
     const script = document.createElement('script');
     script.src = chrome.runtime.getURL('lib/printer-main.js');
     script.onload = () => console.log('[Printer] printer-main.js injected');
@@ -77,10 +74,19 @@ function ensureMainWorldReady() {
 
 /**
  * In một nhãn.
+ * @param {string} toNumber - Mã TO
+ * @param {string} id - ID của kiện
+ * @param {string} dateStr - Ngày (chuỗi)
+ * @param {string} number - Số TO (không có tiền tố)
+ * @param {string} email - Email người đóng
+ * @param {number} itemCount - Số lượng
+ * @param {string[]} typeList - Mảng các type_group thuộc về ID này
  * @returns {Promise<void>}
  */
-export async function printLabel(toNumber, type, id, dateStr, number, email, itemCount) {
+export async function printLabel(toNumber, id, dateStr, number, email, itemCount, typeList) {
+  const typeListSafe = typeList || [];
   // console.log('[Printer] printLabel called for', toNumber);
+
   showToast('⏳ Đang chuẩn bị in...');
 
   let qrDataUrl;
@@ -121,7 +127,6 @@ export async function printLabel(toNumber, type, id, dateStr, number, email, ite
       if (e.source !== window) return;
       const data = e.data;
 
-      // Main world đã tạo xong PDF, gửi base64
       if (data.action === 'printLabel-pdf-ready' && data.requestId === requestId) {
         chrome.runtime.sendMessage(
           { action: 'PRINT_LABEL', pdfBase64: data.pdfBase64 },
@@ -138,7 +143,6 @@ export async function printLabel(toNumber, type, id, dateStr, number, email, ite
         return;
       }
 
-      // Main world báo lỗi trực tiếp (trước khi có PDF)
       if (data.action === 'printLabel-result' && data.requestId === requestId) {
         finalize(data.success, data.error);
       }
@@ -150,12 +154,11 @@ export async function printLabel(toNumber, type, id, dateStr, number, email, ite
 
     window.addEventListener('message', messageHandler);
 
-    // Gửi yêu cầu vào main world
     window.postMessage(
       {
         action: 'printLabel',
         requestId,
-        payload: { toNumber, type, id, dateStr, number, email, itemCount, qrDataUrl }
+        payload: { toNumber, id, dateStr, number, email, itemCount, typeList: typeListSafe, qrDataUrl }
       },
       '*'
     );
@@ -163,7 +166,8 @@ export async function printLabel(toNumber, type, id, dateStr, number, email, ite
 
   try {
     await resultPromise;
-    showToast(`✅ Đã in TO-${type}-${id}`);
+    const typeStr = typeListSafe.join(', ');
+    showToast(`✅ Đã in TO-${id} (${typeStr})`);
   } catch (err) {
     showToast(`❌ In thất bại: ${err.message}`);
     throw err;
@@ -174,7 +178,6 @@ export async function printLabel(toNumber, type, id, dateStr, number, email, ite
  * Hiển thị toast thông báo không chặn UI.
  */
 function showToast(message) {
-  // console.log('[Toast]', message);
   const toast = document.createElement('div');
   toast.textContent = message;
   Object.assign(toast.style, {

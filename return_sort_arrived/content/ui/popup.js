@@ -253,6 +253,10 @@ export class UIManager {
     return window.location.href.includes("/v2/returninbound/arrving");
   }
 
+  _getTypeListForId(id) {
+    return this.state.getDisplayNamesForId(id);
+  }
+
   _updateVisibility() {
     if (!this.host) return;
     const isArriving = this._isArrivingPage();
@@ -1014,32 +1018,21 @@ export class UIManager {
     });
   }
 
-  async _retryPrint(toNumber, displayType, id, dateStr, number, email, itemCount) {
+  async _retryPrint(toNumber, id, dateStr, number, email, itemCount, typeList) {
     let attempts = 0;
     const maxAttempts = 3;
     while (attempts < maxAttempts) {
       try {
-        await printLabel(toNumber, displayType, id, dateStr, number, email, itemCount);
+        await printLabel(toNumber, id, dateStr, number, email, itemCount, typeList);
         return;
       } catch (e) {
         console.error(`Print attempt ${attempts + 1} failed:`, e);
         attempts++;
-        if (attempts < maxAttempts)
-          await new Promise((r) => setTimeout(r, 1000));
+        if (attempts < maxAttempts) await new Promise(r => setTimeout(r, 1000));
       }
     }
-    alert(
-      "In thất bại sau 3 lần thử. Vui lòng kiểm tra máy in hoặc tải file HTML.",
-    );
-    const html = this._generateLabelHTML(
-      toNumber,
-      displayType,
-      id,
-      dateStr,
-      number,
-      email,
-      itemCount,
-    );
+    alert('In thất bại sau 3 lần thử. Vui lòng kiểm tra máy in hoặc tải file HTML.');
+    const html = this._generateLabelHTML(toNumber, id, dateStr, number, email, itemCount, typeList);
     const blob = new Blob([html], { type: "text/html;charset=UTF-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -1048,56 +1041,37 @@ export class UIManager {
     a.click();
   }
 
-  _generateLabelHTML(toNumber, displayType, id, dateStr, number, email, itemCount) {
+  _generateLabelHTML(toNumber, id, dateStr, number, email, itemCount, typeList) {
+    const typeStr = (typeList || []).join(', ');
     return `<!DOCTYPE html>
 <html lang="vi">
-<head>
-  <meta charset="UTF-8">
-  <style>
-    @page { size: 100mm 50mm; margin: 0; }
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body {
-      width: 100mm; height: 50mm;
-      font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
-      background: white;
-      display: flex; align-items: stretch;
-    }
-    .left {
-      width: 67%;
-      display: flex; flex-direction: column; justify-content: space-between;
-      padding: 3mm 3mm 3mm 5mm;
-    }
-    .right {
-      width: 33%;
-      display: flex; flex-direction: column; align-items: center; justify-content: space-between;
-      padding: 3mm 5mm 3mm 0;
-    }
-    .to-main {
-      font-size: 24px; font-weight: 800; color: #000;
-      letter-spacing: 0.5px; line-height: 1.2;
-      text-transform: uppercase;
-    }
-    .to-small { text-transform: uppercase; margin-bottom: 1mm; }
-    .number-text { font-size: 18px; font-weight: 700; color: #000; font-family: 'Courier New', Courier, monospace; letter-spacing: 0.5px; }
-    .date-text { font-size: 16px; font-weight: 700; color: #000; font-family: 'Courier New', Courier, monospace; }
-    .email-text { font-size: 12px; font-weight: 500; color: #000; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .qty-text { font-size: 16px; font-weight: 700; color: #000; font-family: 'Courier New', Courier, monospace; }
-    .qr-wrapper img { width: 30mm; height: 30mm; filter: grayscale(100%) contrast(150%); }
-  </style>
-</head>
+<head><meta charset="UTF-8"><style>
+  @page { size: 100mm 50mm; margin: 0; }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { width: 100mm; height: 50mm; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; background: white; display: flex; align-items: stretch; }
+  .left { width: 67%; display: flex; flex-direction: column; justify-content: space-between; padding: 3mm 3mm 3mm 5mm; }
+  .right { width: 33%; display: flex; flex-direction: column; align-items: center; justify-content: space-between; padding: 3mm 5mm 3mm 0; }
+  .to-main { font-size: 24px; font-weight: 800; color: #000; letter-spacing: 0.5px; line-height: 1.2; text-transform: uppercase; }
+  .types-main { font-size: 14px; font-weight: 600; color: #000; text-transform: uppercase; }
+  .number-text { font-size: 18px; font-weight: 700; color: #000; font-family: 'Courier New', Courier, monospace; }
+  .date-text { font-size: 16px; font-weight: 700; color: #000; font-family: 'Courier New', Courier, monospace; }
+  .email-text { font-size: 12px; font-weight: 500; color: #000; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .qty-text { font-size: 16px; font-weight: 700; color: #000; font-family: 'Courier New', Courier, monospace; }
+  .qr-wrapper img { width: 30mm; height: 30mm; filter: grayscale(100%) contrast(150%); }
+</style></head>
 <body>
   <div class="left">
-    <div class="to-main">TO-${displayType}-${id}</div>
+    <div class="to-main">TO-${id}</div>
+    <div class="types-main">${typeStr}</div>
     <div class="number-text">${number}</div>
     <div class="date-text">${dateStr}</div>
     <div class="qty-text">QTY: ${itemCount}</div>
     <div class="email-text" title="${email}">${email}</div>
   </div>
   <div class="right">
-    <div class="to-small">TO-${displayType}-${id}</div>
-    <div class="qr-wrapper">
-      <img src="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgZmlsbD0id2hpdGUiLz48L3N2Zz4=" alt="QR" />
-    </div>
+    <div class="to-main" style="font-size:14px;">TO-${id}</div>
+    <div class="types-main" style="font-size:10px; text-align:center;">${typeStr}</div>
+    <div class="qr-wrapper"><img src="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgZmlsbD0id2hpdGUiLz48L3N2Zz4=" alt="QR" /></div>
     <div class="qty-text">QTY: ${itemCount}</div>
   </div>
 </body>
@@ -1124,23 +1098,17 @@ export class UIManager {
     this._updateCard({
       id,
       displayType,
-      return_tn: "Đang in...",
+      return_tn: 'Đang in...',
       count: itemCount,
-      threshold: 0, // tạm thời
+      threshold: 0,
       isFull: false,
     });
     const date = new Date();
-    const dateStr = `${date.getDate().toString().padStart(2, "0")} ${date.getMonth() + 1} ${date.getFullYear().toString().slice(-2)}`;
-    const numberPart = toNumber.split("-").pop();
-    this._retryPrint(
-      toNumber,
-      displayType,
-      id,
-      dateStr,
-      numberPart,
-      this.state.email,
-      itemCount,
-    )
+    const dateStr = `${date.getDate().toString().padStart(2, '0')} ${date.getMonth() + 1} ${date.getFullYear().toString().slice(-2)}`;
+    const numberPart = toNumber.split('-').pop();
+    const typeList = this._getTypeListForId(id);
+
+    this._retryPrint(toNumber, id, dateStr, numberPart, this.state.email, itemCount, typeList)
       .then(() => {
         this._savePrintedLabel({
           toNumber,
@@ -1155,7 +1123,7 @@ export class UIManager {
         this._updateCard({
           id,
           displayType,
-          return_tn: "✅ Đã đóng kiện",
+          return_tn: '✅ Đã đóng kiện',
           count: itemCount,
           threshold: 0,
           isFull: false,
@@ -1167,7 +1135,7 @@ export class UIManager {
         this._updateCard({
           id,
           displayType,
-          return_tn: "❌ In thất bại",
+          return_tn: '❌ In thất bại',
           count: itemCount,
           threshold: 0,
           isFull: false,
@@ -1183,7 +1151,7 @@ export class UIManager {
               if (retryBtn.disabled) return;
               retryBtn.disabled = true;
               retryBtn.innerHTML = '<span class="spinner"></span> Đang in...';
-              this.printAndClose(id, displayType, toNumber, itemCount).finally(() => {
+              this.printAndClose(id, typeList, toNumber, itemCount).finally(() => {
                 retryBtn.disabled = false;
                 retryBtn.textContent = "In lại";
               });

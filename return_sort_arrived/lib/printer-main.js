@@ -84,7 +84,9 @@
     }
 
     /* ---------- Tạo container nhãn ẩn ---------- */
-    function createLabelContainer(toNumber, type, id, dateStr, number, email, itemCount, qrDataUrl) {
+    function createLabelContainer(toNumber, id, dateStr, number, email, itemCount, typeList, qrDataUrl) {
+        const typeStr = (typeList || []).join(', ') || '';
+
         const container = document.createElement('div');
         Object.assign(container.style, {
             position: 'fixed',
@@ -98,39 +100,40 @@
             alignItems: 'stretch'
         });
 
-        // Tạo HTML cơ bản (chưa áp fit riêng cho tiêu đề)
-        container.innerHTML =
-            '<div style="width:67%; display:flex; flex-direction:column; justify-content:space-between; padding:' +
-            mmToPx(3) + 'px ' + mmToPx(3) + 'px ' + mmToPx(3) + 'px ' + mmToPx(5) + 'px;">' +
-            '<div id="label-title-main" style="font-weight:800; color:#000; letter-spacing:0.5px; line-height:1.2; text-transform:uppercase;">TO-' + type + '-' + id + '</div>' +
-            '<div style="font-size:' + mmToPx(6) + 'px; font-weight:700; color:#000; font-family:\'Courier New\', Courier, monospace; letter-spacing:0.5px;">' + number + '</div>' +
-            '<div style="font-size:' + mmToPx(5.3) + 'px; font-weight:700; color:#000; font-family:\'Courier New\', Courier, monospace;">' + dateStr + '</div>' +
-            '<div style="font-size:' + mmToPx(5.3) + 'px; font-weight:700; color:#000; font-family:\'Courier New\', Courier, monospace;">QTY: ' + itemCount + '</div>' +
-            '<div style="font-size:' + mmToPx(4) + 'px; font-weight:500; color:#000; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="' + email + '">' + email + '</div>' +
-            '</div>' +
-            '<div style="width:33%; display:flex; flex-direction:column; align-items:center; justify-content:space-between; padding:' +
-            mmToPx(3) + 'px ' + mmToPx(5) + 'px ' + mmToPx(3) + 'px 0;">' +
-            '<div id="label-title-side" style="font-weight:700; color:#000; font-family:\'Courier New\', Courier, monospace; text-transform:uppercase;">TO-' + type + '-' + id + '</div>' +
-            '<div style="width:' + mmToPx(30) + 'px; height:' + mmToPx(30) + 'px;">' +
-            '<img src="' + qrDataUrl + '" style="width:100%; height:100%; filter: grayscale(100%) contrast(150%);" crossorigin="anonymous" />' +
-            '</div>' +
-            '<div style="font-size:' + mmToPx(4) + 'px; font-weight:700; color:#000; font-family:\'Courier New\', Courier, monospace;">QTY: ' + itemCount + '</div>' +
-            '</div>';
+        container.innerHTML = `
+    <div style="width:67%; display:flex; flex-direction:column; justify-content:space-between; padding:${mmToPx(3)}px ${mmToPx(3)}px ${mmToPx(3)}px ${mmToPx(5)}px;">
+      <div id="label-title-main" style="font-weight:800; color:#000; letter-spacing:0.5px; line-height:1.2; text-transform:uppercase;">TO-${id}</div>
+      <div id="label-types-main" style="font-weight:600; color:#000; letter-spacing:0.3px; line-height:1.2; text-transform:uppercase; font-size:${mmToPx(4)}px;">${typeStr}</div>
+      <div style="font-size:${mmToPx(6)}px; font-weight:700; color:#000; font-family:'Courier New', Courier, monospace; letter-spacing:0.5px;">${number}</div>
+      <div style="font-size:${mmToPx(5.3)}px; font-weight:700; color:#000; font-family:'Courier New', Courier, monospace;">${dateStr}</div>
+      <div style="font-size:${mmToPx(5.3)}px; font-weight:700; color:#000; font-family:'Courier New', Courier, monospace;">QTY: ${itemCount}</div>
+      <div style="font-size:${mmToPx(4)}px; font-weight:500; color:#000; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${email}">${email}</div>
+    </div>
+    <div style="width:33%; display:flex; flex-direction:column; align-items:center; justify-content:space-between; padding:${mmToPx(3)}px ${mmToPx(5)}px ${mmToPx(3)}px 0;">
+      <div id="label-title-side" style="font-weight:700; color:#000; font-family:'Courier New', Courier, monospace; text-transform:uppercase; font-size:${mmToPx(4)}px;">TO-${id}</div>
+      <div id="label-types-side" style="font-weight:600; color:#000; text-transform:uppercase; text-align:center; font-size:${mmToPx(3)}px;">${typeStr}</div>
+      <div style="width:${mmToPx(30)}px; height:${mmToPx(30)}px;">
+        <img src="${qrDataUrl}" style="width:100%; height:100%; filter: grayscale(100%) contrast(150%);" crossorigin="anonymous" />
+      </div>
+      <div style="font-size:${mmToPx(4)}px; font-weight:700; color:#000; font-family:'Courier New', Courier, monospace;">QTY: ${itemCount}</div>
+    </div>
+  `;
 
         document.body.appendChild(container);
 
-        // Tìm các phần tử tiêu đề
+        // Fit text
         const mainTitle = container.querySelector('#label-title-main');
+        const mainTypes = container.querySelector('#label-types-main');
         const sideTitle = container.querySelector('#label-title-side');
+        const sideTypes = container.querySelector('#label-types-side');
 
-        // Xác định chiều rộng tối đa cho từng vị trí
-        const mainMaxWidth = mmToPx(67) - mmToPx(5 + 3); // padding trái 5, phải 3
-        const sideMaxWidth = mmToPx(33) - mmToPx(5); // padding phải 5
+        const mainMaxWidth = mmToPx(67) - mmToPx(5 + 3);
+        const sideMaxWidth = mmToPx(33) - mmToPx(5);
 
-        // Fit font-size cho tiêu đề chính (khởi tạo 8mm)
         fitTextToWidth(mainTitle, mainMaxWidth, mmToPx(8));
-        // Fit font-size cho tiêu đề phụ (khởi tạo 4mm)
+        fitTextToWidth(mainTypes, mainMaxWidth, mmToPx(4));
         fitTextToWidth(sideTitle, sideMaxWidth, mmToPx(4));
+        fitTextToWidth(sideTypes, sideMaxWidth, mmToPx(3));
 
         return container;
     }
@@ -164,11 +167,17 @@
     /* ---------- Quy trình in một nhãn ---------- */
     async function handlePrintLabel(data, requestId) {
         const container = createLabelContainer(
-            data.toNumber, data.type, data.id, data.dateStr,
-            data.number, data.email, data.itemCount, data.qrDataUrl
+            data.toNumber,
+            data.id,
+            data.dateStr,
+            data.number,
+            data.email,
+            data.itemCount,
+            data.typeList || [],
+            data.qrDataUrl
         );
 
-        // Đợi ảnh QR load (nếu chưa cache)
+        // Đợi ảnh QR load
         const img = container.querySelector('img');
         if (img && !img.complete) {
             await new Promise(resolve => {
@@ -177,7 +186,6 @@
             });
         }
 
-        // Chờ layout ổn định
         await new Promise(r => setTimeout(r, 100));
 
         try {

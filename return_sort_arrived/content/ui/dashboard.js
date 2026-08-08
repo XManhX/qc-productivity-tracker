@@ -178,6 +178,10 @@ export class DashboardUI {
     this._renderAll();
   }
 
+  _getTypeListForId(id) {
+    return this.state.getDisplayNamesForId(id);
+  }
+
   // ─── Event Binding ──────────────────────────────────────────────────────
   _bindEvents() {
     this.shadowRoot
@@ -626,6 +630,7 @@ export class DashboardUI {
             <div class="id-badge" style="background:${color}; color:${textColor};">${session.id}</div>
             <div>
               <div class="type">${displayType}</div>
+              <div class="to-number" style="font-weight:600; color:#1e293b; font-size:13px;">${toNumber}</div>
               ${timeStr ? `<div class="time">${timeStr}</div>` : ""}
             </div>
           </div>
@@ -791,26 +796,19 @@ export class DashboardUI {
     contentArea
       .querySelectorAll('.btn-reprint[data-action="reprint-closed"]')
       .forEach((btn) => {
-        btn.addEventListener("click", async (e) => {
+        btn.addEventListener('click', async (e) => {
           e.stopPropagation();
           if (btn.disabled) return;
-          const { to, type: displayType, id, date, number, qty } = btn.dataset;
+          const { to, id, date, number, qty } = btn.dataset;
+          const typeList = this._getTypeListForId(id);
           btn.disabled = true;
           const originalHTML = btn.innerHTML;
           btn.innerHTML = '<span class="spinner"></span>';
           try {
-            await printLabel(
-              to,
-              displayType,
-              id,
-              date,
-              number,
-              this.state.email,
-              parseInt(qty),
-            );
+            await printLabel(to, id, date, number, this.state.email, parseInt(qty), typeList);
             this.state.markPrinted(id);
           } catch (err) {
-            console.error("Reprint failed:", err);
+            console.error('Reprint failed:', err);
           } finally {
             btn.disabled = false;
             btn.innerHTML = originalHTML;
@@ -822,34 +820,23 @@ export class DashboardUI {
     contentArea
       .querySelectorAll('.btn-reprint[data-action="reprint-label"]')
       .forEach((btn) => {
-        btn.addEventListener("click", async (e) => {
+        btn.addEventListener('click', async (e) => {
           e.stopPropagation();
           if (btn.disabled) return;
-          const {
-            to,
-            type: displayType,
-            id,
-            date,
-            number,
-            email,
-            qty,
-          } = btn.dataset;
+          const { to, id, date, number, email, qty, type: displayType } = btn.dataset;
+          // Lấy typeList từ sessions nếu có, fallback [displayType]
+          let typeList = this._getTypeListForId(id);
+          if (!typeList || typeList.length === 0 || typeList[0] === 'Unknown') {
+            typeList = displayType ? [displayType] : ['Unknown'];
+          }
           btn.disabled = true;
           const originalHTML = btn.innerHTML;
           btn.innerHTML = '<span class="spinner"></span>';
           try {
-            await printLabel(
-              to,
-              displayType,
-              id,
-              date,
-              number,
-              email,
-              parseInt(qty),
-            );
-            if (id) this.state.markPrinted(id);
+            await printLabel(to, id, date, number, email, parseInt(qty), typeList);
+            this.state.markPrinted(id);
           } catch (err) {
-            console.error("Reprint failed:", err);
+            console.error('Reprint failed:', err);
           } finally {
             btn.disabled = false;
             btn.innerHTML = originalHTML;

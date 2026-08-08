@@ -8,6 +8,7 @@ export class StateManager {
     this.sessions = [];
     this.typeToId = {};          // type_name → station_id
     this.typeToDisplay = {};     // type_name → display_name
+    this._idToDisplayNames = {}; // station_id → [display_name1, display_name2, ...]
     this._listeners = [];
     this._typeMappingReady = false;
     this._typeMappingPromise = null;
@@ -53,14 +54,23 @@ export class StateManager {
   _applyTypeMapping(mapping) {
     this.typeToId = {};
     this.typeToDisplay = {};
+    this._idToDisplayNames = {}; // reset
+
     for (const [typeName, info] of Object.entries(mapping)) {
-      this.typeToId[typeName] = info.station_id;
-      this.typeToDisplay[typeName] = info.display_name || typeName;
+      const stationId = info.station_id;
+      const displayName = info.display_name || typeName;
+      this.typeToId[typeName] = stationId;
+      this.typeToDisplay[typeName] = displayName;
+
+      // Xây dựng cache: station_id → mảng display_name (không trùng)
+      if (!this._idToDisplayNames[stationId]) {
+        this._idToDisplayNames[stationId] = [];
+      }
+      if (!this._idToDisplayNames[stationId].includes(displayName)) {
+        this._idToDisplayNames[stationId].push(displayName);
+      }
     }
-    // console.log(
-    //   "[StateManager] Type mapping loaded:",
-    //   Object.keys(this.typeToId).length,
-    // );
+
     this._typeMappingReady = true;
   }
 
@@ -116,6 +126,12 @@ export class StateManager {
   getTypeName(returnTn) {
     if (!returnTn) return null;
     return this.masterData[returnTn.toUpperCase().replace(/\s+/g, "")] || null;
+  }
+
+  getDisplayNamesForId(stationId) {
+    if (!stationId) return ['Unknown'];
+    const names = this._idToDisplayNames[stationId];
+    return names && names.length ? names : ['Unknown'];
   }
 
   async _callApi(endpoint, body) {

@@ -477,8 +477,8 @@ export class DashboardUI {
           <div class="id-badge" style="background:${color}; color:${textColor};">${id}</div>
           <div>
             <div class="type" style="font-size:12px;">${typeListStr}</div>
-            ${displayTime ? `<div class="time">${displayTime}</div>` : ''}
             <div class="email" style="font-size:11px; color:#64748b; margin-top:2px;">${email}</div>
+            ${displayTime ? `<div class="time">${displayTime}</div>` : ''}
           </div>
         </div>
         <div class="card-actions">
@@ -690,8 +690,8 @@ export class DashboardUI {
           <div>
             <div class="type" style="font-size:12px;">${typeListStr}</div>
             <div class="to-number" style="font-weight:600; color:#1e293b; font-size:13px;">${toNumber}</div>
-            ${displayTime ? `<div class="time">${displayTime}</div>` : ''}
             <div class="email" style="font-size:11px; color:#64748b; margin-top:2px;">${email}</div>
+            ${displayTime ? `<div class="time">${displayTime}</div>` : ''}
           </div>
         </div>
         <div class="card-actions">
@@ -770,8 +770,8 @@ export class DashboardUI {
           <div>
             <div class="type" style="font-size:12px;">${typeListStr}</div>
             <div class="to-number" style="font-weight:600; color:#1e293b; font-size:13px;">${toNumber}</div>
-            <div class="time">${displayTime}</div>
             <div class="email" style="font-size:11px; color:#64748b; margin-top:2px;">${email}</div>
+            <div class="time">${displayTime}</div>
           </div>
         </div>
         <div class="card-actions">
@@ -814,8 +814,8 @@ export class DashboardUI {
           <div>
             <div class="type" style="font-size:12px;">${typeListStr}</div>
             <div class="return-tn" style="font-weight:500; color:#64748b; font-size:12px; margin-top:2px;">${returnTn}</div>
-            ${displayTime ? `<div class="time">${displayTime}</div>` : ''}
             <div class="email" style="font-size:11px; color:#64748b; margin-top:2px;">${email}</div>
+            ${displayTime ? `<div class="time">${displayTime}</div>` : ''}
           </div>
         </div>
         <div class="card-actions">

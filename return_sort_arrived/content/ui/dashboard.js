@@ -42,7 +42,7 @@ const DASH_STYLES = `
 :host { all: initial; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; }
 .dashboard { display: flex; flex-direction: column; gap: 8px; }
 .tabs {
-  display: flex; border-radius:12px; border-bottom: 1px solid #e2e8f0; background: #f8fafc;
+  display: flex; border-radius: 12px 12px 0 0; border-bottom: 1px solid #e2e8f0; background: #f8fafc;
 }
 .tab {
   flex: 1; text-align: center; padding: 10px 6px; font-size: 12px; font-weight: 600;

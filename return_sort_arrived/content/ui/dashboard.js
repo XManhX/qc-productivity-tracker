@@ -84,9 +84,11 @@ const DASH_STYLES = `
 .id-badge {
   font-size: 18px; font-weight: 800; padding: 6px 10px; border-radius: 8px; min-width: 42px; text-align: center;
 }
+.return-tn { font-size: 12px; color: #64748b; margin-top: 2px; }
 .type { font-size: 14px; font-weight: 600; color: #1e293b; }
 .count { font-size: 14px; font-weight: 700; color: #475569; }
 .time { font-size: 11px; color: #94a3b8; margin-top: 2px; }
+.date { font-size: 11px; color: #94a3b8; margin-top: 2px; }
 .progress-row { margin-top: 6px; display: flex; align-items: center; gap: 8px; }
 .progress-bar { flex: 1; height: 8px; background: #e2e8f0; border-radius: 4px; overflow: hidden; }
 .progress-fill { height: 100%; border-radius: 4px; transition: width 0.4s ease; }
@@ -412,6 +414,30 @@ export class DashboardUI {
     this._openSessions = filtered;
   }
 
+  _formatDate(dateString) {
+    if (!dateString) return '';
+    try {
+      const d = new Date(dateString);
+      if (isNaN(d.getTime())) return '';
+      return `${String(d.getDate()).padStart(2, '0')} ${String(d.getMonth() + 1).padStart(2, '0')} ${String(d.getFullYear()).slice(-2)}`;
+    } catch {
+      return '';
+    }
+  }
+
+  _formatDateTime(dateString) {
+    if (!dateString) return '';
+    try {
+      const d = new Date(dateString);
+      if (isNaN(d.getTime())) return '';
+      const time = d.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+      const date = `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
+      return `${time} ${date}`;
+    } catch {
+      return '';
+    }
+  }
+
   // ─── Tạo và cập nhật phần tử Card ──────────────────────────────────────
   _createCardElement(session) {
     const div = document.createElement("div");
@@ -433,7 +459,12 @@ export class DashboardUI {
     const statusClass = status === 'full' ? 'status-full' : 'status-open';
     const color = STATION_COLORS[id] || '#94a3b8';
     const textColor = getTextColor(color);
-    const timeStr = session.session_start ? new Date(session.session_start).toLocaleTimeString('vi-VN') : '';
+
+    // Hiển thị: giờ + ngày
+    const displayTime = session.session_start ? this._formatDateTime(session.session_start) : '';
+    // Dùng cho in: DD MM YY
+    const dateStr = session.session_start ? this._formatDate(session.session_start) : '';
+
     const toNumber = session.to_number || '';
 
     el.className = `card ${statusClass}`;
@@ -448,7 +479,7 @@ export class DashboardUI {
           <div class="id-badge" style="background:${color}; color:${textColor};">${id}</div>
           <div>
             <div class="type" style="font-size:12px;">${typeListStr}</div>
-            ${timeStr ? `<div class="time">${timeStr}</div>` : ''}
+            ${displayTime ? `<div class="time">${displayTime}</div>` : ''}
           </div>
         </div>
         <div class="card-actions">
@@ -456,7 +487,7 @@ export class DashboardUI {
           ? `<button class="btn btn-close" data-action="close" data-id="${id}" data-type="${typeListStr}">Đóng</button>`
           : ''}
           ${status === 'closed'
-          ? `<button class="btn btn-reprint" data-action="reprint-closed" data-id="${id}" data-type="${typeListStr}" data-to="${toNumber}" data-date="${timeStr}" data-number="${toNumber.split('-').pop() || ''}" data-qty="${count}">In lại</button>`
+          ? `<button class="btn btn-reprint" data-action="reprint-closed" data-id="${id}" data-type="${typeListStr}" data-to="${toNumber}" data-date="${dateStr}" data-number="${toNumber.split('-').pop() || ''}" data-qty="${count}">In lại</button>`
           : ''}
         </div>
       </div>
@@ -482,7 +513,7 @@ export class DashboardUI {
     if (typeEl) typeEl.textContent = typeListStr;
 
     let timeEl = el.querySelector('.time');
-    if (timeStr) {
+    if (displayTime) {
       if (!timeEl) {
         const parent = typeEl?.parentNode;
         if (parent) {
@@ -491,7 +522,7 @@ export class DashboardUI {
           parent.appendChild(timeEl);
         }
       }
-      if (timeEl) timeEl.textContent = timeStr;
+      if (timeEl) timeEl.textContent = displayTime;
     } else if (timeEl) {
       timeEl.remove();
     }
@@ -523,7 +554,7 @@ export class DashboardUI {
         reprintBtn.dataset.id = id;
         reprintBtn.dataset.type = typeListStr;
         reprintBtn.dataset.to = toNumber;
-        reprintBtn.dataset.date = timeStr;
+        reprintBtn.dataset.date = dateStr;
         reprintBtn.dataset.number = toNumber.split('-').pop() || '';
         reprintBtn.dataset.qty = String(count);
         reprintBtn.textContent = 'In lại';
@@ -629,7 +660,9 @@ export class DashboardUI {
     const statusClass = status === 'full' ? 'status-full' : status === 'open' ? 'status-open' : 'status-closed';
     const color = STATION_COLORS[id] || '#94a3b8';
     const textColor = getTextColor(color);
-    const timeStr = session.session_start ? new Date(session.session_start).toLocaleTimeString('vi-VN') : '';
+
+    const displayTime = session.session_start ? this._formatDateTime(session.session_start) : '';
+    const dateStr = session.session_start ? this._formatDate(session.session_start) : '';
     const toNumber = session.to_number || '';
 
     return `
@@ -640,7 +673,7 @@ export class DashboardUI {
           <div>
             <div class="type" style="font-size:12px;">${typeListStr}</div>
             <div class="to-number" style="font-weight:600; color:#1e293b; font-size:13px;">${toNumber}</div>
-            ${timeStr ? `<div class="time">${timeStr}</div>` : ''}
+            ${displayTime ? `<div class="time">${displayTime}</div>` : ''}
           </div>
         </div>
         <div class="card-actions">
@@ -648,7 +681,7 @@ export class DashboardUI {
         ? `<button class="btn btn-close" data-action="close" data-id="${id}" data-type="${typeListStr}">Đóng</button>`
         : ''}
           ${status === 'closed'
-        ? `<button class="btn btn-reprint" data-action="reprint-closed" data-id="${id}" data-type="${typeListStr}" data-to="${toNumber}" data-date="${timeStr}" data-number="${toNumber.split('-').pop() || ''}" data-qty="${count}">In lại</button>`
+        ? `<button class="btn btn-reprint" data-action="reprint-closed" data-id="${id}" data-type="${typeListStr}" data-to="${toNumber}" data-date="${dateStr}" data-number="${toNumber.split('-').pop() || ''}" data-qty="${count}">In lại</button>`
         : ''}
         </div>
       </div>
@@ -665,7 +698,6 @@ export class DashboardUI {
   _renderCardFromLabel(label) {
     const stationId = label.id || '?';
     let typeListStr = this._getTypeListString(stationId);
-    // Fallback: nếu không có typeList từ mappings, dùng label.displayType
     if (typeListStr === 'Unknown' || typeListStr === '') {
       typeListStr = label.displayType || 'Unknown';
     }
@@ -675,14 +707,40 @@ export class DashboardUI {
     const email = label.email || 'unknown';
     const itemCount = label.itemCount ?? 0;
 
-    let timeDisplay = 'N/A';
+    // Lấy threshold từ session nếu có
+    let threshold = null;
+    if (this._sessions) {
+      const session = this._sessions.find(s => s.id === stationId);
+      if (session && session.threshold !== undefined && session.threshold > 0) {
+        threshold = session.threshold;
+      }
+    }
+
+    // Tính percent và text hiển thị
+    let percent = 0;
+    let progressText = '';
+
+    if (threshold !== null && threshold > 0) {
+      percent = Math.min(100, Math.round((itemCount / threshold) * 100));
+      progressText = `${itemCount}/${threshold}`;
+    } else {
+      // Không có threshold => hiển thị count/∞ và thanh full
+      percent = 100;
+      progressText = `${itemCount}/∞`;
+    }
+
+    // Định dạng thời gian
+    let displayTime = 'N/A';
+    let dateStr = '';
     if (label.createdAt) {
       try {
         const d = new Date(label.createdAt);
-        timeDisplay = d.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) +
-          ' ' + d.toLocaleDateString('vi-VN');
+        const time = d.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+        const date = `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
+        displayTime = `${time} ${date}`;
+        dateStr = this._formatDate(label.createdAt);
       } catch (e) {
-        timeDisplay = 'Lỗi ngày';
+        displayTime = 'Lỗi ngày';
       }
     }
 
@@ -694,8 +752,8 @@ export class DashboardUI {
           <div>
             <div class="type" style="font-size:12px;">${typeListStr}</div>
             <div class="to-number" style="font-weight:600; color:#1e293b; font-size:13px;">${toNumber}</div>
-            <div class="time">${timeDisplay}</div>
-            <div class="email" style="font-size:11px; color:#64748b;">${email}</div>
+            <div class="time">${displayTime}</div>
+            <div class="email" style="font-size:11px; color:#64748b; margin-top:2px;">${email}</div>
           </div>
         </div>
         <div class="card-actions">
@@ -703,7 +761,7 @@ export class DashboardUI {
                   data-to="${label.toNumber}"
                   data-type="${typeListStr}"
                   data-id="${stationId}"
-                  data-date="${label.dateStr}"
+                  data-date="${dateStr}"
                   data-number="${label.number}"
                   data-email="${label.email}"
                   data-qty="${itemCount}">
@@ -712,37 +770,45 @@ export class DashboardUI {
         </div>
       </div>
       <div class="progress-row">
-        <span class="progress-text">QTY: ${itemCount}</span>
+        <div class="progress-bar" style="background:#e2e8f0; height:8px; border-radius:4px; overflow:hidden; flex:1;">
+          <div class="progress-fill" style="width:${percent}%; background:${color}; height:100%; border-radius:4px;"></div>
+        </div>
+        <span class="progress-text" style="min-width:60px; text-align:right;">${progressText}</span>
       </div>
     </div>
   `;
   }
 
   _renderActiveEventCard(event) {
-    const displayType = event.type_group || "";
-    const color = STATION_COLORS[event.station_id] || "#94a3b8";
+    const stationId = event.station_id;
+    const typeListStr = this._getTypeListString(stationId);
+    const color = STATION_COLORS[stationId] || '#94a3b8';
     const textColor = getTextColor(color);
-    const timeStr = event.created_at
-      ? new Date(event.created_at).toLocaleTimeString("vi-VN")
-      : "";
+    const displayTime = event.created_at ? this._formatDateTime(event.created_at) : '';
+    const returnTn = event.return_tn || '';
 
     return `
-      <div class="card status-open" data-station="${event.station_id}" data-return="${event.return_tn}" data-type="${displayType}">
-        <div class="card-row">
-          <div class="card-left">
-            <div class="id-badge" style="background:${color}; color:${textColor};">${event.station_id}</div>
-            <div>
-              <div class="type">${displayType}</div>
-              <div class="time">${event.return_tn || ""}</div>
-              ${timeStr ? `<div class="time">${timeStr}</div>` : ""}
-            </div>
-          </div>
-          <div class="card-actions">
-            <button class="btn btn-close" data-action="cancel-event" data-station="${event.station_id}" data-return="${event.return_tn}" data-type="${displayType}">Hủy</button>
+    <div class="card status-open" data-station="${stationId}" data-return="${returnTn}" data-type="${typeListStr}">
+      <div class="card-row">
+        <div class="card-left">
+          <div class="id-badge" style="background:${color}; color:${textColor};">${stationId}</div>
+          <div>
+            <div class="type" style="font-size:12px;">${typeListStr}</div>
+            <div class="return-tn" style="font-weight:500; color:#64748b; font-size:12px; margin-top:2px;">${returnTn}</div>
+            ${displayTime ? `<div class="time">${displayTime}</div>` : ''}
           </div>
         </div>
+        <div class="card-actions">
+          <button class="btn btn-close" data-action="cancel-event" 
+                  data-station="${stationId}" 
+                  data-return="${returnTn}" 
+                  data-type="${typeListStr}">
+            Hủy
+          </button>
+        </div>
       </div>
-    `;
+    </div>
+  `;
   }
 
   // ─── Gắn sự kiện cho các nút ──────────────────────────────────────────

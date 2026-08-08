@@ -1104,7 +1104,7 @@ export class UIManager {
       isFull: false,
     });
     const date = new Date();
-    const dateStr = `${date.getDate().toString().padStart(2, '0')} ${date.getMonth() + 1} ${date.getFullYear().toString().slice(-2)}`;
+    const dateStr = `${date.getDate().toString().padStart(2, '0')} ${(date.getMonth() + 1).toString().padStart(2, '0')} ${date.getFullYear().toString().slice(-2)}`;
     const numberPart = toNumber.split('-').pop();
     const typeList = this._getTypeListForId(id);
 

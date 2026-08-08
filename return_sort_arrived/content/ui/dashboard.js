@@ -460,12 +460,10 @@ export class DashboardUI {
     const color = STATION_COLORS[id] || '#94a3b8';
     const textColor = getTextColor(color);
 
-    // Hiển thị: giờ + ngày
     const displayTime = session.session_start ? this._formatDateTime(session.session_start) : '';
-    // Dùng cho in: DD MM YY
     const dateStr = session.session_start ? this._formatDate(session.session_start) : '';
-
     const toNumber = session.to_number || '';
+    const email = session.email || this.state.email || 'N/A';
 
     el.className = `card ${statusClass}`;
     el.dataset.id = id;
@@ -480,6 +478,7 @@ export class DashboardUI {
           <div>
             <div class="type" style="font-size:12px;">${typeListStr}</div>
             ${displayTime ? `<div class="time">${displayTime}</div>` : ''}
+            <div class="email" style="font-size:11px; color:#64748b; margin-top:2px;">${email}</div>
           </div>
         </div>
         <div class="card-actions">
@@ -492,10 +491,10 @@ export class DashboardUI {
         </div>
       </div>
       <div class="progress-row">
-        <div class="progress-bar">
-          <div class="progress-fill" style="width:${percent}%; background:${color};"></div>
+        <div class="progress-bar" style="background:#e2e8f0; height:8px; border-radius:4px; overflow:hidden; flex:1;">
+          <div class="progress-fill" style="width:${percent}%; background:${color}; height:100%; border-radius:4px;"></div>
         </div>
-        <span class="progress-text">${count}/${threshold}</span>
+        <span class="progress-text" style="min-width:60px; text-align:right;">${count}/${threshold}</span>
       </div>
     `;
       return;
@@ -525,6 +524,23 @@ export class DashboardUI {
       if (timeEl) timeEl.textContent = displayTime;
     } else if (timeEl) {
       timeEl.remove();
+    }
+
+    // Cập nhật email
+    let emailEl = el.querySelector('.email');
+    if (email && email !== 'N/A') {
+      if (!emailEl) {
+        const parent = timeEl?.parentNode || typeEl?.parentNode;
+        if (parent) {
+          emailEl = document.createElement('div');
+          emailEl.className = 'email';
+          emailEl.style.cssText = 'font-size:11px; color:#64748b; margin-top:2px;';
+          parent.appendChild(emailEl);
+        }
+      }
+      if (emailEl) emailEl.textContent = email;
+    } else if (emailEl) {
+      emailEl.remove();
     }
 
     const fill = el.querySelector('.progress-fill');
@@ -664,6 +680,7 @@ export class DashboardUI {
     const displayTime = session.session_start ? this._formatDateTime(session.session_start) : '';
     const dateStr = session.session_start ? this._formatDate(session.session_start) : '';
     const toNumber = session.to_number || '';
+    const email = session.email || this.state.email || 'N/A';
 
     return `
     <div class="card ${statusClass}" data-id="${id}" data-type="${typeListStr}">
@@ -674,6 +691,7 @@ export class DashboardUI {
             <div class="type" style="font-size:12px;">${typeListStr}</div>
             <div class="to-number" style="font-weight:600; color:#1e293b; font-size:13px;">${toNumber}</div>
             ${displayTime ? `<div class="time">${displayTime}</div>` : ''}
+            <div class="email" style="font-size:11px; color:#64748b; margin-top:2px;">${email}</div>
           </div>
         </div>
         <div class="card-actions">
@@ -686,10 +704,10 @@ export class DashboardUI {
         </div>
       </div>
       <div class="progress-row">
-        <div class="progress-bar">
-          <div class="progress-fill" style="width:${percent}%; background:${color};"></div>
+        <div class="progress-bar" style="background:#e2e8f0; height:8px; border-radius:4px; overflow:hidden; flex:1;">
+          <div class="progress-fill" style="width:${percent}%; background:${color}; height:100%; border-radius:4px;"></div>
         </div>
-        <span class="progress-text">${count}/${threshold}</span>
+        <span class="progress-text" style="min-width:60px; text-align:right;">${count}/${threshold}</span>
       </div>
     </div>
   `;
@@ -786,6 +804,7 @@ export class DashboardUI {
     const textColor = getTextColor(color);
     const displayTime = event.created_at ? this._formatDateTime(event.created_at) : '';
     const returnTn = event.return_tn || '';
+    const email = event.email || this.state.email || 'N/A';
 
     return `
     <div class="card status-open" data-station="${stationId}" data-return="${returnTn}" data-type="${typeListStr}">
@@ -796,6 +815,7 @@ export class DashboardUI {
             <div class="type" style="font-size:12px;">${typeListStr}</div>
             <div class="return-tn" style="font-weight:500; color:#64748b; font-size:12px; margin-top:2px;">${returnTn}</div>
             ${displayTime ? `<div class="time">${displayTime}</div>` : ''}
+            <div class="email" style="font-size:11px; color:#64748b; margin-top:2px;">${email}</div>
           </div>
         </div>
         <div class="card-actions">

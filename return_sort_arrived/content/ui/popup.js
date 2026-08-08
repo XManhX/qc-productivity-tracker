@@ -78,9 +78,9 @@ const STYLES = `
 }
 .badge-card {
   border-radius: 14px; padding: 6px 8px; width: 88px;
-  display: flex; flex-direction: column; align-items: center; gap: 1px;
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
   flex-shrink: 0; transition: filter 0.2s, box-shadow 0.2s;
-  font-weight: 700; cursor: pointer;
+  font-weight: 800; cursor: pointer;
   border: 1px solid rgba(255, 255, 255, 0.25);
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
 }
@@ -92,12 +92,12 @@ const STYLES = `
   filter: brightness(1.2);
   box-shadow: 0 4px 12px rgba(0,0,0,0.3);
 }
-.badge-id { font-size: 16px; line-height: 1; }
+.badge-id { font-size: 30px; line-height: 1; margin: 4px 0; }
 .badge-type {
-  font-size: 10px; font-weight: 500; opacity: 0.9;
+  font-size: 12px; font-weight: 600; opacity: 0.9; line-height: 1; letter-spacing: 0.5px;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 80px;
 }
-.badge-count { font-size: 12px; }
+.badge-count {  font-size: 14px; font-weight: 600; line-height: 1; margin: 2px 0; }
 .badge-bar { width: 100%; height: 5px; background: rgba(255,255,255,0.3); border-radius: 3px; overflow: hidden; }
 .badge-fill { height: 100%; background: #fff; border-radius: 3px; transition: width 0.4s ease; }
 .actions { display: flex; flex-direction: column; gap: 8px; margin-left: 8px; align-items: center; }

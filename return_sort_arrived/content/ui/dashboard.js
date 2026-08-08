@@ -360,13 +360,33 @@ export class DashboardUI {
     const container = this.shadowRoot.getElementById("content-area");
     if (!container) return;
 
-    // Tìm các phần tử cần xóa (không còn trong filtered)
+    // Lấy danh sách id mới
     const newIds = new Set(filtered.map((s) => s.id));
+
+    // Xóa các phần tử không còn trong filtered
     for (const [id, el] of this._openElements) {
       if (!newIds.has(id)) {
         el.remove();
         this._openElements.delete(id);
       }
+    }
+
+    // Xóa no-data nếu có
+    const noDataEl = container.querySelector('.no-data');
+    if (noDataEl) noDataEl.remove();
+
+    // Nếu không có dữ liệu, hiển thị no-data và thoát
+    if (filtered.length === 0) {
+      const noDataDiv = document.createElement('div');
+      noDataDiv.className = 'no-data';
+      noDataDiv.innerHTML = `
+      <div class="no-data-icon">📭</div>
+      <div class="no-data-text">Không có ID nào đang mở</div>
+    `;
+      container.appendChild(noDataDiv);
+      this._openElements.clear();
+      this._openSessions = [];
+      return;
     }
 
     // Cập nhật hoặc thêm mới

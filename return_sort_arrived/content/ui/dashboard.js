@@ -182,6 +182,14 @@ export class DashboardUI {
     return this.state.getDisplayNamesForId(id);
   }
 
+  _getTypeListString(id) {
+    const list = this._getTypeListForId(id);
+    if (!list || list.length === 0 || list[0] === 'Unknown') {
+      return 'Unknown';
+    }
+    return list.join(', ');
+  }
+
   // ─── Event Binding ──────────────────────────────────────────────────────
   _bindEvents() {
     this.shadowRoot
@@ -416,83 +424,70 @@ export class DashboardUI {
   }
 
   _applyCardData(el, session) {
-    const displayType = session.type_group || "";
+    const id = session.id;
+    const typeListStr = this._getTypeListString(id);
     const status = session.status;
     const threshold = session.threshold || 30;
     const count = session.item_count;
     const percent = Math.min(100, Math.round((count / threshold) * 100));
-    const statusClass =
-      status === "full"
-        ? "status-full"
-        : status === "open"
-          ? "status-open"
-          : "status-closed";
-    const color = STATION_COLORS[session.id] || "#94a3b8";
+    const statusClass = status === 'full' ? 'status-full' : 'status-open';
+    const color = STATION_COLORS[id] || '#94a3b8';
     const textColor = getTextColor(color);
-    const timeStr = session.session_start
-      ? new Date(session.session_start).toLocaleTimeString("vi-VN")
-      : "";
-    const toNumber = session.to_number || "";
+    const timeStr = session.session_start ? new Date(session.session_start).toLocaleTimeString('vi-VN') : '';
+    const toNumber = session.to_number || '';
 
-    // Cập nhật class, dataset
     el.className = `card ${statusClass}`;
-    el.dataset.id = session.id;
-    el.dataset.type = displayType;
+    el.dataset.id = id;
+    el.dataset.type = typeListStr;
 
-    // Lấy các phần con
-    let row = el.querySelector(".card-row");
-    let progressRow = el.querySelector(".progress-row");
-
+    let row = el.querySelector('.card-row');
     if (!row) {
-      // Tạo mới toàn bộ nếu chưa có cấu trúc
       el.innerHTML = `
-        <div class="card-row">
-          <div class="card-left">
-            <div class="id-badge" style="background:${color}; color:${textColor};">${session.id}</div>
-            <div>
-              <div class="type">${displayType}</div>
-              ${timeStr ? `<div class="time">${timeStr}</div>` : ""}
-            </div>
-          </div>
-          <div class="card-actions">
-            ${(status === "open" || status === "full") && count > 0
-          ? `<button class="btn btn-close" data-action="close" data-id="${session.id}" data-type="${displayType}">Đóng</button>`
-          : ""
-        }
-            ${status === "closed"
-          ? `<button class="btn btn-reprint" data-action="reprint-closed" data-id="${session.id}" data-type="${displayType}" data-to="${toNumber}" data-date="${timeStr}" data-number="${toNumber.split("-").pop() || ""}" data-qty="${count}">In lại</button>`
-          : ""
-        }
+      <div class="card-row">
+        <div class="card-left">
+          <div class="id-badge" style="background:${color}; color:${textColor};">${id}</div>
+          <div>
+            <div class="type" style="font-size:12px;">${typeListStr}</div>
+            ${timeStr ? `<div class="time">${timeStr}</div>` : ''}
           </div>
         </div>
-        <div class="progress-row">
-          <div class="progress-bar">
-            <div class="progress-fill" style="width:${percent}%; background:${color};"></div>
-          </div>
-          <span class="progress-text">${count}/${threshold}</span>
+        <div class="card-actions">
+          ${(status === 'open' || status === 'full') && count > 0
+          ? `<button class="btn btn-close" data-action="close" data-id="${id}" data-type="${typeListStr}">Đóng</button>`
+          : ''}
+          ${status === 'closed'
+          ? `<button class="btn btn-reprint" data-action="reprint-closed" data-id="${id}" data-type="${typeListStr}" data-to="${toNumber}" data-date="${timeStr}" data-number="${toNumber.split('-').pop() || ''}" data-qty="${count}">In lại</button>`
+          : ''}
         </div>
-      `;
+      </div>
+      <div class="progress-row">
+        <div class="progress-bar">
+          <div class="progress-fill" style="width:${percent}%; background:${color};"></div>
+        </div>
+        <span class="progress-text">${count}/${threshold}</span>
+      </div>
+    `;
       return;
     }
 
-    // Cập nhật các phần tử con hiện có
-    const badge = el.querySelector(".id-badge");
+    // Cập nhật các phần tử con
+    const badge = el.querySelector('.id-badge');
     if (badge) {
       badge.style.background = color;
       badge.style.color = textColor;
-      badge.textContent = session.id;
+      badge.textContent = id;
     }
 
-    const typeEl = el.querySelector(".type");
-    if (typeEl) typeEl.textContent = displayType;
+    const typeEl = el.querySelector('.type');
+    if (typeEl) typeEl.textContent = typeListStr;
 
-    let timeEl = el.querySelector(".time");
+    let timeEl = el.querySelector('.time');
     if (timeStr) {
       if (!timeEl) {
         const parent = typeEl?.parentNode;
         if (parent) {
-          timeEl = document.createElement("div");
-          timeEl.className = "time";
+          timeEl = document.createElement('div');
+          timeEl.className = 'time';
           parent.appendChild(timeEl);
         }
       }
@@ -501,37 +496,37 @@ export class DashboardUI {
       timeEl.remove();
     }
 
-    const fill = el.querySelector(".progress-fill");
+    const fill = el.querySelector('.progress-fill');
     if (fill) {
-      fill.style.width = percent + "%";
+      fill.style.width = percent + '%';
       fill.style.background = color;
     }
-    const progressText = el.querySelector(".progress-text");
+    const progressText = el.querySelector('.progress-text');
     if (progressText) progressText.textContent = `${count}/${threshold}`;
 
-    const actionsContainer = el.querySelector(".card-actions");
+    const actionsContainer = el.querySelector('.card-actions');
     if (actionsContainer) {
-      actionsContainer.innerHTML = "";
-      if ((status === "open" || status === "full") && count > 0) {
-        const closeBtn = document.createElement("button");
-        closeBtn.className = "btn btn-close";
-        closeBtn.dataset.action = "close";
-        closeBtn.dataset.id = session.id;
-        closeBtn.dataset.type = displayType;
-        closeBtn.textContent = "Đóng";
+      actionsContainer.innerHTML = '';
+      if ((status === 'open' || status === 'full') && count > 0) {
+        const closeBtn = document.createElement('button');
+        closeBtn.className = 'btn btn-close';
+        closeBtn.dataset.action = 'close';
+        closeBtn.dataset.id = id;
+        closeBtn.dataset.type = typeListStr;
+        closeBtn.textContent = 'Đóng';
         actionsContainer.appendChild(closeBtn);
       }
-      if (status === "closed") {
-        const reprintBtn = document.createElement("button");
-        reprintBtn.className = "btn btn-reprint";
-        reprintBtn.dataset.action = "reprint-closed";
-        reprintBtn.dataset.id = session.id;
-        reprintBtn.dataset.type = displayType;
+      if (status === 'closed') {
+        const reprintBtn = document.createElement('button');
+        reprintBtn.className = 'btn btn-reprint';
+        reprintBtn.dataset.action = 'reprint-closed';
+        reprintBtn.dataset.id = id;
+        reprintBtn.dataset.type = typeListStr;
         reprintBtn.dataset.to = toNumber;
         reprintBtn.dataset.date = timeStr;
-        reprintBtn.dataset.number = toNumber.split("-").pop() || "";
+        reprintBtn.dataset.number = toNumber.split('-').pop() || '';
         reprintBtn.dataset.qty = String(count);
-        reprintBtn.textContent = "In lại";
+        reprintBtn.textContent = 'In lại';
         actionsContainer.appendChild(reprintBtn);
       }
     }
@@ -625,108 +620,102 @@ export class DashboardUI {
 
   // ─── Render từng card (cho các tab không diff) ─────────────────────────
   _renderCard(session) {
-    const displayType = session.type_group || "";
+    const id = session.id;
+    const typeListStr = this._getTypeListString(id);
     const status = session.status;
     const threshold = session.threshold || 30;
     const count = session.item_count;
     const percent = Math.min(100, Math.round((count / threshold) * 100));
-    const statusClass =
-      status === "full"
-        ? "status-full"
-        : status === "open"
-          ? "status-open"
-          : "status-closed";
-    const color = STATION_COLORS[session.id] || "#94a3b8";
+    const statusClass = status === 'full' ? 'status-full' : status === 'open' ? 'status-open' : 'status-closed';
+    const color = STATION_COLORS[id] || '#94a3b8';
     const textColor = getTextColor(color);
-    const timeStr = session.session_start
-      ? new Date(session.session_start).toLocaleTimeString("vi-VN")
-      : "";
-    const toNumber = session.to_number || "";
+    const timeStr = session.session_start ? new Date(session.session_start).toLocaleTimeString('vi-VN') : '';
+    const toNumber = session.to_number || '';
 
     return `
-      <div class="card ${statusClass}" data-id="${session.id}" data-type="${displayType}">
-        <div class="card-row">
-          <div class="card-left">
-            <div class="id-badge" style="background:${color}; color:${textColor};">${session.id}</div>
-            <div>
-              <div class="type">${displayType}</div>
-              <div class="to-number" style="font-weight:600; color:#1e293b; font-size:13px;">${toNumber}</div>
-              ${timeStr ? `<div class="time">${timeStr}</div>` : ""}
-            </div>
-          </div>
-          <div class="card-actions">
-            ${(status === "open" || status === "full") && count > 0
-        ? `<button class="btn btn-close" data-action="close" data-id="${session.id}" data-type="${displayType}">Đóng</button>`
-        : ""
-      }
-            ${status === "closed"
-        ? `<button class="btn btn-reprint" data-action="reprint-closed" data-id="${session.id}" data-type="${displayType}" data-to="${toNumber}" data-date="${timeStr}" data-number="${toNumber.split("-").pop() || ""}" data-qty="${count}">In lại</button>`
-        : ""
-      }
+    <div class="card ${statusClass}" data-id="${id}" data-type="${typeListStr}">
+      <div class="card-row">
+        <div class="card-left">
+          <div class="id-badge" style="background:${color}; color:${textColor};">${id}</div>
+          <div>
+            <div class="type" style="font-size:12px;">${typeListStr}</div>
+            <div class="to-number" style="font-weight:600; color:#1e293b; font-size:13px;">${toNumber}</div>
+            ${timeStr ? `<div class="time">${timeStr}</div>` : ''}
           </div>
         </div>
-        <div class="progress-row">
-          <div class="progress-bar">
-            <div class="progress-fill" style="width:${percent}%; background:${color};"></div>
-          </div>
-          <span class="progress-text">${count}/${threshold}</span>
+        <div class="card-actions">
+          ${(status === 'open' || status === 'full') && count > 0
+        ? `<button class="btn btn-close" data-action="close" data-id="${id}" data-type="${typeListStr}">Đóng</button>`
+        : ''}
+          ${status === 'closed'
+        ? `<button class="btn btn-reprint" data-action="reprint-closed" data-id="${id}" data-type="${typeListStr}" data-to="${toNumber}" data-date="${timeStr}" data-number="${toNumber.split('-').pop() || ''}" data-qty="${count}">In lại</button>`
+        : ''}
         </div>
       </div>
-    `;
+      <div class="progress-row">
+        <div class="progress-bar">
+          <div class="progress-fill" style="width:${percent}%; background:${color};"></div>
+        </div>
+        <span class="progress-text">${count}/${threshold}</span>
+      </div>
+    </div>
+  `;
   }
 
   _renderCardFromLabel(label) {
-    const displayType = label.displayType || "";
-    const stationId = label.id || "?";
-    const color = STATION_COLORS[stationId] || "#3b82f6";
+    const stationId = label.id || '?';
+    let typeListStr = this._getTypeListString(stationId);
+    // Fallback: nếu không có typeList từ mappings, dùng label.displayType
+    if (typeListStr === 'Unknown' || typeListStr === '') {
+      typeListStr = label.displayType || 'Unknown';
+    }
+    const color = STATION_COLORS[stationId] || '#3b82f6';
     const textColor = getTextColor(color);
-    const toNumber = label.toNumber || "N/A";
-    const email = label.email || "unknown";
+    const toNumber = label.toNumber || 'N/A';
+    const email = label.email || 'unknown';
     const itemCount = label.itemCount ?? 0;
 
-    let timeDisplay = "N/A";
+    let timeDisplay = 'N/A';
     if (label.createdAt) {
       try {
         const d = new Date(label.createdAt);
-        timeDisplay =
-          d.toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" }) +
-          " " +
-          d.toLocaleDateString("vi-VN");
+        timeDisplay = d.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) +
+          ' ' + d.toLocaleDateString('vi-VN');
       } catch (e) {
-        timeDisplay = "Lỗi ngày";
+        timeDisplay = 'Lỗi ngày';
       }
     }
 
     return `
-      <div class="card status-closed" data-id="${label.id}" data-type="${displayType}">
-        <div class="card-row">
-          <div class="card-left">
-            <div class="id-badge" style="background:${color}; color:${textColor};">${stationId}</div>
-            <div>
-              <div class="type">${displayType}</div>
-              <div class="to-number" style="font-weight:600; color:#1e293b; font-size:13px;">${toNumber}</div>
-              <div class="time">${timeDisplay}</div>
-              <div class="email" style="font-size:11px; color:#64748b;">${email}</div>
-            </div>
-          </div>
-          <div class="card-actions">
-            <button class="btn btn-reprint" data-action="reprint-label"
-                    data-to="${label.toNumber}"
-                    data-type="${displayType}"
-                    data-id="${label.id}"
-                    data-date="${label.dateStr}"
-                    data-number="${label.number}"
-                    data-email="${label.email}"
-                    data-qty="${itemCount}">
-              In lại
-            </button>
+    <div class="card status-closed" data-id="${stationId}" data-type="${typeListStr}">
+      <div class="card-row">
+        <div class="card-left">
+          <div class="id-badge" style="background:${color}; color:${textColor};">${stationId}</div>
+          <div>
+            <div class="type" style="font-size:12px;">${typeListStr}</div>
+            <div class="to-number" style="font-weight:600; color:#1e293b; font-size:13px;">${toNumber}</div>
+            <div class="time">${timeDisplay}</div>
+            <div class="email" style="font-size:11px; color:#64748b;">${email}</div>
           </div>
         </div>
-        <div class="progress-row">
-          <span class="progress-text">QTY: ${itemCount}</span>
+        <div class="card-actions">
+          <button class="btn btn-reprint" data-action="reprint-label"
+                  data-to="${label.toNumber}"
+                  data-type="${typeListStr}"
+                  data-id="${stationId}"
+                  data-date="${label.dateStr}"
+                  data-number="${label.number}"
+                  data-email="${label.email}"
+                  data-qty="${itemCount}">
+            In lại
+          </button>
         </div>
       </div>
-    `;
+      <div class="progress-row">
+        <span class="progress-text">QTY: ${itemCount}</span>
+      </div>
+    </div>
+  `;
   }
 
   _renderActiveEventCard(event) {

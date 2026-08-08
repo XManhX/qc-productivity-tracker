@@ -603,13 +603,19 @@ export class UIManager {
     topRow.querySelectorAll(".badge-card:not(.placeholder)").forEach((badge) => {
       badge.addEventListener("click", (e) => {
         const id = badge.dataset.id;
-        if (id) this.state.showSessionDetail(id);
+        if (id) {
+          // Nếu đang ở Dashboard, chuyển về Arrival trước
+          if (this._viewMode === "dashboard") {
+            this._switchView("arrival");
+          }
+          this.state.showSessionDetail(id);
+        }
       });
     });
   }
 
   updateTop5(sessions) {
-    if (this.shadowRoot && this._viewMode === "arrival") this._updateTop5();
+    if (this.shadowRoot) this._updateTop5();
   }
 
   // ─── Icon & màu sắc cho từng loại lỗi ─────────────────

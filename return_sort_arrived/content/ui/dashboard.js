@@ -131,6 +131,15 @@ export class DashboardUI {
     this._activeEventsPage = 1;
     this._hasMoreActiveEvents = true;
     this._activeEventsCount = 0;
+
+    // Map lưu các phần tử DOM cho tab open (key = session.id)
+    this._openElements = new Map();
+    // Danh sách session open hiện tại đã lọc
+    this._openSessions = [];
+
+    // Debounce cho render
+    this._renderDebounce = null;
+
     this._build();
     stateManager.addListener((sessions) => this._onSessionsUpdate(sessions));
     this._loadPrintedLabels();
@@ -169,6 +178,7 @@ export class DashboardUI {
     this._renderAll();
   }
 
+  // ─── Event Binding ──────────────────────────────────────────────────────
   _bindEvents() {
     this.shadowRoot
       .getElementById("search-box")
@@ -179,11 +189,13 @@ export class DashboardUI {
 
     this.shadowRoot.querySelectorAll(".tab").forEach((tab) => {
       tab.addEventListener("click", (e) => {
-        this._activeTab = e.currentTarget.dataset.tab;
-        if (this._activeTab === "closed") {
+        const tabName = e.currentTarget.dataset.tab;
+        if (this._activeTab === tabName) return; // không chuyển nếu đang active
+        this._activeTab = tabName;
+        if (tabName === "closed") {
           this._closedPage = 1;
           this._hasMoreClosed = true;
-        } else if (this._activeTab === "active-events") {
+        } else if (tabName === "active-events") {
           this._activeEventsPage = 1;
           this._hasMoreActiveEvents = true;
         }
@@ -205,7 +217,7 @@ export class DashboardUI {
           btn.innerHTML = '<span class="spinner"></span> Đang đóng...';
           Promise.all(
             openSessions.map(
-              (s) => this.state.closeSession(s.id, s.type_group), // type_group đã là display_name
+              (s) => this.state.closeSession(s.id, s.type_group),
             ),
           ).finally(() => {
             btn.disabled = false;
@@ -223,24 +235,31 @@ export class DashboardUI {
     btnCloseAll.style.display = this._activeTab === "open" ? "block" : "none";
   }
 
+  // ─── Event từ StateManager ─────────────────────────────────────────────
   _onSessionsUpdate(sessions) {
     this._sessions = sessions;
     this._fetchClosedCount();
     this._fetchActiveEventsCount();
-    if (this._activeTab === "closed") {
-      this._closedPage = 1;
-      this._hasMoreClosed = true;
+
+    // Nếu đang ở tab open, cập nhật realtime (diff & patch)
+    if (this._activeTab === "open") {
+      if (this._renderDebounce) cancelAnimationFrame(this._renderDebounce);
+      this._renderDebounce = requestAnimationFrame(() => {
+        this._syncOpenTab(); // chỉ diff, không xóa container
+        this._updateBadges();
+        this._renderDebounce = null;
+      });
+    } else {
+      // Các tab khác chỉ update badge, không render lại (để khi chuyển tab sẽ render)
+      this._updateBadges();
     }
-    if (this._activeTab === "active-events") {
-      this._activeEventsPage = 1;
-      this._hasMoreActiveEvents = true;
-    }
-    this._renderAll();
   }
 
+  // ─── Load dữ liệu từ storage ──────────────────────────────────────────
   async _loadPrintedLabels() {
     const { printedLabels } = await chrome.storage.local.get("printedLabels");
     this._printedLabels = printedLabels || [];
+    if (this._activeTab === "reprint") this._renderAll();
   }
 
   async _fetchClosedCount() {
@@ -262,23 +281,22 @@ export class DashboardUI {
     if (!this._searchTerm) return items;
     const term = this._searchTerm.toLowerCase();
     return items.filter((item) => {
-      // Các trường có thể chứa thông tin cần tìm
-      const searchableFields = [
-        item.id, // station_id với session (string "A","B",...)
-        item.station_id, // station_id với event (string "A","B",...)
-        item.type_group, // tên hiển thị (session/event)
-        item.return_tn, // mã vận đơn (active event)
-        item.displayType, // tên hiển thị (printed label)
-        item.toNumber, // TO number (printed label / closed session)
-        item.number, // số cuối TO (printed label)
+      const fields = [
+        item.id,
+        item.station_id,
+        item.type_group,
+        item.return_tn,
+        item.displayType,
+        item.toNumber,
+        item.number,
       ];
-      // Chỉ cần một field khớp là đủ
-      return searchableFields.some(
-        (field) => field != null && String(field).toLowerCase().includes(term),
+      return fields.some(
+        (f) => f != null && String(f).toLowerCase().includes(term),
       );
     });
   }
 
+  // ─── Render chính ──────────────────────────────────────────────────────
   _renderAll() {
     this._updateBadges();
     const contentArea = this.shadowRoot.getElementById("content-area");
@@ -286,60 +304,216 @@ export class DashboardUI {
 
     switch (this._activeTab) {
       case "open":
-        contentArea.innerHTML = this._renderOpenTab();
-        this._attachCardEvents();
+        this._renderOpenTab(); // xóa container và tạo mới từ đầu
         break;
       case "closed":
+        this._closedPage = 1;
+        this._hasMoreClosed = true;
         this._renderClosedTabAsync().then((html) => {
           contentArea.innerHTML = html;
+          // Xóa map vì các phần tử cũ không còn trong container
+          this._openElements.clear();
           this._attachCardEvents();
         });
         break;
       case "active-events":
+        this._activeEventsPage = 1;
+        this._hasMoreActiveEvents = true;
         this._renderActiveEventsTabAsync().then((html) => {
           contentArea.innerHTML = html;
+          this._openElements.clear();
           this._attachCardEvents();
         });
         break;
       case "reprint":
         contentArea.innerHTML = this._renderReprintTab();
+        this._openElements.clear();
         this._attachCardEvents();
         break;
     }
   }
 
-  _updateBadges() {
-    const sessions = this._sessions || [];
-    const openCount = sessions.filter(
-      (s) => s.status === "open" || s.status === "full",
-    ).length;
-    const reprintCount = (this._printedLabels || []).length;
-
-    const badgeOpen = this.shadowRoot.getElementById("badge-open");
-    const badgeClosed = this.shadowRoot.getElementById("badge-closed");
-    const badgeActiveEvents = this.shadowRoot.getElementById(
-      "badge-active-events",
-    );
-    const badgeReprint = this.shadowRoot.getElementById("badge-reprint");
-
-    if (badgeOpen) badgeOpen.textContent = openCount;
-    if (badgeClosed) badgeClosed.textContent = this._closedCount;
-    if (badgeActiveEvents)
-      badgeActiveEvents.textContent = this._activeEventsCount;
-    if (badgeReprint) badgeReprint.textContent = reprintCount;
+  // ─── Render tab Open (xóa container, tạo mới) ──────────────────────────
+  _renderOpenTab() {
+    const container = this.shadowRoot.getElementById("content-area");
+    if (!container) return;
+    // Xóa toàn bộ nội dung
+    container.innerHTML = "";
+    // Xóa map cũ vì các phần tử cũ bị xóa
+    this._openElements.clear();
+    // Tạo lại từ đầu bằng sync
+    this._syncOpenTab();
+    this._attachCardEvents();
   }
 
-  _renderOpenTab() {
+  // ─── Sync tab Open (diff & patch, không xóa container) ──────────────────
+  _syncOpenTab() {
     const sessions = this._sessions || [];
     const openSessions = sessions.filter(
       (s) => s.status === "open" || s.status === "full",
     );
     const filtered = this._filter(openSessions);
-    if (filtered.length === 0)
-      return '<div class="no-data"><div class="no-data-icon">📭</div><div class="no-data-text">Không có ID nào đang mở</div></div>';
-    return filtered.map((s) => this._renderCard(s)).join("");
+    const container = this.shadowRoot.getElementById("content-area");
+    if (!container) return;
+
+    // Tìm các phần tử cần xóa (không còn trong filtered)
+    const newIds = new Set(filtered.map((s) => s.id));
+    for (const [id, el] of this._openElements) {
+      if (!newIds.has(id)) {
+        el.remove();
+        this._openElements.delete(id);
+      }
+    }
+
+    // Cập nhật hoặc thêm mới
+    filtered.forEach((s) => {
+      let el = this._openElements.get(s.id);
+      if (!el) {
+        el = this._createCardElement(s);
+        container.appendChild(el);
+        this._openElements.set(s.id, el);
+      } else {
+        this._updateCardElement(el, s);
+      }
+    });
+
+    this._openSessions = filtered;
   }
 
+  // ─── Tạo và cập nhật phần tử Card ──────────────────────────────────────
+  _createCardElement(session) {
+    const div = document.createElement("div");
+    this._applyCardData(div, session);
+    return div;
+  }
+
+  _updateCardElement(el, session) {
+    this._applyCardData(el, session);
+  }
+
+  _applyCardData(el, session) {
+    const displayType = session.type_group || "";
+    const status = session.status;
+    const threshold = session.threshold || 30;
+    const count = session.item_count;
+    const percent = Math.min(100, Math.round((count / threshold) * 100));
+    const statusClass =
+      status === "full"
+        ? "status-full"
+        : status === "open"
+          ? "status-open"
+          : "status-closed";
+    const color = STATION_COLORS[session.id] || "#94a3b8";
+    const textColor = getTextColor(color);
+    const timeStr = session.session_start
+      ? new Date(session.session_start).toLocaleTimeString("vi-VN")
+      : "";
+    const toNumber = session.to_number || "";
+
+    // Cập nhật class, dataset
+    el.className = `card ${statusClass}`;
+    el.dataset.id = session.id;
+    el.dataset.type = displayType;
+
+    // Lấy các phần con
+    let row = el.querySelector(".card-row");
+    let progressRow = el.querySelector(".progress-row");
+
+    if (!row) {
+      // Tạo mới toàn bộ nếu chưa có cấu trúc
+      el.innerHTML = `
+        <div class="card-row">
+          <div class="card-left">
+            <div class="id-badge" style="background:${color}; color:${textColor};">${session.id}</div>
+            <div>
+              <div class="type">${displayType}</div>
+              ${timeStr ? `<div class="time">${timeStr}</div>` : ""}
+            </div>
+          </div>
+          <div class="card-actions">
+            ${(status === "open" || status === "full") && count > 0
+          ? `<button class="btn btn-close" data-action="close" data-id="${session.id}" data-type="${displayType}">Đóng</button>`
+          : ""
+        }
+            ${status === "closed"
+          ? `<button class="btn btn-reprint" data-action="reprint-closed" data-id="${session.id}" data-type="${displayType}" data-to="${toNumber}" data-date="${timeStr}" data-number="${toNumber.split("-").pop() || ""}" data-qty="${count}">In lại</button>`
+          : ""
+        }
+          </div>
+        </div>
+        <div class="progress-row">
+          <div class="progress-bar">
+            <div class="progress-fill" style="width:${percent}%; background:${color};"></div>
+          </div>
+          <span class="progress-text">${count}/${threshold}</span>
+        </div>
+      `;
+      return;
+    }
+
+    // Cập nhật các phần tử con hiện có
+    const badge = el.querySelector(".id-badge");
+    if (badge) {
+      badge.style.background = color;
+      badge.style.color = textColor;
+      badge.textContent = session.id;
+    }
+
+    const typeEl = el.querySelector(".type");
+    if (typeEl) typeEl.textContent = displayType;
+
+    let timeEl = el.querySelector(".time");
+    if (timeStr) {
+      if (!timeEl) {
+        const parent = typeEl?.parentNode;
+        if (parent) {
+          timeEl = document.createElement("div");
+          timeEl.className = "time";
+          parent.appendChild(timeEl);
+        }
+      }
+      if (timeEl) timeEl.textContent = timeStr;
+    } else if (timeEl) {
+      timeEl.remove();
+    }
+
+    const fill = el.querySelector(".progress-fill");
+    if (fill) {
+      fill.style.width = percent + "%";
+      fill.style.background = color;
+    }
+    const progressText = el.querySelector(".progress-text");
+    if (progressText) progressText.textContent = `${count}/${threshold}`;
+
+    const actionsContainer = el.querySelector(".card-actions");
+    if (actionsContainer) {
+      actionsContainer.innerHTML = "";
+      if ((status === "open" || status === "full") && count > 0) {
+        const closeBtn = document.createElement("button");
+        closeBtn.className = "btn btn-close";
+        closeBtn.dataset.action = "close";
+        closeBtn.dataset.id = session.id;
+        closeBtn.dataset.type = displayType;
+        closeBtn.textContent = "Đóng";
+        actionsContainer.appendChild(closeBtn);
+      }
+      if (status === "closed") {
+        const reprintBtn = document.createElement("button");
+        reprintBtn.className = "btn btn-reprint";
+        reprintBtn.dataset.action = "reprint-closed";
+        reprintBtn.dataset.id = session.id;
+        reprintBtn.dataset.type = displayType;
+        reprintBtn.dataset.to = toNumber;
+        reprintBtn.dataset.date = timeStr;
+        reprintBtn.dataset.number = toNumber.split("-").pop() || "";
+        reprintBtn.dataset.qty = String(count);
+        reprintBtn.textContent = "In lại";
+        actionsContainer.appendChild(reprintBtn);
+      }
+    }
+  }
+
+  // ─── Render tab Closed ──────────────────────────────────────────────────
   async _renderClosedTabAsync() {
     const sessions = await this._fetchClosedSessions(this._closedPage);
     const filtered = this._filter(sessions);
@@ -384,6 +558,7 @@ export class DashboardUI {
     });
   }
 
+  // ─── Render tab Reprint ──────────────────────────────────────────────────
   _renderReprintTab() {
     const filtered = this._filter(this._printedLabels);
     if (filtered.length === 0)
@@ -391,6 +566,7 @@ export class DashboardUI {
     return filtered.map((l) => this._renderCardFromLabel(l)).join("");
   }
 
+  // ─── Render tab Active Events ──────────────────────────────────────────
   async _renderActiveEventsTabAsync() {
     const events = await this.state.fetchActiveScanEvents(
       this._activeEventsPage,
@@ -423,35 +599,9 @@ export class DashboardUI {
     return html;
   }
 
-  _renderActiveEventCard(event) {
-    const displayType = event.type_group || ""; // đã là display_name
-    const color = STATION_COLORS[event.station_id] || "#94a3b8";
-    const textColor = getTextColor(color);
-    const timeStr = event.created_at
-      ? new Date(event.created_at).toLocaleTimeString("vi-VN")
-      : "";
-
-    return `
-      <div class="card status-open" data-station="${event.station_id}" data-return="${event.return_tn}" data-type="${displayType}">
-        <div class="card-row">
-          <div class="card-left">
-            <div class="id-badge" style="background:${color}; color:${textColor};">${event.station_id}</div>
-            <div>
-              <div class="type">${displayType}</div>
-              <div class="time">${event.return_tn || ""}</div>
-              ${timeStr ? `<div class="time">${timeStr}</div>` : ""}
-            </div>
-          </div>
-          <div class="card-actions">
-            <button class="btn btn-close" data-action="cancel-event" data-station="${event.station_id}" data-return="${event.return_tn}" data-type="${displayType}">Hủy</button>
-          </div>
-        </div>
-      </div>
-    `;
-  }
-
+  // ─── Render từng card (cho các tab không diff) ─────────────────────────
   _renderCard(session) {
-    const displayType = session.type_group || ""; // đã là display_name
+    const displayType = session.type_group || "";
     const status = session.status;
     const threshold = session.threshold || 30;
     const count = session.item_count;
@@ -509,13 +659,14 @@ export class DashboardUI {
     const email = label.email || "unknown";
     const itemCount = label.itemCount ?? 0;
 
-    // Định dạng thời gian in (nếu có)
     let timeDisplay = "N/A";
     if (label.createdAt) {
       try {
         const d = new Date(label.createdAt);
-        timeDisplay = d.toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" })
-          + " " + d.toLocaleDateString("vi-VN");
+        timeDisplay =
+          d.toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" }) +
+          " " +
+          d.toLocaleDateString("vi-VN");
       } catch (e) {
         timeDisplay = "Lỗi ngày";
       }
@@ -553,10 +704,39 @@ export class DashboardUI {
     `;
   }
 
+  _renderActiveEventCard(event) {
+    const displayType = event.type_group || "";
+    const color = STATION_COLORS[event.station_id] || "#94a3b8";
+    const textColor = getTextColor(color);
+    const timeStr = event.created_at
+      ? new Date(event.created_at).toLocaleTimeString("vi-VN")
+      : "";
+
+    return `
+      <div class="card status-open" data-station="${event.station_id}" data-return="${event.return_tn}" data-type="${displayType}">
+        <div class="card-row">
+          <div class="card-left">
+            <div class="id-badge" style="background:${color}; color:${textColor};">${event.station_id}</div>
+            <div>
+              <div class="type">${displayType}</div>
+              <div class="time">${event.return_tn || ""}</div>
+              ${timeStr ? `<div class="time">${timeStr}</div>` : ""}
+            </div>
+          </div>
+          <div class="card-actions">
+            <button class="btn btn-close" data-action="cancel-event" data-station="${event.station_id}" data-return="${event.return_tn}" data-type="${displayType}">Hủy</button>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  // ─── Gắn sự kiện cho các nút ──────────────────────────────────────────
   _attachCardEvents() {
     const contentArea = this.shadowRoot.getElementById("content-area");
     if (!contentArea) return;
 
+    // Đóng session
     contentArea
       .querySelectorAll('.btn-close[data-action="close"]')
       .forEach((btn) => {
@@ -564,7 +744,7 @@ export class DashboardUI {
           e.stopPropagation();
           if (btn.disabled) return;
           const id = btn.dataset.id;
-          const displayType = btn.dataset.type; // display_name
+          const displayType = btn.dataset.type;
           if (confirm(`Đóng kiện ID ${id}?`)) {
             btn.disabled = true;
             const originalHTML = btn.innerHTML;
@@ -577,6 +757,7 @@ export class DashboardUI {
         });
       });
 
+    // Hủy đơn active
     contentArea
       .querySelectorAll('.btn-close[data-action="cancel-event"]')
       .forEach((btn) => {
@@ -606,6 +787,7 @@ export class DashboardUI {
         });
       });
 
+    // In lại (closed session)
     contentArea
       .querySelectorAll('.btn-reprint[data-action="reprint-closed"]')
       .forEach((btn) => {
@@ -636,6 +818,7 @@ export class DashboardUI {
         });
       });
 
+    // In lại (reprint tab)
     contentArea
       .querySelectorAll('.btn-reprint[data-action="reprint-label"]')
       .forEach((btn) => {
@@ -674,6 +857,7 @@ export class DashboardUI {
         });
       });
 
+    // Load more closed
     const loadMoreClosedBtn =
       this.shadowRoot.getElementById("load-more-closed");
     if (loadMoreClosedBtn) {
@@ -697,6 +881,7 @@ export class DashboardUI {
       });
     }
 
+    // Load more active events
     const loadMoreActiveBtn = this.shadowRoot.getElementById(
       "load-more-active-events",
     );
@@ -722,6 +907,29 @@ export class DashboardUI {
     }
   }
 
+  // ─── Update badges ──────────────────────────────────────────────────────
+  _updateBadges() {
+    const sessions = this._sessions || [];
+    const openCount = sessions.filter(
+      (s) => s.status === "open" || s.status === "full",
+    ).length;
+    const reprintCount = (this._printedLabels || []).length;
+
+    const badgeOpen = this.shadowRoot.getElementById("badge-open");
+    const badgeClosed = this.shadowRoot.getElementById("badge-closed");
+    const badgeActiveEvents = this.shadowRoot.getElementById(
+      "badge-active-events",
+    );
+    const badgeReprint = this.shadowRoot.getElementById("badge-reprint");
+
+    if (badgeOpen) badgeOpen.textContent = openCount;
+    if (badgeClosed) badgeClosed.textContent = this._closedCount;
+    if (badgeActiveEvents)
+      badgeActiveEvents.textContent = this._activeEventsCount;
+    if (badgeReprint) badgeReprint.textContent = reprintCount;
+  }
+
+  // ─── Refresh (gọi từ bên ngoài) ────────────────────────────────────────
   refresh() {
     this._loadPrintedLabels();
     this._fetchClosedCount();
